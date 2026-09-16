@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+    <title>Lịch sử - Smart Parking</title>
+    <link
+        rel="stylesheet"
+        href="history.css"
+    >
+</head>
+<body>
+    <main class="main-content">
+        <!-- ==================================================
+             HEADER
+        ================================================== -->
+        <header class="page-header">
+            <div class="header-left">
+                <a
+                    href="index.html"
+                    class="back-button"
+                >
+                    ← Quay lại
+                </a>
+                <div>
+                    <h1>
+                        Lịch sử hoạt động
+                    </h1>
+                    <p>
+                        Theo dõi toàn bộ lịch sử xe ra vào bãi đỗ
+                    </p>
+                </div>
+            </div>
+            <div class="user-info">
+                <strong>
+                    Nguyễn Văn Dũng
+                </strong>
+                <span>
+                    Quản trị viên
+                </span>
+            </div>
+        </header>
+        <!-- ==================================================
+             STATISTICS
+        ================================================== -->
+        <section class="statistics">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    📋
+                </div>
+                <div>
+                    <span>
+                        Tổng lượt
+                    </span>
+                    <strong id="total-history">
+                        0
+                    </strong>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    🚗
+                </div>
+                <div>
+                    <span>
+                        Xe vào
+                    </span>
+                    <strong id="total-in">
+                        0
+                    </strong>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    🚪
+                </div>
+                <div>
+                    <span>
+                        Xe ra
+                    </span>
+                    <strong id="total-out">
+                        0
+                    </strong>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    📅
+                </div>
+                <div>
+                    <span>
+                        Hôm nay
+                    </span>
+                    <strong id="today-total">
+                        0
+                    </strong>
+                </div>
+            </div>
+        </section>
+        <!-- ==================================================
+             FILTER
+        ================================================== -->
+        <section class="filter-box">
+            <div class="filter-group">
+                <label for="search-plate">
+                    Biển số
+                </label>
+                <input
+                    type="text"
+                    id="search-plate"
+                    placeholder="Nhập biển số..."
+                >
+            </div>
+            <div class="filter-group">
+                <label for="type-filter">
+                    Loại giao dịch
+                </label>
+                <select id="type-filter">
+                    <option value="all">
+                        Tất cả
+                    </option>
+                    <option value="in">
+                        Xe vào
+                    </option>
+                    <option value="out">
+                        Xe ra
+                    </option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="date-filter">
+                    Ngày
+                </label>
+                <input
+                    type="date"
+                    id="date-filter"
+                >
+            </div>
+            <button
+                id="reset-filter"
+                class="reset-button"
+            >
+                ↻ Đặt lại
+            </button>
+        </section>
+        <!-- ==================================================
+             HISTORY
+        ================================================== -->
+        <section class="history-box">
+            <div class="history-header">
+                <div>
+                    <h2>
+                        Danh sách lịch sử
+                    </h2>
+                    <p id="result-count">
+                        0 bản ghi
+                    </p>
+                </div>
+                <div class="history-actions">
+                    <a
+                        href="vehical.html"
+                        class="vehicle-button"
+                    >
+                        🚘 Xe ra vào
+                    </a>
+                    <button
+                        id="clear-history"
+                        class="delete-button"
+                    >
+                        🗑 Xóa lịch sử
+                    </button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>
+                                STT
+                            </th>
+                            <th>
+                                Biển số
+                            </th>
+                            <th>
+                                Vị trí
+                            </th>
+                            <th>
+                                Giao dịch
+                            </th>
+                            <th>
+                                Thời gian
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body">
+                    </tbody>
+                </table>
+                <div
+                    id="empty-history"
+                    class="empty-history"
+                >
+                    <div class="empty-icon">
+                        📭
+                    </div>
+                    <h3>
+                        Chưa có lịch sử
+                    </h3>
+                    <p>
+                        Dữ liệu xe ra vào sẽ xuất hiện ở đây.
+                    </p>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="history.js"></script>
+</body>
+</html>

@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bãi đỗ xe - Smart Parking</title>
+    <link rel="stylesheet" href="parking.css">
+</head>
+
+<body>
+
+    <div class="parking-page">
+
+        <!-- ========================= -->
+        <!-- HEADER -->
+        <!-- ========================= -->
+
+        <header class="page-header">
+
+            <div class="header-left">
+
+                <a href="index.html" class="back-button">
+                    ←
+                </a>
+
+                <div>
+                    <h1>Bãi đỗ xe</h1>
+                    <p>Quản lý và theo dõi tình trạng các vị trí đỗ xe</p>
+                </div>
+
+            </div>
+
+            <div class="user-info">
+
+                <div class="avatar">
+                    D
+                </div>
+
+                <div>
+                    <strong>Nguyễn Văn Dũng</strong>
+                    <small>Quản trị viên</small>
+                </div>
+
+            </div>
+
+        </header>
+
+
+        <!-- ========================= -->
+        <!-- THỐNG KÊ NHANH -->
+        <!-- ========================= -->
+
+        <section class="parking-summary">
+
+            <div class="summary-card">
+
+                <div class="summary-icon blue">
+                    🅿️
+                </div>
+
+                <div>
+                    <span>Tổng vị trí</span>
+                    <strong id="total-slots">60</strong>
+                </div>
+
+            </div>
+
+
+            <div class="summary-card">
+
+                <div class="summary-icon green">
+                    ✓
+                </div>
+
+                <div>
+                    <span>Đang trống</span>
+                    <strong id="available-slots">24</strong>
+                </div>
+
+            </div>
+
+
+            <div class="summary-card">
+
+                <div class="summary-icon red">
+                    🚗
+                </div>
+
+                <div>
+                    <span>Đang đỗ</span>
+                    <strong id="occupied-slots">34</strong>
+                </div>
+
+            </div>
+
+
+            <div class="summary-card">
+
+                <div class="summary-icon orange">
+                    🔧
+                </div>
+
+                <div>
+                    <span>Bảo trì</span>
+                    <strong id="maintenance-slots">2</strong>
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ========================= -->
+        <!-- BỘ LỌC + CHÚ THÍCH -->
+        <!-- ========================= -->
+
+        <section class="control-bar">
+
+            <div class="parking-filter">
+
+                <label for="area">
+                    Khu vực
+                </label>
+
+                <select id="area">
+
+                    <option value="all">
+                        Tất cả khu vực
+                    </option>
+
+                    <option value="A">
+                        Khu A
+                    </option>
+
+                    <option value="B">
+                        Khu B
+                    </option>
+
+                    <option value="C">
+                        Khu C
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="legend">
+
+                <div class="legend-item">
+
+                    <span class="legend-dot available"></span>
+                    Trống
+
+                </div>
+
+                <div class="legend-item">
+
+                    <span class="legend-dot occupied"></span>
+                    Đang đỗ
+
+                </div>
+
+                <div class="legend-item">
+
+                    <span class="legend-dot maintenance"></span>
+                    Bảo trì
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ========================= -->
+        <!-- KHU A -->
+        <!-- ========================= -->
+
+        <section class="parking-section" data-area="A">
+
+            <div class="section-header">
+
+                <div>
+                    <h2>Khu A</h2>
+                    <p>20 vị trí</p>
+                </div>
+
+                <span class="area-status">
+                    8 / 20 vị trí trống
+                </span>
+
+            </div>
+
+
+            <div class="parking-grid">
+
+                <div class="parking-slot available">
+                    <strong>A01</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>A02</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>A03</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>A04</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot maintenance">
+                    <strong>A05</strong>
+                    <span>Bảo trì</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>A06</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>A07</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>A08</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>A09</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>A10</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>A11</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>A12</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>A13</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot maintenance">
+                    <strong>A14</strong>
+                    <span>Bảo trì</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>A15</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>A16</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>A17</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>A18</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>A19</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>A20</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ========================= -->
+        <!-- KHU B -->
+        <!-- ========================= -->
+
+        <section class="parking-section" data-area="B">
+
+            <div class="section-header">
+
+                <div>
+                    <h2>Khu B</h2>
+                    <p>20 vị trí</p>
+                </div>
+
+                <span class="area-status">
+                    9 / 20 vị trí trống
+                </span>
+
+            </div>
+
+
+            <div class="parking-grid">
+
+                <div class="parking-slot occupied">
+                    <strong>B01</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>B02</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>B03</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>B04</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>B05</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>B06</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>B07</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>B08</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>B09</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>B10</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>B11</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>B12</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>B13</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>B14</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>B15</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>B16</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>B17</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>B18</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>B19</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>B20</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ========================= -->
+        <!-- KHU C -->
+        <!-- ========================= -->
+
+        <section class="parking-section" data-area="C">
+
+            <div class="section-header">
+
+                <div>
+                    <h2>Khu C</h2>
+                    <p>20 vị trí</p>
+                </div>
+
+                <span class="area-status">
+                    7 / 20 vị trí trống
+                </span>
+
+            </div>
+
+
+            <div class="parking-grid">
+
+                <div class="parking-slot available">
+                    <strong>C01</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>C02</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>C03</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>C04</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>C05</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>C06</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot maintenance">
+                    <strong>C07</strong>
+                    <span>Bảo trì</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>C08</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>C09</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>C10</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>C11</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>C12</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>C13</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>C14</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>C15</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>C16</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>C17</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot available">
+                    <strong>C18</strong>
+                    <span>Trống</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>C19</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+                <div class="parking-slot occupied">
+                    <strong>C20</strong>
+                    <span>Đang đỗ</span>
+                </div>
+
+            </div>
+
+        </section>
+
+    </div>
+
+
+    <!-- ========================= -->
+    <!-- JAVASCRIPT -->
+    <!-- ========================= -->
+
+    <script src="parking.js"></script>
+
+</body>
+
+</html>

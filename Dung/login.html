@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng nhập - Smart Parking</title>
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <div class="login-container">
+        <!-- ==================== BÊN TRÁI ==================== -->
+        <div class="intro">
+            <div class="brand">
+                <div class="brand-icon">
+                    P
+                </div>
+                <div>
+                    <h1>Smart Parking</h1>
+                    <p>Hệ thống quản lý bãi đỗ xe</p>
+                </div>
+            </div>
+            <div class="intro-content">
+                <h2>
+                    Quản lý bãi đỗ xe
+                    <br>
+                    thông minh và hiệu quả.
+                </h2>
+                <p>
+                    Theo dõi tình trạng bãi đỗ,
+                    quản lý phương tiện ra vào
+                    và giám sát hoạt động của hệ thống
+                    trên một nền tảng duy nhất.
+                </p>
+            </div>
+            <!-- MINH HỌA -->
+            <div class="parking-illustration">
+                <div class="road">
+                    <div class="road-line"></div>
+                    <div class="car">
+                        🚗
+                    </div>
+                </div>
+                <div class="parking-sign">
+                    P
+                </div>
+            </div>
+        </div>
+        <!-- ==================== BÊN PHẢI ==================== -->
+        <div class="login-box">
+            <div class="login-header">
+                <h2>Đăng nhập</h2>
+                <p>
+                    Đăng nhập để tiếp tục sử dụng hệ thống
+                </p>
+            </div>
+            <!-- FORM ĐĂNG NHẬP -->
+            <form action="index.html" method="get">
+                <!-- TÊN ĐĂNG NHẬP -->
+                <div class="form-group">
+                    <label for="username">
+                        Tên đăng nhập
+                    </label>
+                    <div class="input-box">
+                        <span>👤</span>
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            placeholder="Nhập tên đăng nhập"
+                            required
+                        >
+                    </div>
+                </div>
+                <!-- MẬT KHẨU -->
+                <div class="form-group">
+                    <label for="password">
+                        Mật khẩu
+                    </label>
+                    <div class="input-box">
+                        <span>🔒</span>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            placeholder="Nhập mật khẩu"
+                            required
+                        >
+                    </div>
+                </div>
+                <!-- GHI NHỚ + QUÊN MẬT KHẨU -->
+                <div class="login-options">
+                    <label class="remember">
+                        <input
+                            type="checkbox"
+                            name="remember"
+                        >
+                        <span>
+                            Ghi nhớ đăng nhập
+                        </span>
+                    </label>
+                    <a href="#">
+                        Quên mật khẩu?
+                    </a>
+                </div>
+                <!-- NÚT ĐĂNG NHẬP -->
+                <button
+                    type="submit"
+                    class="login-button"
+                >
+                    ĐĂNG NHẬP
+                </button>
+            </form>
+            <!-- FOOTER -->
+            <div class="login-footer">
+                <p>
+                    © 2026 Smart Parking
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

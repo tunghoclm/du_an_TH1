@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+    <title>Thống kê - Smart Parking</title>
+    <link
+        rel="stylesheet"
+        href="thongke.css"
+    >
+</head>
+<body>
+    <main class="main-content">
+       
+             HEADER
+      
+        <header class="page-header">
+            <div class="header-left">
+                <a
+                    href="index.html"
+                    class="back-button"
+                >
+                    ← Quay lại
+                </a>
+                <div>
+                    <h1>
+                        Thống kê
+                    </h1>
+                    <p>
+                        Tổng quan tình hình hoạt động của bãi đỗ xe
+                    </p>
+                </div>
+            </div>
+            <div class="user-info">
+                <strong>
+                    Nguyễn Văn Dũng
+                </strong>
+                <span>
+                    Quản trị viên
+                </span>
+            </div>
+        </header>
+       
+             FILTER
+      
+        <section class="filter-box">
+            <div class="filter-title">
+                <strong>
+                    Khoảng thời gian
+                </strong>
+                <span>
+                    Chọn thời gian muốn thống kê
+                </span>
+            </div>
+            <select id="time-range">
+                <option value="today">
+                    Hôm nay
+                </option>
+                <option value="7days">
+                    7 ngày qua
+                </option>
+                <option value="30days">
+                    30 ngày qua
+                </option>
+                <option value="all">
+                    Toàn bộ thời gian
+                </option>
+            </select>
+        </section>
+       
+             OVERVIEW
+      
+        <section class="section-title">
+            <div>
+                <h2>
+                    Tổng quan
+                </h2>
+                <p>
+                    Tình trạng hiện tại của bãi đỗ
+                </p>
+            </div>
+        </section>
+        <section class="overview-grid">
+            <!-- Tổng vị trí -->
+            <div class="overview-card">
+                <div class="card-icon">
+                    🅿️
+                </div>
+                <div class="card-content">
+                    <span>
+                        Tổng vị trí
+                    </span>
+                    <strong id="total-slots">
+                        60
+                    </strong>
+                    <small>
+                        3 khu vực
+                    </small>
+                </div>
+            </div>
+            <!-- Đang đỗ -->
+            <div class="overview-card">
+                <div class="card-icon">
+                    🚗
+                </div>
+                <div class="card-content">
+                    <span>
+                        Đang đỗ
+                    </span>
+                    <strong id="occupied-slots">
+                        0
+                    </strong>
+                    <small id="occupied-percent">
+                        0% công suất
+                    </small>
+                </div>
+            </div>
+            <!-- Còn trống -->
+            <div class="overview-card">
+                <div class="card-icon">
+                    🟢
+                </div>
+                <div class="card-content">
+                    <span>
+                        Còn trống
+                    </span>
+                    <strong id="available-slots">
+                        60
+                    </strong>
+                    <small>
+                        Có thể tiếp nhận
+                    </small>
+                </div>
+            </div>
+            <!-- Tổng lượt -->
+            <div class="overview-card">
+                <div class="card-icon">
+                    📊
+                </div>
+                <div class="card-content">
+                    <span>
+                        Tổng lượt xe
+                    </span>
+                    <strong id="total-movements">
+                        0
+                    </strong>
+                    <small id="period-label">
+                        Hôm nay
+                    </small>
+                </div>
+            </div>
+        </section>
+       
+             VEHICLE MOVEMENT
+      
+        <section class="section-title chart-section-title">
+            <div>
+                <h2>
+                    Xe ra vào
+                </h2>
+                <p>
+                    Số lượt xe vào và xe ra theo thời gian
+                </p>
+            </div>
+        </section>
+        <section class="chart-card">
+            <div class="chart-header">
+                <div>
+                    <h3>
+                        Lưu lượng xe
+                    </h3>
+                    <span id="chart-description">
+                        Thống kê trong hôm nay
+                    </span>
+                </div>
+            </div>
+            <div class="chart-wrapper">
+                <canvas
+                    id="movement-chart"
+                ></canvas>
+            </div>
+        </section>
+       
+             AREA STATISTICS
+      
+        <section class="section-title area-title">
+            <div>
+                <h2>
+                    Tình trạng theo khu vực
+                </h2>
+                <p>
+                    Mức độ sử dụng của từng khu vực
+                </p>
+            </div>
+        </section>
+        <section class="area-grid">
+            <!-- KHU A -->
+            <div class="area-card">
+                <div class="area-card-header">
+                    <div>
+                        <h3>
+                            Khu A
+                        </h3>
+                        <span>
+                            20 vị trí
+                        </span>
+                    </div>
+                    <strong id="area-a-percent">
+                        0%
+                    </strong>
+                </div>
+                <div class="progress-bar">
+                    <div
+                        id="area-a-progress"
+                        class="progress-fill"
+                    ></div>
+                </div>
+                <div class="area-info">
+                    <span>
+                        Đang đỗ:
+                        <strong id="area-a-occupied">
+                            0
+                        </strong>
+                    </span>
+                    <span>
+                        Trống:
+                        <strong id="area-a-available">
+                            20
+                        </strong>
+                    </span>
+                </div>
+            </div>
+            <!-- KHU B -->
+            <div class="area-card">
+                <div class="area-card-header">
+                    <div>
+                        <h3>
+                            Khu B
+                        </h3>
+                        <span>
+                            20 vị trí
+                        </span>
+                    </div>
+                    <strong id="area-b-percent">
+                        0%
+                    </strong>
+                </div>
+                <div class="progress-bar">
+                    <div
+                        id="area-b-progress"
+                        class="progress-fill"
+                    ></div>
+                </div>
+                <div class="area-info">
+                    <span>
+                        Đang đỗ:
+                        <strong id="area-b-occupied">
+                            0
+                        </strong>
+                    </span>
+                    <span>
+                        Trống:
+                        <strong id="area-b-available">
+                            20
+                        </strong>
+                    </span>
+                </div>
+            </div>
+            <!-- KHU C -->
+            <div class="area-card">
+                <div class="area-card-header">
+                    <div>
+                        <h3>
+                            Khu C
+                        </h3>
+                        <span>
+                            20 vị trí
+                        </span>
+                    </div>
+                    <strong id="area-c-percent">
+                        0%
+                    </strong>
+                </div>
+                <div class="progress-bar">
+                    <div
+                        id="area-c-progress"
+                        class="progress-fill"
+                    ></div>
+                </div>
+                <div class="area-info">
+                    <span>
+                        Đang đỗ:
+                        <strong id="area-c-occupied">
+                            0
+                        </strong>
+                    </span>
+                    <span>
+                        Trống:
+                        <strong id="area-c-available">
+                            20
+                        </strong>
+                    </span>
+                </div>
+            </div>
+        </section>
+       
+             MOVEMENT SUMMARY
+      
+        <section class="section-title movement-title">
+            <div>
+                <h2>
+                    Tổng hợp lượt xe
+                </h2>
+                <p>
+                    Thống kê số lượt vào và ra
+                </p>
+            </div>
+        </section>
+        <section class="movement-summary">
+            <div class="movement-card">
+                <div class="movement-icon">
+                    🚗
+                </div>
+                <div>
+                    <span>
+                        Xe vào
+                    </span>
+                    <strong id="period-in">
+                        0
+                    </strong>
+                </div>
+            </div>
+            <div class="movement-card">
+                <div class="movement-icon">
+                    🚪
+                </div>
+                <div>
+                    <span>
+                        Xe ra
+                    </span>
+                    <strong id="period-out">
+                        0
+                    </strong>
+                </div>
+            </div>
+            <div class="movement-card">
+                <div class="movement-icon">
+                    📋
+                </div>
+                <div>
+                    <span>
+                        Tổng lượt
+                    </span>
+                    <strong id="period-total">
+                        0
+                    </strong>
+                </div>
+            </div>
+        </section>
+    </main>
+    <script src="thongke.js"></script>
+</body>
+</html>

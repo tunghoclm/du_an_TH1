@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xe ra vào - Smart Parking</title>
+    <link rel="stylesheet" href="vehical.css">
+</head>
+<body>
+    <div class="page-container">
+     
+        <!-- HEADER -->
+     
+        <header class="page-header">
+            <a href="index.html" class="back-button">
+                ← Quay lại
+            </a>
+            <div class="header-title">
+                <h1>Xe ra vào</h1>
+                <p>
+                    Theo dõi phương tiện ra vào bãi đỗ xe
+                </p>
+            </div>
+            <div class="user-info">
+                <strong>Nguyễn Văn Dũng</strong>
+                <span>Quản trị viên</span>
+            </div>
+        </header>
+     
+        <!-- THỐNG KÊ -->
+     
+        <section class="summary-container">
+            <!-- XE VÀO -->
+            <div class="summary-card">
+                <div class="summary-icon in-icon">
+                    🚗
+                </div>
+                <div class="summary-content">
+                    <span>
+                        Xe vào
+                    </span>
+                    <strong id="vehicle-in">
+                        0
+                    </strong>
+                    <small>
+                        Tổng lượt xe vào
+                    </small>
+                </div>
+            </div>
+            <!-- XE RA -->
+            <div class="summary-card">
+                <div class="summary-icon out-icon">
+                    🚪
+                </div>
+                <div class="summary-content">
+                    <span>
+                        Xe ra
+                    </span>
+                    <strong id="vehicle-out">
+                        0
+                    </strong>
+                    <small>
+                        Tổng lượt xe ra
+                    </small>
+                </div>
+            </div>
+            <!-- ĐANG TRONG BÃI -->
+            <div class="summary-card">
+                <div class="summary-icon inside-icon">
+                    🅿️
+                </div>
+                <div class="summary-content">
+                    <span>
+                        Đang trong bãi
+                    </span>
+                    <strong id="vehicle-inside">
+                        0
+                    </strong>
+                    <small>
+                        Phương tiện hiện tại
+                    </small>
+                </div>
+            </div>
+        </section>
+     
+        <!-- BỘ LỌC -->
+     
+        <section class="filter-container">
+            <div class="filter-group">
+                <label for="vehicle-filter">
+                    Loại thao tác
+                </label>
+                <select id="vehicle-filter">
+                    <option value="all">
+                        Tất cả
+                    </option>
+                    <option value="in">
+                        Xe vào
+                    </option>
+                    <option value="out">
+                        Xe ra
+                    </option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="plate-search">
+                    Tìm biển số
+                </label>
+                <input
+                    type="text"
+                    id="plate-search"
+                    placeholder="Nhập biển số xe..."
+                >
+            </div>
+        </section>
+     
+        <!-- DANH SÁCH XE RA VÀO -->
+     
+        <section class="vehicle-container">
+            <div class="vehicle-header">
+                <div>
+                    <h2>
+                        Danh sách xe ra vào
+                    </h2>
+                    <p>
+                        Lịch sử các lượt phương tiện
+                    </p>
+                </div>
+                <span id="record-count">
+                    0 lượt
+                </span>
+            </div>
+            <!-- BẢNG -->
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>
+                                STT
+                            </th>
+                            <th>
+                                Biển số
+                            </th>
+                            <th>
+                                Vị trí
+                            </th>
+                            <th>
+                                Thao tác
+                            </th>
+                            <th>
+                                Thời gian
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="vehicle-table-body">
+                    </tbody>
+                </table>
+            </div>
+            <!-- KHÔNG CÓ DỮ LIỆU -->
+            <div
+                id="empty-message"
+                class="empty-message"
+            >
+                <div class="empty-icon">
+                    🚗
+                </div>
+                <h3>
+                    Chưa có dữ liệu
+                </h3>
+                <p>
+                    Các lượt xe vào và ra sẽ xuất hiện ở đây.
+                </p>
+            </div>
+        </section>
+    </div>
+    <script src="vehical.js"></script>
+</body>
+</html>
