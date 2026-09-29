@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Người dùng - Smart Parking</title>
+    <link rel="stylesheet" href="users.css">
+</head>
+
+<body>
+
+    <main class="main-content">
+
+        <!-- =========================
+             HEADER
+        ========================== -->
+        <header class="page-header">
+
+            <div class="header-left">
+                <a href="index.html" class="back-button">← Quay lại</a>
+
+                <div>
+                    <h1>Người dùng</h1>
+                    <p>Quản lý thông tin tài khoản và ví gửi xe</p>
+                </div>
+            </div>
+
+            <div class="user-info">
+                <strong>Bùi Chính Minh Dũng</strong>
+                <span>Người dùng</span>
+            </div>
+
+        </header>
+
+
+        <!-- =========================
+             ACCOUNT
+        ========================== -->
+        <section class="account-section">
+
+            <div class="section-title">
+                <h2>Thông tin tài khoản</h2>
+                <p>Thông tin cá nhân và tài khoản của bạn</p>
+            </div>
+
+            <div class="account-card">
+
+                <div class="avatar">
+                    👤
+                </div>
+
+                <div class="account-info">
+
+                    <div class="info-item">
+                        <span>Tên tài khoản</span>
+                        <strong>dung123</strong>
+                    </div>
+
+                    <div class="info-item">
+                        <span>Họ và tên</span>
+                        <strong>Nguyễn Văn Dũng</strong>
+                    </div>
+
+                    <div class="info-item">
+                        <span>Số điện thoại</span>
+                        <strong>09xxxxxxxx</strong>
+                    </div>
+
+                    <div class="info-item">
+                        <span>Email</span>
+                        <strong>dung@example.com</strong>
+                    </div>
+
+                    <div class="info-item">
+                        <span>Ngày sinh</span>
+                        <strong>17/09/2006</strong>
+                    </div>
+
+                    <div class="info-item">
+                        <span>Ngày tham gia</span>
+                        <strong>15/09/2026</strong>
+                    </div>
+
+                </div>
+
+                <button class="edit-button">Chỉnh sửa</button>
+
+            </div>
+
+        </section>
+
+
+        <!-- =========================
+             WALLET
+        ========================== -->
+        <section class="wallet-section">
+
+            <div class="section-title">
+                <h2>Ví gửi xe</h2>
+                <p>Quản lý số dư và nạp tiền vào tài khoản</p>
+            </div>
+
+            <div class="wallet-grid">
+
+                <!-- BALANCE -->
+                <div class="balance-card">
+
+                    <div class="balance-header">
+                        <span>Số dư hiện tại</span>
+                        <span class="wallet-icon">💰</span>
+                    </div>
+
+                    <strong class="balance">250.000đ</strong>
+
+                    <p>Số dư dùng để thanh toán phí gửi xe</p>
+
+                    <button class="deposit-button">
+                        + Nạp tiền
+                    </button>
+
+                </div>
+
+
+                <!-- DEPOSIT -->
+                <div class="deposit-card">
+
+                    <h3>Nạp tiền vào ví</h3>
+                    <p>Chọn phương thức và số tiền muốn nạp</p>
+
+                    <div class="form-group">
+
+                        <label>Phương thức thanh toán</label>
+
+                        <div class="payment-methods">
+
+                            <label class="payment-option">
+                                <input type="radio" name="payment" checked>
+                                <span>🏦</span>
+                                Chuyển khoản
+                            </label>
+
+                            <label class="payment-option">
+                                <input type="radio" name="payment">
+                                <span>📱</span>
+                                Ví điện tử
+                            </label>
+
+                            <label class="payment-option">
+                                <input type="radio" name="payment">
+                                <span>▣</span>
+                                QR Code
+                            </label>
+
+                        </div>
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label for="amount">Số tiền</label>
+
+                        <select id="amount">
+                            <option value="50000">50.000đ</option>
+                            <option value="100000">100.000đ</option>
+                            <option value="200000">200.000đ</option>
+                            <option value="500000">500.000đ</option>
+                            <option value="1000000">1.000.000đ</option>
+                        </select>
+
+                    </div>
+
+                    <button class="confirm-button">
+                        Xác nhận nạp tiền
+                    </button>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =========================
+             TRANSACTION HISTORY
+        ========================== -->
+        <section class="transaction-section">
+
+            <div class="section-title">
+                <h2>Lịch sử nạp tiền</h2>
+                <p>Các giao dịch nạp tiền gần đây</p>
+            </div>
+
+            <div class="transaction-card">
+
+                <div class="transaction-row transaction-header">
+                    <span>Thời gian</span>
+                    <span>Phương thức</span>
+                    <span>Số tiền</span>
+                    <span>Trạng thái</span>
+                </div>
+
+                <div class="transaction-row">
+                    <span>19/09/2026 18:30</span>
+                    <span>Chuyển khoản</span>
+                    <strong>+100.000đ</strong>
+                    <span class="status success">Thành công</span>
+                </div>
+
+                <div class="transaction-row">
+                    <span>18/09/2026 14:20</span>
+                    <span>Ví điện tử</span>
+                    <strong>+200.000đ</strong>
+                    <span class="status success">Thành công</span>
+                </div>
+
+                <div class="transaction-row">
+                    <span>15/09/2026 09:10</span>
+                    <span>Chuyển khoản</span>
+                    <strong>+100.000đ</strong>
+                    <span class="status success">Thành công</span>
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+<link rel="stylesheet" href="users.css">
+<link rel="stylesheet" href="darkmode.css">
+
+<script src="theme.js"></script>
+</body>
+
+</html>

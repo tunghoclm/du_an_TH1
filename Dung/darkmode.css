@@ -1,0 +1,184 @@
+/* =========================
+   DARK MODE - GLOBAL
+========================= */
+
+body.dark-mode {
+    background: #181a1f;
+    color: #e8e8e8;
+}
+
+
+/* =========================
+   HEADER
+========================= */
+
+body.dark-mode .page-header h1,
+body.dark-mode .section-title h2,
+body.dark-mode .section-title h3,
+body.dark-mode h1,
+body.dark-mode h2,
+body.dark-mode h3 {
+    color: #f1f1f1;
+}
+
+body.dark-mode .page-header p,
+body.dark-mode .section-title p,
+body.dark-mode .user-info span {
+    color: #aaa;
+}
+
+body.dark-mode .back-button {
+    color: #7da7e8;
+}
+
+
+/* =========================
+   CARD
+========================= */
+
+body.dark-mode .settings-card,
+body.dark-mode .account-card,
+body.dark-mode .balance-card,
+body.dark-mode .deposit-card,
+body.dark-mode .transaction-card,
+body.dark-mode .overview-card,
+body.dark-mode .chart-card,
+body.dark-mode .area-card,
+body.dark-mode .movement-card,
+body.dark-mode .filter-box,
+body.dark-mode .summary-card {
+    background: #22252b;
+    color: #e8e8e8;
+}
+
+
+/* =========================
+   TEXT
+========================= */
+
+body.dark-mode span,
+body.dark-mode p {
+    color: #aaa;
+}
+
+body.dark-mode strong,
+body.dark-mode label {
+    color: #eee;
+}
+
+
+/* =========================
+   INPUT / SELECT
+========================= */
+
+body.dark-mode input,
+body.dark-mode select,
+body.dark-mode textarea {
+    background: #181a1f;
+    color: #eee;
+    border-color: #444;
+}
+
+body.dark-mode input::placeholder {
+    color: #777;
+}
+
+
+/* =========================
+   SETTINGS ROW
+========================= */
+
+body.dark-mode .setting-row {
+    border-color: #333;
+}
+
+
+/* =========================
+   PARKING
+========================= */
+
+body.dark-mode .parking-slot {
+    background: #252930;
+    border-color: #3a3f47;
+    color: #eee;
+}
+
+body.dark-mode .parking-slot.available {
+    background: #1f2b24;
+}
+
+body.dark-mode .parking-slot.occupied {
+    background: #352323;
+}
+
+body.dark-mode .parking-slot.maintenance {
+    background: #35301f;
+}
+
+
+/* =========================
+   TABLE / TRANSACTION
+========================= */
+
+body.dark-mode .transaction-row {
+    border-color: #333;
+}
+
+body.dark-mode .transaction-header {
+    background: #292c33;
+}
+
+
+/* =========================
+   CHART
+========================= */
+
+body.dark-mode .chart-card {
+    background: #22252b;
+}
+
+
+/* =========================
+   PROGRESS
+========================= */
+
+body.dark-mode .progress-bar {
+    background: #363a42;
+}
+
+
+/* =========================
+   BUTTON
+========================= */
+
+body.dark-mode .action-button {
+    background: #303846;
+    color: #9bbcf0;
+}
+
+body.dark-mode .action-button:hover {
+    background: #3a4352;
+}
+
+
+/* =========================
+   MODAL
+========================= */
+
+body.dark-mode .slot-menu {
+    background: #22252b;
+    color: #eee;
+}
+
+body.dark-mode .slot-menu h3 {
+    color: #fff;
+}
+
+
+/* =========================
+   LEGEND
+========================= */
+
+body.dark-mode .legend {
+    color: #ccc;
+}

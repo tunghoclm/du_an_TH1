@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Cài đặt - Smart Parking</title>
+
+    <link rel="stylesheet" href="settings.css">
+</head>
+
+<body>
+
+<main class="main-content">
+
+    <!-- HEADER -->
+    <header class="page-header">
+
+        <div class="header-left">
+
+            <a href="index.html" class="back-button">
+                ← Quay lại
+            </a>
+
+            <div>
+                <h1>Cài đặt</h1>
+                <p>Quản lý các thiết lập của tài khoản</p>
+            </div>
+
+        </div>
+
+        <div class="user-info">
+            <strong>Bùi Chính Minh Dũng</strong>
+            <span>Người dùng</span>
+        </div>
+
+    </header>
+
+
+    <!-- ACCOUNT -->
+    <section class="settings-section">
+
+        <div class="section-title">
+            <h2>👤 Tài khoản</h2>
+            <p>Quản lý thông tin hiển thị của tài khoản</p>
+        </div>
+
+        <div class="settings-card">
+
+            <div class="setting-row">
+
+                <div class="setting-info">
+                    <strong>Tên hiển thị</strong>
+                    <span>Tên được hiển thị trên hệ thống</span>
+                </div>
+
+                <input
+                    type="text"
+                    id="display-name"
+                    value="Bùi Chính Minh Dũng"
+                >
+
+            </div>
+
+
+            <div class="setting-row">
+
+                <div class="setting-info">
+                    <strong>Email</strong>
+                    <span>Email sử dụng cho tài khoản</span>
+                </div>
+
+                <input
+                    type="email"
+                    id="email"
+                    value="dung@example.com"
+                >
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- NOTIFICATION -->
+    <section class="settings-section">
+
+        <div class="section-title">
+            <h2>🔔 Thông báo</h2>
+            <p>Quản lý thông báo từ hệ thống</p>
+        </div>
+
+        <div class="settings-card">
+
+            <div class="setting-row">
+
+                <div class="setting-info">
+                    <strong>Thông báo hệ thống</strong>
+                    <span>Nhận thông báo về tình trạng bãi xe</span>
+                </div>
+
+                <label class="switch">
+                    <input
+                        type="checkbox"
+                        id="notification-toggle"
+                        checked
+                    >
+
+                    <span class="slider"></span>
+                </label>
+
+            </div>
+
+
+            <div class="setting-row">
+
+                <div class="setting-info">
+                    <strong>Thông báo giao dịch</strong>
+                    <span>Thông báo khi nạp tiền hoặc thanh toán</span>
+                </div>
+
+                <label class="switch">
+                    <input
+                        type="checkbox"
+                        id="transaction-toggle"
+                        checked
+                    >
+
+                    <span class="slider"></span>
+                </label>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- APPEARANCE -->
+    <section class="settings-section">
+
+        <div class="section-title">
+            <h2>🎨 Giao diện</h2>
+            <p>Tùy chỉnh giao diện hệ thống</p>
+        </div>
+
+        <div class="settings-card">
+
+            <div class="setting-row">
+
+                <div class="setting-info">
+                    <strong>Chế độ tối</strong>
+                    <span>Chuyển sang giao diện tối</span>
+                </div>
+
+                <label class="switch">
+
+                    <input
+                        type="checkbox"
+                        id="dark-mode-toggle"
+                    >
+
+                    <span class="slider"></span>
+
+                </label>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- SECURITY -->
+    <section class="settings-section">
+
+        <div class="section-title">
+            <h2>🔒 Bảo mật</h2>
+            <p>Quản lý bảo mật tài khoản</p>
+        </div>
+
+        <div class="settings-card">
+
+            <div class="setting-row">
+
+                <div class="setting-info">
+                    <strong>Đổi mật khẩu</strong>
+                    <span>Thay đổi mật khẩu đăng nhập</span>
+                </div>
+
+                <button
+                    class="action-button"
+                    id="change-password"
+                >
+                    Đổi mật khẩu
+                </button>
+
+            </div>
+
+
+            <div class="setting-row">
+
+                <div class="setting-info">
+                    <strong>Đăng xuất</strong>
+                    <span>Đăng xuất khỏi tài khoản hiện tại</span>
+                </div>
+
+                <button
+                    class="logout-button"
+                    id="logout-button"
+                >
+                    Đăng xuất
+                </button>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- SAVE -->
+    <div class="save-area">
+
+        <button
+            class="save-button"
+            id="save-settings"
+        >
+            Lưu thay đổi
+        </button>
+
+    </div>
+
+</main>
+
+
+<script src="settings.js"></script>
+<link rel="stylesheet" href="settings.css">
+<link rel="stylesheet" href="darkmode.css">
+
+<script src="theme.js"></script>
+</body>
+</html>
