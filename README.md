@@ -156,3 +156,4 @@ Sau đó tải file `test_plate.jpg` lên ở trang `/entry`, rồi lại tải 
 - Dùng mô hình OCR chuyên biển số (ví dụ EasyOCR, hoặc model huấn luyện riêng)
   để tăng độ chính xác với biển số Việt Nam.
 - Thêm thanh toán không tiền mặt (QR code, ví điện tử).
+# du_an_TH1
