@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giá xe - Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='pricing.css') }}">
+</head>
+<body>
+<div class="wrap">
+
+    <!-- ============ TIÊU ĐỀ ============ -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
+            <div>
+                <h1>Bảng giá gửi xe</h1>
+                <p>
+                    {% if can_edit %}Quản lý giá cước theo loại xe và khung thời gian
+                    {% else %}Giá cước theo loại xe và khung thời gian (chỉ xem){% endif %}
+                </p>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <div class="user-chip">
+                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
+                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ============ THÔNG BÁO ============ -->
+    <div class="toasts" id="toasts">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="toast toast-{{ category }}" role="status">
+                <span>{{ message }}</span>
+                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
+            </div>
+            {% endfor %}
+        {% endwith %}
+    </div>
+
+    <!-- ============ SỐ LIỆU NHANH ============ -->
+    <section class="stats">
+        <div class="stat"><span class="stat-icon blue">🚗</span><div><b>{{ vehicle_types|length }}</b><small>Loại xe</small></div></div>
+        <div class="stat"><span class="stat-icon amber">🕒</span><div><b>{{ periods|length }}</b><small>Khung thời gian</small></div></div>
+        <div class="stat"><span class="stat-icon green">💰</span><div><b>{{ prices|length }}</b><small>Mức giá</small></div></div>
+    </section>
+
+    <!-- ============ TAB ============ -->
+    <nav class="tabs" role="tablist">
+        <button type="button" class="tab active" data-tab="prices" role="tab">Bảng giá</button>
+        <button type="button" class="tab" data-tab="periods" role="tab">Khung thời gian</button>
+        <button type="button" class="tab" data-tab="types" role="tab">Loại xe</button>
+    </nav>
+
+    <!-- ===== TAB 1: BẢNG GIÁ ===== -->
+    <section class="panel" id="tab-prices">
+        <div class="panel-toolbar">
+            <div class="chips" id="type-filter">
+                <button type="button" class="chip active" data-type="all">Tất cả</button>
+                {% for v in vehicle_types %}
+                <button type="button" class="chip" data-type="{{ v['id'] }}">{{ v['name'] }}</button>
+                {% endfor %}
+            </div>
+            {% if can_edit %}<button type="button" class="btn btn-green" id="add-main" onclick="openPrice(null)">＋ Thêm giá mới</button>{% endif %}
+        </div>
+        <div class="table-wrap">
+            <table class="data" id="price-table">
+                <thead>
+                    <tr>
+                        <th class="c-stt">STT</th><th>Loại xe</th><th>Khung thời gian</th><th>Giờ áp dụng</th>
+                        <th class="num">Giá</th><th>Loại vé</th>{% if can_edit %}<th class="c-act">Thao tác</th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                {% for r in prices %}
+                    <tr data-type="{{ r['vehicle_type_id'] }}">
+                        <td class="c-stt" data-label="STT"><span class="stt">{{ loop.index }}</span></td>
+                        <td data-label="Loại xe"><strong>{{ r['vehicle_name'] }}</strong></td>
+                        <td data-label="Khung thời gian"><span class="pill">{{ r['period_name'] }}</span></td>
+                        <td data-label="Giờ áp dụng">
+                            {% if r['kind'] == 'day' %}Ngày {{ r['start_value'] }} – {{ r['end_value'] }}
+                            {% else %}{{ r['start_value'] }} – {{ r['end_value'] }}{% endif %}
+                        </td>
+                        <td class="num" data-label="Giá"><span class="money">{{ '{:,}'.format(r['amount']).replace(',', '.') }} đ</span></td>
+                        <td data-label="Loại vé"><span class="badge {{ 'badge-month' if r['ticket_type'] == 'month' else 'badge-turn' }}">{{ ticket_labels.get(r['ticket_type'], r['ticket_type']) }}</span></td>
+                        {% if can_edit %}
+                        <td class="c-act" data-label="Thao tác">
+                            <div class="actions">
+                                <button type="button" class="btn btn-edit"
+                                        data-id="{{ r['id'] }}" data-type="{{ r['vehicle_type_id'] }}" data-period="{{ r['period_id'] }}"
+                                        data-amount="{{ r['amount'] }}" data-ticket="{{ r['ticket_type'] }}"
+                                        onclick="openPrice(this)">✎ Sửa</button>
+                                <button type="button" class="btn btn-del"
+                                        data-url="{{ url_for('pricing_price_delete', price_id=r['id']) }}"
+                                        data-msg="Xóa giá {{ '{:,}'.format(r['amount']).replace(',', '.') }} đ của “{{ r['vehicle_name'] }}” ({{ r['period_name'] }})?"
+                                        onclick="askDelete(this)">🗑 Xóa</button>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <div class="empty" id="price-empty" {% if prices %}hidden{% endif %}>
+                <div class="empty-icon">🧾</div>
+                <p>{% if prices %}Chưa có giá nào cho loại xe này.{% else %}Chưa có mức giá nào.{% endif %}</p>
+                {% if can_edit and vehicle_types and periods %}<button type="button" class="btn btn-green" onclick="openPrice(null)">＋ Thêm giá mới</button>{% endif %}
+            </div>
+        </div>
+        <p class="note">
+            Khi xe ra, phí = <strong>giá vé Lượt</strong> của loại xe theo <strong>khung giờ lúc xe vào</strong> (tính 1 lượt, không tính theo số giờ).
+            Giá vé Tháng hiện chỉ để tham khảo, chưa áp dụng tự động.
+        </p>
+    </section>
+
+    <!-- ===== TAB 2: KHUNG THỜI GIAN ===== -->
+    <section class="panel" id="tab-periods" hidden>
+        <div class="panel-toolbar">
+            <p class="muted">Các khung giờ (hoặc khoảng ngày trong tháng) dùng để đặt giá.</p>
+            {% if can_edit %}<button type="button" class="btn btn-green" onclick="openPeriod(null)">＋ Thêm khung thời gian</button>{% endif %}
+        </div>
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr><th class="c-stt">STT</th><th>Tên</th><th>Kiểu</th><th>Bắt đầu</th><th>Kết thúc</th>{% if can_edit %}<th class="c-act">Thao tác</th>{% endif %}</tr>
+                </thead>
+                <tbody>
+                {% for p in periods %}
+                    <tr>
+                        <td class="c-stt" data-label="STT"><span class="stt">{{ loop.index }}</span></td>
+                        <td data-label="Tên"><strong>{{ p['name'] }}</strong></td>
+                        <td data-label="Kiểu"><span class="badge badge-turn">{{ 'Theo ngày trong tháng' if p['kind'] == 'day' else 'Theo giờ' }}</span></td>
+                        <td data-label="Bắt đầu">{{ p['start_value'] }}</td>
+                        <td data-label="Kết thúc">{{ p['end_value'] }}</td>
+                        {% if can_edit %}
+                        <td class="c-act" data-label="Thao tác">
+                            <div class="actions">
+                                <button type="button" class="btn btn-edit"
+                                        data-id="{{ p['id'] }}" data-name="{{ p['name'] }}" data-kind="{{ p['kind'] }}"
+                                        data-start="{{ p['start_value'] }}" data-end="{{ p['end_value'] }}"
+                                        onclick="openPeriod(this)">✎ Sửa</button>
+                                <button type="button" class="btn btn-del"
+                                        data-url="{{ url_for('pricing_period_delete', period_id=p['id']) }}"
+                                        data-msg="Xóa khung thời gian “{{ p['name'] }}”? Các giá thuộc khung này cũng sẽ bị xóa."
+                                        onclick="askDelete(this)">🗑 Xóa</button>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% if not periods %}<div class="empty"><div class="empty-icon">🕒</div><p>Chưa có khung thời gian nào.</p></div>{% endif %}
+        </div>
+    </section>
+
+    <!-- ===== TAB 3: LOẠI XE ===== -->
+    <section class="panel" id="tab-types" hidden>
+        <div class="panel-toolbar">
+            <p class="muted">Tự tạo tên loại xe theo nhu cầu của bãi.</p>
+            {% if can_edit %}<button type="button" class="btn btn-green" onclick="openType(null)">＋ Thêm loại xe</button>{% endif %}
+        </div>
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr><th class="c-stt">STT</th><th>Tên loại</th><th>Số mức giá</th>{% if can_edit %}<th class="c-act">Thao tác</th>{% endif %}</tr>
+                </thead>
+                <tbody>
+                {% for v in vehicle_types %}
+                    <tr>
+                        <td class="c-stt" data-label="STT"><span class="stt">{{ loop.index }}</span></td>
+                        <td data-label="Tên loại"><strong>{{ v['name'] }}</strong></td>
+                        <td data-label="Số mức giá">{{ prices|selectattr('vehicle_type_id', 'equalto', v['id'])|list|length }}</td>
+                        {% if can_edit %}
+                        <td class="c-act" data-label="Thao tác">
+                            <div class="actions">
+                                <button type="button" class="btn btn-edit" data-id="{{ v['id'] }}" data-name="{{ v['name'] }}"
+                                        onclick="openType(this)">✎ Sửa</button>
+                                <button type="button" class="btn btn-del"
+                                        data-url="{{ url_for('pricing_type_delete', type_id=v['id']) }}"
+                                        data-msg="Xóa loại xe “{{ v['name'] }}”? Các giá thuộc loại xe này cũng sẽ bị xóa."
+                                        onclick="askDelete(this)">🗑 Xóa</button>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% if not vehicle_types %}<div class="empty"><div class="empty-icon">🚗</div><p>Chưa có loại xe nào.</p></div>{% endif %}
+        </div>
+    </section>
+
+    {% if not can_edit %}
+    <p class="note center">Chỉ quản trị viên và nhân viên mới chỉnh sửa được bảng giá.</p>
+    {% endif %}
+</div>
+
+{% if can_edit %}
+<!-- ============ HỘP THOẠI: GIÁ ============ -->
+<dialog id="price-dialog">
+    <form method="POST" action="{{ url_for('pricing_price_save') }}" class="dlg">
+        <h2 id="price-title">Thêm giá xe</h2>
+        <input type="hidden" name="id" id="price-id">
+
+        <label for="price-type">Loại xe <i>*</i></label>
+        <select name="vehicle_type_id" id="price-type" required>
+            {% for v in vehicle_types %}<option value="{{ v['id'] }}">{{ v['name'] }}</option>{% endfor %}
+        </select>
+
+        <label for="price-period">Khung thời gian <i>*</i></label>
+        <select name="period_id" id="price-period" required>
+            {% for p in periods %}<option value="{{ p['id'] }}" data-kind="{{ p['kind'] }}">{{ p['name'] }} ({% if p['kind'] == 'day' %}ngày {{ p['start_value'] }} – {{ p['end_value'] }}{% else %}{{ p['start_value'] }} – {{ p['end_value'] }}{% endif %})</option>{% endfor %}
+        </select>
+
+        <label for="price-amount">Giá tiền (VNĐ) <i>*</i></label>
+        <input type="number" name="amount" id="price-amount" min="0" step="500" inputmode="numeric" placeholder="vd: 5000" required>
+
+        <label>Loại vé</label>
+        <div class="seg">
+            {% for key, label in ticket_labels.items() %}
+            <input type="radio" name="ticket_type" id="tk-{{ key }}" value="{{ key }}" {{ 'checked' if key == 'turn' }}>
+            <label for="tk-{{ key }}">{{ label }}</label>
+            {% endfor %}
+        </div>
+
+        <p class="hint" id="price-hint"></p>
+
+        {% if not vehicle_types or not periods %}
+        <p class="warn">Cần tạo ít nhất 1 loại xe và 1 khung thời gian trước khi thêm giá.</p>
+        {% endif %}
+
+        <div class="dlg-foot">
+            <button type="button" class="btn btn-ghost" onclick="this.closest('dialog').close()">Hủy</button>
+            <button type="submit" class="btn btn-green">💾 Lưu</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- ============ HỘP THOẠI: KHUNG THỜI GIAN ============ -->
+<dialog id="period-dialog">
+    <form method="POST" action="{{ url_for('pricing_period_save') }}" class="dlg">
+        <h2 id="period-title">Thêm khung thời gian</h2>
+        <input type="hidden" name="id" id="period-id">
+
+        <label for="period-name">Tên khung thời gian <i>*</i></label>
+        <input type="text" name="name" id="period-name" maxlength="40" placeholder="vd: Sáng, Tối, Cuối tuần..." required>
+
+        <label for="period-kind">Kiểu</label>
+        <select name="kind" id="period-kind" onchange="applyKind()">
+            <option value="time">Theo giờ trong ngày (HH:MM)</option>
+            <option value="day">Theo ngày trong tháng (1–31)</option>
+        </select>
+
+        <div class="two">
+            <div><label for="period-start">Bắt đầu <i>*</i></label><input name="start_value" id="period-start" required></div>
+            <div><label for="period-end">Kết thúc <i>*</i></label><input name="end_value" id="period-end" required></div>
+        </div>
+
+        <div class="dlg-foot">
+            <button type="button" class="btn btn-ghost" onclick="this.closest('dialog').close()">Hủy</button>
+            <button type="submit" class="btn btn-green">💾 Lưu</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- ============ HỘP THOẠI: LOẠI XE ============ -->
+<dialog id="type-dialog">
+    <form method="POST" action="{{ url_for('pricing_type_save') }}" class="dlg">
+        <h2 id="type-title">Thêm loại xe</h2>
+        <input type="hidden" name="id" id="type-id">
+
+        <label for="type-name">Tên loại xe <i>*</i></label>
+        <input type="text" name="name" id="type-name" maxlength="40" placeholder="vd: Xe máy, Ô tô, Xe tải nhỏ..." required>
+
+        <div class="dlg-foot">
+            <button type="button" class="btn btn-ghost" onclick="this.closest('dialog').close()">Hủy</button>
+            <button type="submit" class="btn btn-green">💾 Lưu</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- ============ HỘP THOẠI: XÁC NHẬN XÓA ============ -->
+<dialog id="confirm-dialog" class="small">
+    <form method="POST" id="confirm-form" class="dlg center">
+        <div class="confirm-icon">🗑</div>
+        <h2>Xác nhận xóa</h2>
+        <p id="confirm-msg" class="confirm-msg"></p>
+        <div class="dlg-foot center">
+            <button type="button" class="btn btn-ghost" onclick="this.closest('dialog').close()">Hủy</button>
+            <button type="submit" class="btn btn-red">Xóa</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
+
+<script>
+    function $(id) { return document.getElementById(id); }
+
+    /* ---------- Tab ---------- */
+    var tabs = document.querySelectorAll('.tab');
+    function showTab(name) {
+        tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.tab === name); });
+        ['prices', 'periods', 'types'].forEach(function (n) { $('tab-' + n).hidden = (n !== name); });
+        history.replaceState(null, '', '#' + name);
+    }
+    tabs.forEach(function (t) { t.addEventListener('click', function () { showTab(t.dataset.tab); }); });
+    var start = location.hash.replace('#', '');
+    if (['prices', 'periods', 'types'].indexOf(start) >= 0) showTab(start);
+
+    /* ---------- Lọc theo loại xe ---------- */
+    var chips = document.querySelectorAll('#type-filter .chip');
+    chips.forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            chips.forEach(function (c) { c.classList.toggle('active', c === chip); });
+            var want = chip.dataset.type, shown = 0;
+            document.querySelectorAll('#price-table tbody tr').forEach(function (tr) {
+                var show = (want === 'all' || tr.dataset.type === want);
+                tr.hidden = !show;
+                if (show) { shown++; tr.querySelector('.stt').textContent = shown; }
+            });
+            $('price-empty').hidden = shown > 0;
+            $('price-table').hidden = shown === 0;
+        });
+    });
+
+    /* ---------- Thông báo tự tắt ---------- */
+    setTimeout(function () {
+        document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); });
+    }, 6000);
+</script>
+
+{% if can_edit %}
+<script>
+    /* Bấm ra ngoài hộp thoại (vùng nền mờ) để đóng */
+    document.querySelectorAll('dialog').forEach(function (d) {
+        d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
+    });
+
+    /* ---------- Xóa (hộp xác nhận) ---------- */
+    function askDelete(btn) {
+        $('confirm-form').action = btn.dataset.url;
+        $('confirm-msg').textContent = btn.dataset.msg;
+        $('confirm-dialog').showModal();
+    }
+
+    /* ---------- Khung thời gian ---------- */
+    function applyKind(keepValues) {
+        var kind = $('period-kind').value;
+        ['period-start', 'period-end'].forEach(function (id) {
+            var el = $(id), old = el.value;
+            el.type = (kind === 'time') ? 'time' : 'number';
+            if (kind === 'day') { el.min = 1; el.max = 31; el.step = 1; }
+            else { el.removeAttribute('min'); el.removeAttribute('max'); el.removeAttribute('step'); }
+            el.value = keepValues ? old : '';
+        });
+    }
+    function openPeriod(btn) {
+        var editing = !!btn;
+        $('period-title').textContent = editing ? 'Sửa khung thời gian' : 'Thêm khung thời gian';
+        $('period-id').value = editing ? btn.dataset.id : '';
+        $('period-name').value = editing ? btn.dataset.name : '';
+        $('period-kind').value = editing ? btn.dataset.kind : 'time';
+        applyKind(false);
+        if (editing) {
+            var day = btn.dataset.kind === 'day';
+            $('period-start').value = day ? parseInt(btn.dataset.start, 10) : btn.dataset.start;
+            $('period-end').value = day ? parseInt(btn.dataset.end, 10) : btn.dataset.end;
+        }
+        $('period-dialog').showModal();
+    }
+
+    /* ---------- Loại xe ---------- */
+    function openType(btn) {
+        var editing = !!btn;
+        $('type-title').textContent = editing ? 'Sửa loại xe' : 'Thêm loại xe';
+        $('type-id').value = editing ? btn.dataset.id : '';
+        $('type-name').value = editing ? btn.dataset.name : '';
+        $('type-dialog').showModal();
+    }
+
+    /* ---------- Giá ---------- */
+    // Vé Lượt chỉ đi với khung GIỜ (HH:MM); vé Tháng chỉ đi với khung NGÀY trong tháng.
+    var allPeriodOptions = Array.prototype.slice.call($('price-period').options).map(function (o) {
+        return { value: o.value, text: o.text, kind: o.dataset.kind };
+    });
+    function currentTicket() { return $('tk-month').checked ? 'month' : 'turn'; }
+    function fillPeriods(selectedId) {
+        var wantKind = currentTicket() === 'month' ? 'day' : 'time';
+        var sel = $('price-period'), keep = selectedId || sel.value;
+        sel.innerHTML = '';
+        allPeriodOptions.forEach(function (o) {
+            if (o.kind !== wantKind) return;
+            var opt = document.createElement('option');
+            opt.value = o.value; opt.textContent = o.text; opt.dataset.kind = o.kind;
+            sel.appendChild(opt);
+        });
+        if (sel.options.length) { sel.disabled = false; if (keep) sel.value = keep; if (!sel.value) sel.selectedIndex = 0; }
+        $('price-hint').textContent = sel.options.length ? '' : (wantKind === 'day'
+            ? 'Chưa có khung thời gian kiểu "Theo ngày trong tháng". Hãy tạo ở tab Khung thời gian trước (vd: Tháng, ngày 01–30).'
+            : 'Chưa có khung thời gian kiểu "Theo giờ". Hãy tạo ở tab Khung thời gian trước.');
+    }
+    document.querySelectorAll('input[name="ticket_type"]').forEach(function (r) {
+        r.addEventListener('change', function () { fillPeriods(); });
+    });
+    function openPrice(btn) {
+        var editing = !!btn;
+        $('price-title').textContent = editing ? 'Sửa giá xe' : 'Thêm giá xe';
+        $('price-id').value = editing ? btn.dataset.id : '';
+        if (editing) {
+            $('price-type').value = btn.dataset.type;
+            $('price-amount').value = btn.dataset.amount;
+            $('tk-' + btn.dataset.ticket).checked = true;
+            fillPeriods(btn.dataset.period);
+        } else {
+            $('price-amount').value = '';
+            $('tk-turn').checked = true;
+            fillPeriods();
+            // Đang lọc theo 1 loại xe -> chọn sẵn loại xe đó
+            var active = document.querySelector('#type-filter .chip.active');
+            if (active && active.dataset.type !== 'all') $('price-type').value = active.dataset.type;
+        }
+        $('price-dialog').showModal();
+    }
+</script>
+{% endif %}
+</body>
+</html>
