@@ -92,8 +92,8 @@ Tài khoản demo mặc định (đăng nhập tại `/login`):
 | `/login`       | Đăng nhập hệ thống                                                          |
 | `/`            | Menu chính — số liệu nhanh + lối vào các chức năng                          |
 | `/parking`     | Sơ đồ bãi đỗ theo khu A/B/C (60 vị trí) — tự động cập nhật khi xe vào/ra qua OCR; có thể bấm vị trí trống để đưa vào/ra khỏi bảo trì |
-| `/entry`       | Xe vào — tải ảnh biển số, OCR nhận diện, **chọn loại xe**, gán vị trí      |
-| `/exit`        | Xe ra — tải ảnh biển số, đối chiếu, tính phí, **trả lại vị trí đã gán**      |
+| `/gate`        | **Xe vào / ra (1 trang)** — chọn ảnh → *Nhận diện biển số* (xem ảnh có khung đánh dấu) → *Xác nhận*. Biển số chưa có trong bãi = xe **vào** (chọn loại xe, gán vị trí); biển số đang gửi = xe **ra** (tính phí, trả vị trí). Có ô ghi chú và cho sửa biển số nếu nhận diện sai |
+| `/entry`, `/exit` | Đường dẫn cũ, tự chuyển sang `/gate` |
 | `/history`     | Lịch sử toàn bộ lượt gửi xe, có bộ lọc theo biển số / trạng thái / ngày      |
 | `/statistics`  | Thống kê tổng lượt xe, doanh thu, tỉ lệ lấp đầy bãi đỗ                       |
 | `/users`       | Quản lý tài khoản (chỉ admin thấy) — thêm, khóa/mở khóa, xóa người dùng      |
@@ -110,10 +110,10 @@ Tài khoản **user** thường chỉ xem, không chỉnh sửa được.
 
 **Cách tính phí:** khi xe vào bắt buộc chọn **loại xe**; khi xe ra, hệ thống lấy **giá vé Lượt** của loại xe
 tương ứng với **khung giờ lúc xe vào** trong trang `/pricing` (1 lượt, không tính theo số giờ). Nếu loại xe chưa có giá
-ở khung giờ hiện tại thì trang `/entry` không cho nhận xe và báo cần bổ sung giá. Giá vé *Tháng* chỉ để tham khảo, chưa áp dụng tự động.
+ở khung giờ hiện tại thì trang `/gate` không cho nhận xe vào và báo cần bổ sung giá. Giá vé *Tháng* chỉ để tham khảo, chưa áp dụng tự động.
 Với xe cũ chưa có loại xe (hoặc giá đã bị xóa), hệ thống dùng đơn giá dự phòng 5.000 VNĐ / giờ (biến `FEE_PER_HOUR` trong `app.py`).
 
-**Nếu bãi đỗ hết chỗ** (60/60 vị trí đều occupied/maintenance), trang `/entry` sẽ báo lỗi
+**Nếu bãi đỗ hết chỗ** (60/60 vị trí đều occupied/maintenance), trang `/gate` sẽ báo lỗi
 "Bãi đỗ đã hết chỗ trống" và không ghi nhận xe vào.
 
 ## 5. Test nhanh không cần ảnh xe thật
@@ -124,8 +124,8 @@ Dùng script có sẵn để tạo ảnh biển số giả lập:
 python generate_sample_plate.py "51F-123.45" test_plate.jpg
 ```
 
-Sau đó tải file `test_plate.jpg` lên ở trang `/entry`, rồi lại tải lên trang
-`/exit` để thử luồng tính phí hoàn chỉnh.
+Sau đó tải file `test_plate.jpg` lên ở trang `/gate` (xe vào), rồi tải lại đúng ảnh đó
+lần nữa (xe ra) để thử luồng tính phí hoàn chỉnh.
 
 ## 6. Ghi chú kỹ thuật
 
@@ -156,4 +156,3 @@ Sau đó tải file `test_plate.jpg` lên ở trang `/entry`, rồi lại tải 
 - Dùng mô hình OCR chuyên biển số (ví dụ EasyOCR, hoặc model huấn luyện riêng)
   để tăng độ chính xác với biển số Việt Nam.
 - Thêm thanh toán không tiền mặt (QR code, ví điện tử).
-# du_an_TH1

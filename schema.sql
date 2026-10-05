@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS parking_records (
     slot_name     TEXT,                       -- Vị trí đỗ được gán (vd: A01)
     vehicle_type_id   INTEGER,                -- Loại xe lúc gửi (tham chiếu vehicle_types)
     vehicle_type_name TEXT,                   -- Tên loại xe lúc gửi (lưu lại để không mất khi đổi/xóa loại)
+    note              TEXT,                   -- Ghi chú của người nhận xe (vào/ra)
     entry_time    DATETIME NOT NULL,          -- Thời điểm xe vào
     exit_time     DATETIME,                   -- Thời điểm xe ra (NULL nếu còn trong bãi)
     entry_image   TEXT,                       -- Tên file ảnh chụp lúc vào

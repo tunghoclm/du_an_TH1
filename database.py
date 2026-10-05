@@ -37,7 +37,8 @@ def init_db():
     # Migration nhẹ: nếu bảng parking_records cũ (từ bản trước) chưa có cột slot_name
     for col_sql in ("ALTER TABLE parking_records ADD COLUMN slot_name TEXT",
                     "ALTER TABLE parking_records ADD COLUMN vehicle_type_id INTEGER",
-                    "ALTER TABLE parking_records ADD COLUMN vehicle_type_name TEXT"):
+                    "ALTER TABLE parking_records ADD COLUMN vehicle_type_name TEXT",
+                    "ALTER TABLE parking_records ADD COLUMN note TEXT"):
         try:
             conn.execute(col_sql)
         except sqlite3.OperationalError:
@@ -87,15 +88,16 @@ def init_db():
 # ============================================================
 
 def add_entry_record(plate_number: str, entry_image: str, slot_name: str = None,
-                     vehicle_type_id: int = None, vehicle_type_name: str = None) -> int:
+                     vehicle_type_id: int = None, vehicle_type_name: str = None,
+                     note: str = None) -> int:
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO parking_records
-               (plate_number, entry_time, entry_image, slot_name, vehicle_type_id, vehicle_type_name, status)
-           VALUES (?, ?, ?, ?, ?, ?, 'IN')""",
+               (plate_number, entry_time, entry_image, slot_name, vehicle_type_id, vehicle_type_name, note, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'IN')""",
         (plate_number, datetime.now().isoformat(timespec='seconds'), entry_image, slot_name,
-         vehicle_type_id, vehicle_type_name)
+         vehicle_type_id, vehicle_type_name, note or None)
     )
     conn.commit()
     record_id = cur.lastrowid
@@ -117,14 +119,21 @@ def find_open_record(plate_number: str):
     return row
 
 
-def close_record(record_id: int, exit_image: str, fee: int):
+def close_record(record_id: int, exit_image: str, fee: int, note: str = None):
+    """Đóng lượt gửi xe. Nếu có ghi chú lúc ra thì nối thêm vào ghi chú lúc vào (nếu có)."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
         """UPDATE parking_records
-           SET exit_time = ?, exit_image = ?, fee = ?, status = 'OUT'
+           SET exit_time = ?, exit_image = ?, fee = ?, status = 'OUT',
+               note = CASE
+                        WHEN ? IS NULL THEN note
+                        WHEN note IS NULL OR note = '' THEN 'Ra: ' || ?
+                        ELSE note || ' | Ra: ' || ?
+                      END
            WHERE id = ?""",
-        (datetime.now().isoformat(timespec='seconds'), exit_image, fee, record_id)
+        (datetime.now().isoformat(timespec='seconds'), exit_image, fee,
+         note or None, note, note, record_id)
     )
     conn.commit()
     conn.close()
