@@ -16,20 +16,29 @@ giao diện web bằng **HTML/CSS**.
 ```
 smart_parking/
 ├── app.py                     # Flask server (routes chính)
-├── database.py                # Thao tác SQLite
-├── plate_recognition.py       # OCR biển số (OpenCV + Tesseract)
-├── schema.sql                 # Cấu trúc bảng dữ liệu
-├── generate_sample_plate.py   # Tạo ảnh biển số mẫu để test
+├── setup.bat / setup.sh       # Cài đặt 1 lần (venv, thư viện, model OCR, database)
+├── run.bat / run.sh           # Chạy ứng dụng hằng ngày
 ├── requirements.txt
+├── cache/                     # File sinh ra sau khi chạy setup
+│   ├── venv/                  #   môi trường ảo Python
+│   ├── easyocr_models/        #   model EasyOCR đã tải
+│   ├── parking.db             #   database SQLite
+│   └── tmp/                   #   ảnh tạm giữa bước Nhận diện và Xác nhận
+├── py/                        # Các file Python
+│   ├── config.py              #   đường dẫn dùng chung
+│   ├── database.py            #   Thao tác SQLite
+│   ├── plate_recognition.py   #   OCR biển số (OpenCV + EasyOCR)
+│   ├── plate_api.py
+│   ├── plate_utils.py
+│   └── generate_sample_plate.py  # Tạo ảnh biển số mẫu để test
+├── SQL/
+│   └── schema.sql             # Cấu trúc bảng dữ liệu
 ├── templates/
-│   ├── base.html
-│   ├── index.html              # Trang chủ - danh sách xe trong bãi
-│   ├── entry.html               # Form xe vào
-│   ├── exit.html                # Form xe ra
-│   └── history.html             # Lịch sử gửi xe
+│   ├── html/                  # Các file HTML (Flask templates)
+│   └── css/                   # Các file CSS (phục vụ qua route /css/<file>)
 └── static/
-    ├── css/style.css
-    └── uploads/                # Ảnh upload được lưu tại đây
+    ├── in/                    # Ảnh khi xe đi vào
+    └── out/                   # Ảnh khi xe đi ra
 ```
 
 ## 2. Cài đặt (CHỈ LÀM 1 LẦN DUY NHẤT)
@@ -52,10 +61,10 @@ setup.bat
 ```
 
 Script sẽ:
-1. Tạo virtual environment (`venv/`)
+1. Tạo virtual environment (`cache/venv/`)
 2. Cài toàn bộ thư viện trong `requirements.txt`
 3. **Tải sẵn model EasyOCR** (bước tốn thời gian nhất, cần Internet — chỉ tải 1 lần)
-4. Khởi tạo file database `parking.db`
+4. Khởi tạo file database `cache/parking.db` từ `SQL/schema.sql`
 
 > Sau bước này, máy đã sẵn sàng chạy offline (trừ khi bạn xoá venv hoặc model).
 
@@ -121,7 +130,7 @@ Với xe cũ chưa có loại xe (hoặc giá đã bị xóa), hệ thống dùn
 Dùng script có sẵn để tạo ảnh biển số giả lập:
 
 ```bash
-python generate_sample_plate.py "51F-123.45" test_plate.jpg
+python py/generate_sample_plate.py "51F-123.45" test_plate.jpg
 ```
 
 Sau đó tải file `test_plate.jpg` lên ở trang `/gate` (xe vào), rồi tải lại đúng ảnh đó
