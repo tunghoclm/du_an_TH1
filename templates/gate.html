@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xe vào / ra - Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/entry_exit.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gate.css') }}">
+</head>
+<body>
+<div class="page-wrap">
+
+    <header class="page-header">
+        <div class="header-left">
+            <a href="{{ url_for('index') }}" class="back-button">←</a>
+            <div>
+                <h1>🚗 Xe vào / ra</h1>
+                <p>Chọn ảnh biển số → Nhận diện → Xác nhận. Biển số chưa có trong bãi là xe vào, đang gửi là xe ra.</p>
+            </div>
+        </div>
+        <div class="user-info">
+            <div>
+                <strong>{{ session.get('fullname') }}</strong>
+                <small>{{ role_label }}</small>
+            </div>
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+
+    <div class="card">
+        <form method="POST" enctype="multipart/form-data" id="gate-form">
+            <input type="hidden" name="token" value="{{ token }}">
+            <input type="hidden" name="checked_plate" value="{{ plate if mode else '' }}">
+
+            <div class="field">
+                <label for="image">Chọn hình ảnh biển số:</label>
+                <input type="file" id="image" name="image" accept="image/*" capture="environment">
+            </div>
+
+            <div class="field">
+                <label for="note">Ghi chú (nếu không nhận diện được biển số):</label>
+                <input type="text" id="note" name="note" value="{{ note }}" maxlength="200">
+            </div>
+
+            <div class="field">
+                <label for="plate">Biển số vừa nhận diện được:</label>
+                <input type="text" id="plate" name="plate" value="{{ plate }}" placeholder="Chưa nhận diện" autocomplete="off">
+                {% if token %}
+                <p class="field-hint">Nhận diện sai? Sửa lại biển số (gõ <code>61T3-2222</code> hoặc <code>61T32222</code> đều được) rồi bấm <strong>Nhận diện biển số</strong> để cập nhật thông tin bên dưới.</p>
+                {% endif %}
+            </div>
+
+            {% if token %}
+            <!-- ================= ẢNH BIỂN SỐ ĐÃ NHẬN DIỆN (nằm trước khung xe vào / xe ra) ================= -->
+            <div class="preview-section">
+                <div class="preview-head">
+                    <span class="badge-blue">Hình ảnh biển số vừa chọn</span>
+                    {% if plate %}<span class="badge-green">{{ plate }}</span>{% endif %}
+                </div>
+                {% if preview_url %}
+                <div class="preview-box"><img src="{{ preview_url }}" alt="Ảnh biển số đã nhận diện"></div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if mode == 'exit' %}
+            <!-- ================= XE RA ================= -->
+            <div class="mode-panel mode-exit">
+                <div class="mode-title">🚪 XE RA BÃI — biển số <strong>{{ plate }}</strong> đang gửi trong bãi</div>
+                <table class="info-table">
+                    <tr><td>Loại xe</td><td>{{ record['vehicle_type_name'] or '—' }}</td></tr>
+                    <tr><td>Vị trí đỗ</td><td>{{ record['slot_name'] or '—' }}</td></tr>
+                    <tr><td>Giờ vào</td><td>{{ record['entry_time'].replace('T', ' ') }}</td></tr>
+                    <tr><td>Đã gửi</td><td>{{ fee_preview.duration }}</td></tr>
+                    <tr><td>Phí tạm tính</td><td><strong>{{ '{:,}'.format(fee_preview.fee).replace(',', '.') }} VNĐ</strong>
+                        <span class="muted">({{ fee_preview.note }})</span></td></tr>
+                    {% if record['note'] %}<tr><td>Ghi chú lúc vào</td><td>{{ record['note'] }}</td></tr>{% endif %}
+                </table>
+                <p class="field-hint">Phí được chốt lại tại thời điểm bấm Xác nhận.</p>
+            </div>
+
+            {% elif mode == 'entry' %}
+            <!-- ================= XE VÀO ================= -->
+            <div class="mode-panel mode-entry">
+                <div class="mode-title">🚗 XE VÀO BÃI — biển số <strong>{{ plate }}</strong> chưa có trong bãi</div>
+
+                <div class="field">
+                    <label for="vehicle_type_id">Loại xe:</label>
+                    <select name="vehicle_type_id" id="vehicle_type_id" class="vehicle-select" required>
+                        <option value="" disabled {{ 'selected' if not form.get('vehicle_type_id') }}>— Chọn loại xe —</option>
+                        {% for t in type_options %}
+                            {% if t.price %}
+                            <option value="{{ t.id }}" {{ 'selected' if form.get('vehicle_type_id') == t.id|string }}>{{ t.name }} — {{ '{:,}'.format(t.price.amount).replace(',', '.') }}đ/lượt (khung {{ t.price.period_name }})</option>
+                            {% else %}
+                            <option value="{{ t.id }}" disabled>{{ t.name }} — chưa có giá lúc {{ now.strftime('%H:%M') }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    <p class="field-hint">Giá tính theo khung giờ lúc xe vào ({{ now.strftime('%H:%M') }}). Xem chi tiết tại <a href="{{ url_for('pricing') }}">Giá xe</a>.</p>
+                    {% if not type_options %}
+                        <div class="no-slots-message">⚠️ Chưa có loại xe nào. Hãy nhờ nhân viên/admin tạo ở trang Giá xe.</div>
+                    {% endif %}
+                </div>
+
+                {% if entry_mode == 'auto' %}
+                    {% if no_slots %}
+                        <div class="no-slots-message">⚠️ Bãi đỗ đã hết chỗ trống.</div>
+                    {% else %}
+                        <div class="auto-mode-note">
+                            🤖 Chế độ <strong>tự động</strong> đang bật cho tài khoản của bạn (đổi tại <a href="{{ url_for('settings') }}">Cài đặt</a>).
+                            Hệ thống sẽ tự chọn 1 vị trí trống khi xác nhận.
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="field">
+                        <label>Chọn vị trí đỗ:</label>
+                        {% if no_slots %}
+                            <div class="no-slots-message">⚠️ Bãi đỗ đã hết chỗ trống, không có vị trí nào để chọn.</div>
+                        {% endif %}
+                        {% for area, slots in slots_by_area.items() %}
+                            {% if slots %}
+                            <p class="area-label">Khu {{ area }}</p>
+                            <div class="slot-picker-grid">
+                                {% for slot in slots %}
+                                <input type="radio" name="slot_name" id="slot-{{ slot['slot_name'] }}"
+                                       value="{{ slot['slot_name'] }}" {{ 'checked' if form.get('slot_name') == slot['slot_name'] }}>
+                                <label for="slot-{{ slot['slot_name'] }}" class="slot-option">
+                                    <strong>{{ slot['slot_name'] }}</strong>
+                                    <span>Trống</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="button-row">
+                <button type="submit" name="action" value="recognize" class="btn btn-blue">🔍 Nhận diện biển số</button>
+                <button type="submit" name="action" value="confirm" class="btn btn-orange"
+                        {% if not mode or (mode == 'entry' and no_slots) %}disabled{% endif %}>
+                    💾 {% if mode == 'exit' %}Xác nhận xe ra{% elif mode == 'entry' %}Xác nhận xe vào{% else %}Xác nhận{% endif %}
+                </button>
+            </div>
+        </form>
+
+    </div>
+</div>
+
+<script>
+    // Nhận diện (OCR) mất vài giây: khóa nút + báo "Đang xử lý" để tránh bấm nhiều lần.
+    (function () {
+        var form = document.getElementById('gate-form');
+        var buttons = form.querySelectorAll('button[type=submit]');
+        var originals = [];
+        buttons.forEach(function (b) { originals.push(b.innerHTML); });
+
+        form.addEventListener('submit', function (e) {
+            var submitter = e.submitter;
+            // Hoãn việc khóa nút tới sau khi trình duyệt đã gom xong dữ liệu form (để vẫn gửi được name=action)
+            setTimeout(function () {
+                buttons.forEach(function (b) { b.disabled = true; });
+                if (submitter) submitter.innerHTML = '⏳ Đang xử lý...';
+            }, 0);
+        });
+
+        // Quay lại bằng nút Back của trình duyệt: khôi phục trạng thái nút
+        window.addEventListener('pageshow', function (ev) {
+            if (ev.persisted) location.reload();
+        });
+    })();
+</script>
+</body>
+</html>

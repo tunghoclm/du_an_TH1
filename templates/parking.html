@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bãi đỗ xe - Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/parking.css') }}">
+</head>
+<body>
+    <div class="parking-page">
+
+        <header class="page-header">
+            <div class="header-left">
+                <a href="{{ url_for('index') }}" class="back-button">←</a>
+                <div>
+                    <h1>Bãi đỗ xe</h1>
+                    <p>
+                        {% if session.get('role') in ('admin', 'manager') %}
+                            Xem và quản lý tình trạng các vị trí đỗ xe theo thời gian thực
+                        {% else %}
+                            Xem tình trạng các vị trí đỗ xe theo thời gian thực (chỉ xem)
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            <div class="user-info">
+                <div class="avatar">{{ (session.get('fullname') or '?')[0]|upper }}</div>
+                <div>
+                    <strong>{{ session.get('fullname') }}</strong>
+                    <small>{{ role_label }}</small>
+                </div>
+            </div>
+        </header>
+
+        <section class="parking-summary">
+            <div class="summary-card">
+                <div class="summary-icon blue">🅿️</div>
+                <div>
+                    <span>Tổng vị trí</span>
+                    <strong>{{ counts.total }}</strong>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon green">✓</div>
+                <div>
+                    <span>Đang trống</span>
+                    <strong>{{ counts.available }}</strong>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon red">🚗</div>
+                <div>
+                    <span>Đang đỗ</span>
+                    <strong>{{ counts.occupied }}</strong>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon orange">🔧</div>
+                <div>
+                    <span>Bảo trì</span>
+                    <strong>{{ counts.maintenance }}</strong>
+                </div>
+            </div>
+        </section>
+
+        <section class="control-bar">
+            <div class="parking-filter">
+                <label for="area">Khu vực</label>
+                <select id="area" onchange="filterArea(this.value)">
+                    <option value="all">Tất cả khu vực</option>
+                    <option value="A">Khu A</option>
+                    <option value="B">Khu B</option>
+                    <option value="C">Khu C</option>
+                </select>
+            </div>
+            <div class="legend">
+                <div class="legend-item"><span class="legend-dot available"></span>Trống</div>
+                <div class="legend-item"><span class="legend-dot occupied"></span>Đang đỗ</div>
+                <div class="legend-item"><span class="legend-dot maintenance"></span>Bảo trì</div>
+            </div>
+        </section>
+
+        {% if session.get('role') in ('admin', 'manager') %}
+        <p class="staff-hint">🔧 Bấm vào vị trí đang trống hoặc đang bảo trì để chuyển đổi trạng thái bảo trì.</p>
+        {% endif %}
+
+        {% for area, slots in slots_by_area.items() %}
+        <section class="parking-section" data-area="{{ area }}">
+            <div class="section-header">
+                <div>
+                    <h2>Khu {{ area }}</h2>
+                    <p>{{ slots|length }} vị trí</p>
+                </div>
+                <span class="area-status">
+                    {{ slots | selectattr('status', 'equalto', 'available') | list | length }} / {{ slots|length }} vị trí trống
+                </span>
+            </div>
+
+            <div class="parking-grid">
+                {% for slot in slots %}
+                {% if session.get('role') in ('admin', 'manager') and slot['status'] != 'occupied' %}
+                <form method="POST" action="{{ url_for('slot_maintenance', slot_name=slot['slot_name']) }}"
+                      class="slot-form"
+                      onsubmit="return confirm('{{ 'Kết thúc bảo trì' if slot['status'] == 'maintenance' else 'Đưa vị trí ' + slot['slot_name'] + ' vào bảo trì' }}?');">
+                    <button type="submit" class="parking-slot {{ slot['status'] }} slot-clickable">
+                        <strong>{{ slot['slot_name'] }}</strong>
+                        <span>{% if slot['status'] == 'available' %}Trống{% else %}Bảo trì{% endif %}</span>
+                    </button>
+                </form>
+                {% else %}
+                <div class="parking-slot {{ slot['status'] }}" title="{% if slot['status'] == 'occupied' %}Xe: {{ slot['plate_number'] }}{% endif %}">
+                    <strong>{{ slot['slot_name'] }}</strong>
+                    <span>
+                        {% if slot['status'] == 'available' %}Trống
+                        {% elif slot['status'] == 'occupied' %}{{ slot['plate_number'] }}
+                        {% else %}Bảo trì{% endif %}
+                    </span>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </section>
+        {% endfor %}
+    </div>
+
+    <script>
+        // Chỉ lọc hiển thị theo khu vực — KHÔNG chỉnh sửa dữ liệu (chỉ xem).
+        function filterArea(selected) {
+            document.querySelectorAll('.parking-section').forEach(function (section) {
+                var area = section.dataset.area;
+                section.style.display = (selected === 'all' || selected === area) ? 'block' : 'none';
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lịch sử - Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/history.css') }}">
+</head>
+<body>
+    <main class="main-content">
+        <header class="page-header">
+            <div class="header-left">
+                <a href="{{ url_for('index') }}" class="back-button">← Quay lại</a>
+                <div>
+                    <h1>Lịch sử hoạt động</h1>
+                    <p>Theo dõi toàn bộ lịch sử xe ra vào bãi đỗ</p>
+                </div>
+            </div>
+            <div class="user-info">
+                <strong>{{ session.get('fullname') }}</strong>
+                <span>{{ role_label }}</span>
+            </div>
+        </header>
+
+        <section class="statistics">
+            <div class="stat-card">
+                <div class="stat-icon">📋</div>
+                <div><span>Tổng lượt</span><strong>{{ total_count }}</strong></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🚗</div>
+                <div><span>Đang gửi</span><strong>{{ in_count }}</strong></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🚪</div>
+                <div><span>Đã lấy xe</span><strong>{{ out_count }}</strong></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📅</div>
+                <div><span>Hôm nay</span><strong>{{ today_count }}</strong></div>
+            </div>
+        </section>
+
+        <section class="filter-box">
+            <form method="GET" style="display:contents;">
+                <div class="filter-group">
+                    <label for="plate">Biển số</label>
+                    <input type="text" id="plate" name="plate" value="{{ keyword }}" placeholder="Nhập biển số...">
+                </div>
+                <div class="filter-group">
+                    <label for="status">Trạng thái</label>
+                    <select id="status" name="status">
+                        <option value="all" {{ 'selected' if status_filter == 'all' }}>Tất cả</option>
+                        <option value="IN" {{ 'selected' if status_filter == 'IN' }}>Đang gửi</option>
+                        <option value="OUT" {{ 'selected' if status_filter == 'OUT' }}>Đã lấy xe</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="date">Ngày</label>
+                    <input type="date" id="date" name="date" value="{{ date_filter }}">
+                </div>
+                <button type="submit" class="reset-button" style="background:#1e3c72;color:white;">Lọc</button>
+                <a href="{{ url_for('history') }}" class="reset-button">↻ Đặt lại</a>
+            </form>
+        </section>
+
+        <section class="history-box">
+            <div class="history-header">
+                <div>
+                    <h2>Danh sách lịch sử</h2>
+                    <p>{{ records|length }} bản ghi</p>
+                </div>
+            </div>
+            <div class="table-container">
+                {% if records %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Biển số</th>
+                            <th>Loại xe</th>
+                            <th>Vị trí</th>
+                            <th>Giao dịch</th>
+                            <th>Phí (VNĐ)</th>
+                            <th>Thời gian vào</th>
+                            <th>Thời gian ra</th>
+                            <th>Ghi chú</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in records %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td><strong>{{ r['plate_number'] }}</strong></td>
+                            <td>{{ r['vehicle_type_name'] or '—' }}</td>
+                            <td>{{ r['slot_name'] or '—' }}</td>
+                            <td>
+                                {% if r['status'] == 'IN' %}
+                                    <span class="badge badge-in">Đang gửi</span>
+                                {% else %}
+                                    <span class="badge badge-out">Đã lấy xe</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ '{:,}'.format(r['fee']) if r['fee'] else '—' }}</td>
+                            <td>{{ r['entry_time'] }}</td>
+                            <td>{{ r['exit_time'] or '—' }}</td>
+                            <td>{{ r['note'] or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-history">
+                    <div class="empty-icon">📭</div>
+                    <h3>Không tìm thấy bản ghi phù hợp</h3>
+                    <p>Hãy thử thay đổi bộ lọc.</p>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+</body>
+</html>
