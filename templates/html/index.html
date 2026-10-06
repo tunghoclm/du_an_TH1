@@ -83,7 +83,7 @@
                 <span class="arrow">→</span>
             </a>
 
-            {% if session.get('role') == 'admin' %}
+            {% if session.get('role') in ('admin', 'manager') %}
             <a href="{{ url_for('users') }}" class="menu-card">
                 <div class="card-icon users-icon">👥</div>
                 <div class="card-content">

@@ -13,23 +13,25 @@
                 <a href="{{ url_for('index') }}" class="back-button">←</a>
                 <div>
                     <h1>Người dùng</h1>
-                    <p>Quản lý tài khoản sử dụng hệ thống</p>
+                    <p>Quản lý tài khoản sử dụng hệ thống{% if session.get('role') != 'admin' %} (nhân viên chỉ quản lý tài khoản người dùng){% endif %}</p>
                 </div>
             </div>
             <div class="user-info">
                 <div class="avatar">{{ (session.get('fullname') or '?')[0]|upper }}</div>
                 <div>
                     <strong>{{ session.get('fullname') }}</strong>
-                    <small>Quản trị viên</small>
+                    <small>{{ role_label }}</small>
                 </div>
             </div>
         </header>
 
+        {% if not open_modal %}
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}
                 <p style="color: {{ '#c0392b' if category == 'error' else '#1c8a4b' }}; margin-bottom: 14px;">{{ message }}</p>
             {% endfor %}
         {% endwith %}
+        {% endif %}
 
         <section class="summary-container">
             <div class="summary-card">
@@ -48,7 +50,7 @@
 
         <section class="toolbar">
             <div style="flex:1;"></div>
-            <button id="add-user-button" class="add-button" type="button">+ Thêm người dùng</button>
+            <button id="add-user-button" class="add-button" type="button">+ Thêm tài khoản</button>
         </section>
 
         <section class="users-container">
@@ -65,7 +67,7 @@
                     <thead>
                         <tr>
                             <th>STT</th><th>Tài khoản</th><th>Họ tên</th>
-                            <th>Vai trò</th><th>Trạng thái</th><th>Thao tác</th>
+                            <th>Vai trò</th><th>Xe &amp; vé đăng ký</th><th>Trạng thái</th><th>Thao tác</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -82,12 +84,28 @@
                                 </span>
                             </td>
                             <td>
+                                {% set vs = vehicles_by_user.get(u['id'], []) %}
+                                {% if u['role'] != 'user' %}
+                                    <span class="muted">—</span>
+                                {% elif vs %}
+                                    {% for v in vs %}
+                                    <span class="plate-chip {{ 'chip-month' if v['ticket_type'] == 'month' else '' }}"
+                                          title="{{ v['vehicle_type_name'] or '' }} · {{ ticket_labels.get(v['ticket_type'], '') }}{% if v['expires_on'] %} · đến {{ v['expires_on']|vdate }}{% if v['months'] %} ({{ v['months'] }} tháng){% endif %}{% endif %}">
+                                        {{ v['plate_number'] }} · {{ 'Tháng' if v['ticket_type'] == 'month' else 'Lượt' }}
+                                    </span>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="muted">Chưa đăng ký</span>
+                                {% endif %}
+                            </td>
+                            <td>
                                 <span class="status-badge {{ 'status-active' if u['status'] == 'active' else 'status-locked' }}">
                                     {{ 'Hoạt động' if u['status'] == 'active' else 'Đã khóa' }}
                                 </span>
                             </td>
                             <td>
-                                {% if u['username'] != 'admin' %}
+                                <a href="{{ url_for('edit_user', user_id=u['id']) }}" class="action-button edit-button">Sửa</a>
+                                {% if session.get('role') == 'admin' and u['username'] != 'admin' %}
                                 <form method="POST" action="{{ url_for('toggle_user', user_id=u['id']) }}" style="display:inline;">
                                     <button type="submit" class="action-button toggle-button">
                                         {{ 'Khóa' if u['status'] == 'active' else 'Mở khóa' }}
@@ -97,8 +115,6 @@
                                       onsubmit="return confirm('Xóa tài khoản {{ u['username'] }}?');">
                                     <button type="submit" class="action-button delete-button">Xóa</button>
                                 </form>
-                                {% else %}
-                                    <span style="color:#aaa;">—</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -109,49 +125,73 @@
         </section>
     </div>
 
-    <!-- FORM THÊM NGƯỜI DÙNG -->
-    <div id="user-modal" class="modal hidden">
-        <div class="modal-box">
+    <!-- FORM THÊM TÀI KHOẢN -->
+    <div id="user-modal" class="modal {{ '' if open_modal else 'hidden' }}">
+        <div class="modal-box modal-wide">
             <div class="modal-header">
                 <div>
-                    <h2>Thêm người dùng</h2>
-                    <p>Nhập thông tin tài khoản mới</p>
+                    <h2>Thêm tài khoản</h2>
+                    <p>Nhập thông tin tài khoản mới{% if session.get('role') != 'admin' %} (loại: Người dùng){% endif %}</p>
                 </div>
                 <button id="close-modal" type="button" class="close-modal">×</button>
             </div>
 
+            {% if open_modal %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% for category, message in messages %}
+                    <p class="flash-inline {{ 'flash-error' if category == 'error' else 'flash-ok' }}">{{ message }}</p>
+                {% endfor %}
+            {% endwith %}
+            {% endif %}
+
             <form method="POST" action="{{ url_for('add_user') }}">
                 <div class="form-group">
                     <label for="username">Tên đăng nhập</label>
-                    <input type="text" id="username" name="username" required placeholder="Ví dụ: nguyenvana">
+                    <input type="text" id="username" name="username" required placeholder="Ví dụ: nguyenvana"
+                           value="{{ (form or {}).get('username', '') }}">
                 </div>
                 <div class="form-group">
                     <label for="fullname">Họ và tên</label>
-                    <input type="text" id="fullname" name="fullname" required placeholder="Nguyễn Văn A">
+                    <input type="text" id="fullname" name="fullname" required placeholder="Nguyễn Văn A"
+                           value="{{ (form or {}).get('fullname', '') }}">
                 </div>
+                {% if session.get('role') == 'admin' %}
                 <div class="form-group">
                     <label for="role">Vai trò</label>
                     <select id="role" name="role">
-                        <option value="user">Người dùng</option>
-                        <option value="manager">Nhân viên</option>
-                        <option value="admin">Quản trị viên</option>
+                        <option value="user" {{ 'selected' if (form or {}).get('role', 'user') == 'user' }}>Người dùng</option>
+                        <option value="manager" {{ 'selected' if (form or {}).get('role') == 'manager' }}>Nhân viên</option>
                     </select>
                 </div>
+                {% else %}
+                <input type="hidden" id="role" name="role" value="user">
+                {% endif %}
                 <div class="form-group">
                     <label for="password">Mật khẩu</label>
-                    <input type="password" id="password" name="password" required placeholder="Nhập mật khẩu">
+                    <input type="password" id="password" name="password" required minlength="4" placeholder="Tối thiểu 4 ký tự">
                 </div>
+
+                <div id="vehicle-block" class="form-group">
+                    <label>Đăng ký xe &amp; loại vé <small class="muted">(tùy chọn — nhận diện từ ảnh hoặc nhập tay)</small></label>
+                    {% include '_vehicle_rows.html' %}
+                </div>
+
                 <div class="modal-actions">
                     <button type="button" id="cancel-button" class="cancel-button">Hủy</button>
-                    <button type="submit" class="save-button">Lưu người dùng</button>
+                    <button type="submit" class="save-button">Lưu tài khoản</button>
                 </div>
             </form>
         </div>
     </div>
 
     <script>
-        // Chỉ dùng JS để ẩn/hiện form modal — dữ liệu gửi qua form POST thật (không phải localStorage).
+        // JS chỉ dùng để ẩn/hiện form — dữ liệu gửi qua form POST thật.
         const modal = document.getElementById('user-modal');
+        const roleField = document.getElementById('role');
+        const vehicleBlock = document.getElementById('vehicle-block');
+        function syncRole() { vehicleBlock.style.display = roleField.value === 'user' ? '' : 'none'; }
+        roleField.addEventListener('change', syncRole);
+        syncRole();
         document.getElementById('add-user-button').addEventListener('click', () => modal.classList.remove('hidden'));
         document.getElementById('close-modal').addEventListener('click', () => modal.classList.add('hidden'));
         document.getElementById('cancel-button').addEventListener('click', () => modal.classList.add('hidden'));

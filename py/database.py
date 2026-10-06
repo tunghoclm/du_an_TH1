@@ -14,7 +14,8 @@ import sqlite3
 import os
 from datetime import datetime, timedelta
 
-from config import DB_PATH, SCHEMA_PATH
+import glob
+from config import DB_PATH, SQL_DIR
 
 AREAS = ['A', 'B', 'C']
 SLOTS_PER_AREA = 20
@@ -29,14 +30,34 @@ def get_connection():
 def init_db():
     """Khởi tạo database theo file schema.sql, seed dữ liệu mẫu (vị trí đỗ, tài khoản)."""
     conn = get_connection()
-    with open(SCHEMA_PATH, 'r', encoding='utf-8') as f:
-        conn.executescript(f.read())
+
+    # Đọc TẤT CẢ file .sql trong thư mục SQL/ (tên file nào cũng được: schema.sql, cschema.sql, ...)
+    sql_files = sorted(glob.glob(os.path.join(SQL_DIR, '*.sql')))
+    if not sql_files:
+        raise RuntimeError(f"Không tìm thấy file .sql nào trong thư mục: {SQL_DIR}")
+    for path in sql_files:
+        with open(path, 'r', encoding='utf-8-sig') as f:
+            conn.executescript(f.read())
+
+    # Kiểm tra các bảng bắt buộc đã được tạo chưa
+    existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    required = {'parking_records', 'parking_slots', 'users', 'settings',
+                'price_periods', 'vehicle_types', 'prices', 'user_vehicles'}
+    missing = required - existing
+    if missing:
+        raise RuntimeError(
+            "Database thiếu bảng: " + ", ".join(sorted(missing)) + "\n"
+            "Các file SQL đã đọc: " + ", ".join(os.path.basename(p) for p in sql_files) + "\n"
+            "Hãy kiểm tra nội dung các file trong thư mục SQL/ (phải chứa lệnh CREATE TABLE cho các bảng trên).")
 
     # Migration nhẹ: nếu bảng parking_records cũ (từ bản trước) chưa có cột slot_name
     for col_sql in ("ALTER TABLE parking_records ADD COLUMN slot_name TEXT",
                     "ALTER TABLE parking_records ADD COLUMN vehicle_type_id INTEGER",
                     "ALTER TABLE parking_records ADD COLUMN vehicle_type_name TEXT",
-                    "ALTER TABLE parking_records ADD COLUMN note TEXT"):
+                    "ALTER TABLE parking_records ADD COLUMN note TEXT",
+                    "ALTER TABLE user_vehicles ADD COLUMN start_on TEXT",
+                    "ALTER TABLE user_vehicles ADD COLUMN months INTEGER",
+                    "ALTER TABLE user_vehicles ADD COLUMN paid_amount INTEGER"):
         try:
             conn.execute(col_sql)
         except sqlite3.OperationalError:
@@ -330,12 +351,29 @@ def username_exists(username: str) -> bool:
     return exists
 
 
-def add_user(username: str, fullname: str, password: str, role: str):
+def add_user(username: str, fullname: str, password: str, role: str) -> int:
+    """Thêm tài khoản, trả về id của tài khoản mới."""
     conn = get_connection()
-    conn.execute(
+    cur = conn.execute(
         "INSERT INTO users (username, fullname, password, role, status) VALUES (?, ?, ?, ?, 'active')",
         (username, fullname, password, role)
     )
+    new_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def update_user(user_id: int, fullname: str, role: str):
+    conn = get_connection()
+    conn.execute("UPDATE users SET fullname = ?, role = ? WHERE id = ?", (fullname, role, user_id))
+    conn.commit()
+    conn.close()
+
+
+def set_user_password(user_id: int, new_password: str):
+    conn = get_connection()
+    conn.execute("UPDATE users SET password = ? WHERE id = ?", (new_password, user_id))
     conn.commit()
     conn.close()
 
@@ -354,7 +392,107 @@ def toggle_user_status(user_id: int):
 
 def delete_user(user_id: int):
     conn = get_connection()
+    conn.execute("DELETE FROM user_vehicles WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+
+# ============================================================
+# XE & VÉ ĐĂNG KÝ CỦA NGƯỜI DÙNG
+# ============================================================
+
+def get_user_vehicles(user_id: int):
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT v.*, t.name AS vehicle_type_name
+           FROM user_vehicles v LEFT JOIN vehicle_types t ON t.id = v.vehicle_type_id
+           WHERE v.user_id = ? ORDER BY v.id""", (user_id,)).fetchall()
+    conn.close()
+    return rows
+
+
+def get_vehicles_grouped():
+    """{user_id: [xe, ...]} cho toàn bộ tài khoản (dùng ở trang danh sách)."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT v.*, t.name AS vehicle_type_name
+           FROM user_vehicles v LEFT JOIN vehicle_types t ON t.id = v.vehicle_type_id
+           ORDER BY v.id""").fetchall()
+    conn.close()
+    grouped = {}
+    for r in rows:
+        grouped.setdefault(r['user_id'], []).append(r)
+    return grouped
+
+
+def find_vehicle_owner(key: str):
+    """Tài khoản đang đăng ký biển số này (theo plate_key), hoặc None."""
+    conn = get_connection()
+    row = conn.execute(
+        """SELECT u.id, u.username, u.fullname FROM user_vehicles v
+           JOIN users u ON u.id = v.user_id WHERE v.plate_key = ?""", (key,)).fetchone()
+    conn.close()
+    return row
+
+
+def add_user_vehicle(user_id: int, plate_number: str, key: str, vehicle_type_id,
+                     ticket_type: str, expires_on, start_on=None, months=None, paid_amount=None):
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO user_vehicles
+           (user_id, plate_number, plate_key, vehicle_type_id, ticket_type, expires_on,
+            start_on, months, paid_amount, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (user_id, plate_number, key, vehicle_type_id, ticket_type, expires_on,
+         start_on, months, paid_amount, datetime.now().isoformat(timespec='seconds')))
+    conn.commit()
+    conn.close()
+
+
+def set_vehicle_month_ticket(vehicle_id: int, start_on: str, expires_on: str, months: int, paid_amount: int):
+    """Đặt/gia hạn vé tháng cho xe đã đăng ký."""
+    conn = get_connection()
+    conn.execute(
+        """UPDATE user_vehicles SET ticket_type='month', start_on=?, expires_on=?, months=?, paid_amount=?
+           WHERE id=?""", (start_on, expires_on, months, paid_amount, vehicle_id))
+    conn.commit()
+    conn.close()
+
+
+def get_registered_vehicle(key: str):
+    """Xe đã đăng ký theo biển số (plate_key) kèm thông tin chủ tài khoản + loại xe, hoặc None."""
+    conn = get_connection()
+    row = conn.execute(
+        """SELECT v.*, u.username, u.fullname, t.name AS vehicle_type_name
+           FROM user_vehicles v
+           JOIN users u ON u.id = v.user_id
+           LEFT JOIN vehicle_types t ON t.id = v.vehicle_type_id
+           WHERE v.plate_key = ?""", (key,)).fetchone()
+    conn.close()
+    return row
+
+
+def get_registered_plates():
+    """Toàn bộ biển số đã đăng ký (dùng để gợi ý khi OCR đọc lệch 1 ký tự)."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT v.plate_key, v.plate_number, u.username
+           FROM user_vehicles v JOIN users u ON u.id = v.user_id""").fetchall()
+    conn.close()
+    return rows
+
+
+def get_user_vehicle(vehicle_id: int):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM user_vehicles WHERE id = ?", (vehicle_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def delete_user_vehicle(vehicle_id: int):
+    conn = get_connection()
+    conn.execute("DELETE FROM user_vehicles WHERE id = ?", (vehicle_id,))
     conn.commit()
     conn.close()
 
@@ -573,6 +711,27 @@ def save_price(price_id, vehicle_type_id, period_id, amount, ticket_type):
 
 def delete_price(price_id: int):
     _exec("DELETE FROM prices WHERE id = ?", (price_id,))
+
+
+def find_month_price(vehicle_type_id, on_date):
+    """Giá vé THÁNG (1 tháng) của loại xe trong Bảng giá.
+    Ưu tiên khung 'theo ngày' chứa ngày `on_date.day`; nếu không có thì lấy giá tháng đầu tiên của loại xe.
+    Trả về dict {amount, period_name} hoặc None nếu bảng giá chưa có giá tháng cho loại xe."""
+    if not vehicle_type_id:
+        return None
+    rows = _fetch(
+        "SELECT p.amount, t.name AS period_name, t.start_value, t.end_value "
+        "FROM prices p JOIN price_periods t ON t.id = p.period_id "
+        "WHERE p.vehicle_type_id = ? AND p.ticket_type = 'month' ORDER BY t.id", (vehicle_type_id,))
+    if not rows:
+        return None
+    for r in rows:
+        try:
+            if int(r['start_value']) <= on_date.day <= int(r['end_value']):
+                return {'amount': r['amount'], 'period_name': r['period_name']}
+        except ValueError:
+            pass
+    return {'amount': rows[0]['amount'], 'period_name': rows[0]['period_name']}
 
 
 # ----- Tra giá theo loại xe + thời điểm xe vào -----

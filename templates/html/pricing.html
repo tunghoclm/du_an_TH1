@@ -84,7 +84,7 @@
                             {% if r['kind'] == 'day' %}Ngày {{ r['start_value'] }} – {{ r['end_value'] }}
                             {% else %}{{ r['start_value'] }} – {{ r['end_value'] }}{% endif %}
                         </td>
-                        <td class="num" data-label="Giá"><span class="money">{{ '{:,}'.format(r['amount']).replace(',', '.') }} đ</span></td>
+                        <td class="num" data-label="Giá"><span class="money">{{ '{:,}'.format(r['amount']).replace(',', '.') }} đ</span> <span class="muted">/{{ 'tháng' if r['ticket_type'] == 'month' else 'lượt' }}</span></td>
                         <td data-label="Loại vé"><span class="badge {{ 'badge-month' if r['ticket_type'] == 'month' else 'badge-turn' }}">{{ ticket_labels.get(r['ticket_type'], r['ticket_type']) }}</span></td>
                         {% if can_edit %}
                         <td class="c-act" data-label="Thao tác">
@@ -112,7 +112,8 @@
         </div>
         <p class="note">
             Khi xe ra, phí = <strong>giá vé Lượt</strong> của loại xe theo <strong>khung giờ lúc xe vào</strong> (tính 1 lượt, không tính theo số giờ).
-            Giá vé Tháng hiện chỉ để tham khảo, chưa áp dụng tự động.
+            <strong>Vé Tháng</strong>: giá trên là giá của <strong>1 tháng</strong>. Khi đăng ký vé tháng cho tài khoản người dùng, có thể thuê nhiều tháng:
+            tiền = giá tháng × số tháng, bắt đầu tính từ ngày đăng ký; xe có vé tháng còn hạn ra bãi miễn phí.
         </p>
     </section>
 

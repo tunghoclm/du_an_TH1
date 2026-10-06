@@ -68,6 +68,24 @@
             </div>
             {% endif %}
 
+            {% if registered %}
+            <div class="reg-info {{ 'reg-month' if reg_month_ok }}{{ ' reg-expired' if reg_expired }}">
+                ✅ <strong>Xe đã đăng ký</strong> — tài khoản <strong>{{ registered['fullname'] }}</strong> ({{ registered['username'] }})
+                · {{ registered['vehicle_type_name'] or 'chưa chọn loại xe' }}
+                · {{ 'Vé tháng' if registered['ticket_type'] == 'month' else 'Vé lượt' }}
+                {% if registered['ticket_type'] == 'month' %}
+                    · hết hạn {{ registered['expires_on'] }}
+                    {% if reg_month_ok %}<span class="reg-note">(còn hạn)</span>
+                    {% else %}<span class="reg-note">(ĐÃ HẾT HẠN — tính phí như vé lượt)</span>{% endif %}
+                {% endif %}
+            </div>
+            {% elif suggest %}
+            <div class="reg-suggest">
+                💡 Biển số này gần giống xe đã đăng ký <strong>{{ suggest['plate_number'] }}</strong> (tài khoản {{ suggest['username'] }}).
+                Nếu đúng là xe đó, hãy sửa ô biển số rồi bấm <em>Nhận diện biển số</em> lại.
+            </div>
+            {% endif %}
+
             {% if mode == 'exit' %}
             <!-- ================= XE RA ================= -->
             <div class="mode-panel mode-exit">
@@ -94,8 +112,8 @@
                     <select name="vehicle_type_id" id="vehicle_type_id" class="vehicle-select" required>
                         <option value="" disabled {{ 'selected' if not form.get('vehicle_type_id') }}>— Chọn loại xe —</option>
                         {% for t in type_options %}
-                            {% if t.price %}
-                            <option value="{{ t.id }}" {{ 'selected' if form.get('vehicle_type_id') == t.id|string }}>{{ t.name }} — {{ '{:,}'.format(t.price.amount).replace(',', '.') }}đ/lượt (khung {{ t.price.period_name }})</option>
+                            {% if t.price or reg_month_ok %}
+                            <option value="{{ t.id }}" {{ 'selected' if form.get('vehicle_type_id') == t.id|string }}>{{ t.name }}{% if t.price %} — {{ '{:,}'.format(t.price.amount).replace(',', '.') }}đ/lượt (khung {{ t.price.period_name }}){% else %} — vé tháng{% endif %}</option>
                             {% else %}
                             <option value="{{ t.id }}" disabled>{{ t.name }} — chưa có giá lúc {{ now.strftime('%H:%M') }}</option>
                             {% endif %}

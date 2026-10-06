@@ -435,3 +435,92 @@ td {
         padding: 10px 8px;
     }
 }
+
+/* ===== Đăng ký xe & vé / sửa tài khoản ===== */
+.muted { color: #888; font-weight: normal; font-size: 13px; }
+
+.modal-wide { max-width: 680px; max-height: 92vh; overflow-y: auto; }
+
+.edit-button {
+    background: #e0f2fe;
+    color: #0369a1;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.plate-chip {
+    display: inline-block;
+    padding: 4px 9px;
+    margin: 2px 4px 2px 0;
+    border-radius: 6px;
+    background: #f1f5f9;
+    color: #334155;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.chip-month { background: #fef3c7; color: #92400e; }
+
+.flash-inline { padding: 9px 12px; border-radius: 8px; margin-bottom: 10px; font-size: 14px; }
+.flash-error { background: #fee2e2; color: #b91c1c; }
+.flash-ok { background: #dcfce7; color: #15803d; }
+
+.panel { margin-bottom: 25px; }
+.panel-form { max-width: 640px; }
+.panel-form .save-button { margin-top: 6px; }
+.panel input:disabled { background: #f1f5f9; color: #777; }
+.sub-title { margin: 22px 0 10px; font-size: 16px; }
+
+.vehicle-section { margin-top: 4px; }
+.vehicle-row {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #fafbfc;
+}
+.vr-top { display: flex; gap: 8px; align-items: center; }
+.vr-top .vr-plate { flex: 1; }
+.vr-scan {
+    white-space: nowrap;
+    padding: 0 12px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 8px;
+    background: #eef2ff;
+    color: #4338ca;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+}
+.vr-scan:hover { background: #e0e7ff; }
+.vr-remove {
+    width: 36px; height: 42px; border: none; border-radius: 8px;
+    background: #fee2e2; color: #b91c1c; font-size: 18px; cursor: pointer;
+}
+.vr-status { font-size: 12px; margin: 6px 2px 0; min-height: 0; color: #777; }
+.vr-status.ok { color: #15803d; }
+.vr-status.err { color: #b91c1c; }
+.vr-bottom { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+.vr-bottom select { flex: 1; min-width: 120px; }
+.vr-expires-wrap { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: bold; }
+.vehicle-row .vr-expires-wrap input { width: auto; }
+.add-vehicle-btn {
+    border: 1px dashed #2563eb; background: white; color: #2563eb;
+    border-radius: 8px; padding: 9px 14px; cursor: pointer; font-weight: bold;
+}
+.add-vehicle-btn:hover { background: #eff6ff; }
+.vehicle-row input, .vehicle-row select {
+    height: 42px; padding: 0 10px; border: 1px solid #ddd; border-radius: 8px; outline: none; width: 100%;
+}
+
+/* ===== Giá vé / số tháng ===== */
+.vr-months-wrap { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: bold; white-space: nowrap; }
+.vehicle-row .vr-months-wrap input { width: 80px; }
+.vr-price { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: #f1f5f9; color: #475569; font-size: 13px; line-height: 1.5; }
+.vr-price.ok { background: #fef3c7; color: #78350f; }
+.vr-price.err { background: #fee2e2; color: #b91c1c; }
+.renew-form { display: inline-flex; gap: 6px; align-items: center; margin: 0 6px 6px 0; }
+.renew-form input[type=number] { width: 62px; height: 32px; padding: 0 6px; border: 1px solid #ddd; border-radius: 6px; }
+.renew-form button[disabled] { opacity: .5; cursor: not-allowed; }

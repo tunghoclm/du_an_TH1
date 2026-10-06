@@ -64,7 +64,7 @@ Script sẽ:
 1. Tạo virtual environment (`cache/venv/`)
 2. Cài toàn bộ thư viện trong `requirements.txt`
 3. **Tải sẵn model EasyOCR** (bước tốn thời gian nhất, cần Internet — chỉ tải 1 lần)
-4. Khởi tạo file database `cache/parking.db` từ `SQL/schema.sql`
+4. Khởi tạo file database `cache/parking.db` từ các file `.sql` trong `SQL/`
 
 > Sau bước này, máy đã sẵn sàng chạy offline (trừ khi bạn xoá venv hoặc model).
 
@@ -165,3 +165,16 @@ lần nữa (xe ra) để thử luồng tính phí hoàn chỉnh.
 - Dùng mô hình OCR chuyên biển số (ví dụ EasyOCR, hoặc model huấn luyện riêng)
   để tăng độ chính xác với biển số Việt Nam.
 - Thêm thanh toán không tiền mặt (QR code, ví điện tử).
+
+## Quản lý tài khoản (trang Người dùng)
+
+| Chức năng | Admin | Nhân viên | Người dùng |
+|---|:-:|:-:|:-:|
+| Xem trang Người dùng | ✅ (tất cả tài khoản) | ✅ (chỉ tài khoản người dùng) | ❌ |
+| Tạo tài khoản người dùng | ✅ | ✅ | ❌ |
+| Tạo tài khoản nhân viên | ✅ | ❌ | ❌ |
+| Sửa họ tên / đăng ký xe & vé | ✅ | ✅ (chỉ người dùng) | ❌ |
+| Đổi vai trò, đổi mật khẩu, khóa, xóa | ✅ | ❌ | ❌ |
+
+- Khi tạo (hoặc sửa) tài khoản người dùng có thể **đăng ký xe**: chọn ảnh để **nhận diện biển số** hoặc **nhập tay**, chọn loại xe và loại vé (**Vé lượt** / **Vé tháng** kèm ngày hết hạn). Có thể đăng ký nhiều xe; mỗi biển số chỉ thuộc một tài khoản.
+- Dữ liệu xe lưu ở bảng `user_vehicles` (`SQL/schema.sql`), tự tạo khi chạy ứng dụng.

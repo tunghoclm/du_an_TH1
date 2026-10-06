@@ -74,3 +74,20 @@ CREATE TABLE IF NOT EXISTS prices (
     ticket_type      TEXT NOT NULL DEFAULT 'turn',  -- turn = Lượt | month = Tháng
     UNIQUE (vehicle_type_id, period_id)
 );
+
+
+-- ===== Xe & vé đăng ký theo tài khoản người dùng =====
+CREATE TABLE IF NOT EXISTS user_vehicles (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id          INTEGER NOT NULL,
+    plate_number     TEXT NOT NULL,                 -- biển số hiển thị, vd 51F-123.45
+    plate_key        TEXT UNIQUE NOT NULL,          -- biển số chỉ chữ + số (so khớp), mỗi biển số chỉ đăng ký 1 tài khoản
+    vehicle_type_id  INTEGER,
+    ticket_type      TEXT NOT NULL DEFAULT 'turn',  -- turn = Vé lượt | month = Vé tháng
+    expires_on       TEXT,                          -- YYYY-MM-DD (chỉ dùng cho vé tháng)
+    start_on         TEXT,                          -- ngày bắt đầu vé tháng (ngày tạo/đăng ký)
+    months           INTEGER,                       -- số tháng đã thuê
+    paid_amount      INTEGER,                       -- tổng tiền vé tháng (giá tháng x số tháng)
+    created_at       TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);

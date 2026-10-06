@@ -12,7 +12,7 @@ DB_PATH = os.path.join(CACHE_DIR, "parking.db")
 EASYOCR_DIR = os.path.join(CACHE_DIR, "easyocr_models")  # model EasyOCR tải sẵn
 TMP_DIR = os.path.join(CACHE_DIR, "tmp")                # ảnh tạm giữa bước Nhận diện và Xác nhận
 
-SCHEMA_PATH = os.path.join(BASE_DIR, "SQL", "schema.sql")
+SQL_DIR = os.path.join(BASE_DIR, "SQL")                 # chứa các file .sql (đọc tất cả, theo thứ tự tên)
 
 TEMPLATES_HTML_DIR = os.path.join(BASE_DIR, "templates", "html")
 TEMPLATES_CSS_DIR = os.path.join(BASE_DIR, "templates", "css")

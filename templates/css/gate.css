@@ -77,3 +77,10 @@
     background: white;
 }
 .preview-box img { display: block; width: 100%; height: auto; }
+
+/* Thông tin xe đã đăng ký (tài khoản người dùng) */
+.reg-info { background: #e8f5e9; border: 1px solid #a5d6a7; color: #1b5e20; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 14px; }
+.reg-info.reg-month { background: #fff8e1; border-color: #ffd54f; color: #7a5200; }
+.reg-info.reg-expired { background: #fdecea; border-color: #ef9a9a; color: #b71c1c; }
+.reg-note { font-weight: 600; }
+.reg-suggest { background: #e3f2fd; border: 1px solid #90caf9; color: #0d47a1; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 14px; }
