@@ -1,7 +1,13 @@
 @echo off
-REM run.bat — Dùng để CHẠY ứng dụng hàng ngày sau khi đã setup.bat xong.
-REM Tự động kích hoạt venv rồi chạy app.py.
+REM run.bat - Dung de CHAY ung dung hang ngay sau khi da chay setup.bat.
+REM Tu dong kich hoat venv (cache\venv) roi chay app.py.
+cd /d "%~dp0"
 
-call venv\Scripts\activate.bat
+IF NOT EXIST cache\venv (
+    echo Chua cai dat. Hay chay setup.bat truoc.
+    pause
+    exit /b 1
+)
+call cache\venv\Scripts\activate.bat
 python app.py
 pause

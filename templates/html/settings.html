@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cài đặt - Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='entry_exit.css') }}">
+    <style>
+        .mode-options { display: flex; flex-direction: column; gap: 14px; margin: 18px 0 24px; }
+        .mode-option {
+            display: flex; align-items: flex-start; gap: 14px;
+            border: 2px solid #e6e6e6; border-radius: 12px; padding: 16px 18px;
+            cursor: pointer; transition: 0.15s;
+        }
+        .mode-option:hover { border-color: #b9c9ec; }
+        .mode-option.selected { border-color: #1e3c72; background: #f3f6ff; }
+        .mode-option input { margin-top: 3px; accent-color: #1e3c72; }
+        .mode-option .mode-icon { font-size: 22px; }
+        .mode-option h4 { margin: 0 0 4px; font-size: 15px; color: #222; }
+        .mode-option p { margin: 0; font-size: 13px; color: #888; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="page-wrap">
+        <header class="page-header">
+            <div class="header-left">
+                <a href="{{ url_for('index') }}" class="back-button">←</a>
+                <div>
+                    <h1>⚙️ Cài đặt hệ thống</h1>
+                    <p>Lựa chọn của riêng bạn — không cần nhờ nhân viên hay admin</p>
+                </div>
+            </div>
+            <div class="user-info">
+                <div>
+                    <strong>{{ session.get('fullname') }}</strong>
+                    <small>{{ role_label }}</small>
+                </div>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="card">
+            <h2>Cách chọn vị trí đỗ khi xe vào bãi</h2>
+            <p class="hint">Chỉ áp dụng cho tài khoản của bạn khi dùng chức năng "Xe vào bãi". Người khác không bị ảnh hưởng.</p>
+
+            <form method="POST" id="settings-form">
+                <div class="mode-options">
+                    <label class="mode-option {{ 'selected' if entry_mode == 'auto' }}">
+                        <input type="radio" name="entry_mode" value="auto" {{ 'checked' if entry_mode == 'auto' }}>
+                        <div class="mode-icon">🤖</div>
+                        <div>
+                            <h4>Tự động chọn vị trí</h4>
+                            <p>Hệ thống tự động gán 1 vị trí trống bất kỳ cho xe vừa vào, không cần bạn chọn thủ công. Nhanh hơn, tiện khi cần gửi xe gấp.</p>
+                        </div>
+                    </label>
+
+                    <label class="mode-option {{ 'selected' if entry_mode == 'manual' or not entry_mode }}">
+                        <input type="radio" name="entry_mode" value="manual" {{ 'checked' if entry_mode == 'manual' or not entry_mode }}>
+                        <div class="mode-icon">🖐️</div>
+                        <div>
+                            <h4>Tự chọn vị trí</h4>
+                            <p>Bạn tự chọn vị trí cụ thể (theo khu A/B/C) khi gửi xe. Linh hoạt hơn, phù hợp khi muốn đỗ gần lối ra hoặc đúng khu mình thích.</p>
+                        </div>
+                    </label>
+                </div>
+
+                <button type="submit" class="submit-button">Lưu cài đặt</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.querySelectorAll('.mode-option input').forEach(function (input) {
+            input.addEventListener('change', function () {
+                document.querySelectorAll('.mode-option').forEach(function (el) {
+                    el.classList.remove('selected');
+                });
+                input.closest('.mode-option').classList.add('selected');
+            });
+        });
+    </script>
+</body>
+</html>

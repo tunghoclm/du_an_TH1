@@ -1,0 +1,213 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+body {
+    font-family: Arial, sans-serif;
+    min-height: 100vh;
+    background-color: #f4f6f9;
+    color: #333;
+}
+/* ========================= */
+/* TRANG MENU */
+/* ========================= */
+.menu-page {
+    width: 100%;
+    min-height: 100vh;
+    padding: 40px 70px;
+}
+/* ========================= */
+/* HEADER */
+/* ========================= */
+.menu-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 70px;
+}
+/* LOGO */
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+.logo-icon {
+    width: 55px;
+    height: 55px;
+    background-color: #1e3c72;
+    color: white;
+    border-radius: 13px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 28px;
+    font-weight: bold;
+}
+.logo-text h1 {
+    color: #1e3c72;
+    font-size: 24px;
+    margin-bottom: 5px;
+}
+.logo-text p {
+    color: #888;
+    font-size: 13px;
+}
+/* USER */
+.welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+}
+.welcome span {
+    font-size: 12px;
+    color: #999;
+}
+.welcome strong {
+    color: #1e3c72;
+    font-size: 14px;
+}
+/* ========================= */
+/* TITLE */
+/* ========================= */
+.menu-title {
+    text-align: center;
+    margin-bottom: 35px;
+}
+.menu-title h2 {
+    color: #1e3c72;
+    font-size: 30px;
+    margin-bottom: 8px;
+}
+.menu-title p {
+    color: #888;
+    font-size: 14px;
+}
+/* ========================= */
+/* MENU GRID */
+/* ========================= */
+.menu-grid {
+    max-width: 900px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 22px;
+}
+/* ========================= */
+/* MENU CARD */
+/* ========================= */
+.menu-card {
+    position: relative;
+    min-height: 150px;
+    background-color: white;
+    border-radius: 16px;
+    padding: 28px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    text-decoration: none;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.06);
+    border: 1px solid transparent;
+    transition: 0.25s;
+}
+/* HOVER */
+.menu-card:hover {
+    transform: translateY(-4px);
+    border-color: #dce6f7;
+    box-shadow: 0 10px 25px rgba(30, 60, 114, 0.12);
+}
+/* ICON */
+.card-icon {
+    width: 65px;
+    height: 65px;
+    flex-shrink: 0;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+}
+/* ICON COLORS */
+.parking-icon {
+    background-color: #e8f0ff;
+}
+.vehicle-icon {
+    background-color: #eaf8ef;
+}
+.history-icon {
+    background-color: #fff3e5;
+}
+.statistics-icon {
+    background-color: #f0eaff;
+}
+.users-icon {
+    background-color: #ffecef;
+}
+.settings-icon {
+    background-color: #eeeeee;
+}
+/* CARD CONTENT */
+.card-content {
+    flex: 1;
+}
+.card-content h3 {
+    color: #1e3c72;
+    font-size: 18px;
+    margin-bottom: 8px;
+}
+.card-content p {
+    color: #888;
+    font-size: 12px;
+    line-height: 1.5;
+}
+/* ARROW */
+.arrow {
+    color: #1e3c72;
+    font-size: 22px;
+    transition: 0.2s;
+}
+.menu-card:hover .arrow {
+    transform: translateX(5px);
+}
+/* ========================= */
+/* FOOTER */
+/* ========================= */
+.menu-footer {
+    text-align: center;
+    margin-top: 45px;
+}
+.logout {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #d95353;
+    text-decoration: none;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    transition: 0.2s;
+}
+.logout:hover {
+    background-color: #fff0f0;
+}
+/* ========================= */
+/* RESPONSIVE */
+/* ========================= */
+@media (max-width: 700px) {
+    .menu-page {
+        padding: 30px 20px;
+    }
+    .menu-header {
+        margin-bottom: 50px;
+    }
+    .welcome {
+        display: none;
+    }
+    .menu-grid {
+        grid-template-columns: 1fr;
+    }
+    .menu-title h2 {
+        font-size: 26px;
+    }
+}

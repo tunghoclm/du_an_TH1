@@ -1,0 +1,160 @@
+{# Khối nhập xe + vé dùng chung (trang Người dùng và trang Sửa tài khoản).
+   Cần biến: vehicle_types, today, price_info, max_months. Dữ liệu điền lại (nếu có): form_vehicles.
+   JS công khai: VehicleRows.reset(list), VehicleRows.add(data). #}
+<div class="vehicle-section">
+    <div id="vehicle-rows"></div>
+    <button type="button" class="add-vehicle-btn" id="add-vehicle-btn">+ Thêm xe</button>
+</div>
+
+<template id="vehicle-row-tpl">
+    <div class="vehicle-row">
+        <div class="vr-top">
+            <input type="text" name="plate" class="vr-plate" placeholder="Biển số, vd 51F-123.45" autocomplete="off">
+            <label class="vr-scan">📷 Nhận diện từ ảnh
+                <input type="file" accept="image/*" class="vr-file" hidden>
+            </label>
+            <button type="button" class="vr-remove" title="Xóa dòng này">×</button>
+        </div>
+        <div class="vr-status"></div>
+        <div class="vr-bottom">
+            <select name="vehicle_type_id" class="vr-type">
+                <option value="">-- Loại xe --</option>
+                {% for t in vehicle_types %}<option value="{{ t['id'] }}">{{ t['name'] }}</option>{% endfor %}
+            </select>
+            <select name="ticket_type" class="vr-ticket">
+                <option value="turn">Vé lượt</option>
+                <option value="month">Vé tháng</option>
+            </select>
+            <label class="vr-months-wrap" style="display:none;">Số tháng
+                <input type="number" name="months" class="vr-months" min="1" max="{{ max_months }}" value="1">
+            </label>
+        </div>
+        <div class="vr-price">Chọn loại xe để xem giá vé.</div>
+    </div>
+</template>
+
+<script>
+(function () {
+    const rowsEl = document.getElementById('vehicle-rows');
+    const tpl = document.getElementById('vehicle-row-tpl');
+    const recognizeUrl = {{ url_for('recognize_user_plate')|tojson }};
+    const priceInfo = {{ price_info|tojson }};     // {id loại xe: {month: giá tháng|null, turn: [{name, amount, start, end}]}}
+    const MAX_MONTHS = {{ max_months }};
+    const TODAY = {{ today|tojson }};              // ngày tạo = ngày bắt đầu tính vé tháng
+
+    const money = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ';
+    const pad = n => String(n).padStart(2, '0');
+    const fmt = d => pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
+
+    // Cộng tháng lịch giống server (31/01 + 1 tháng = 28/02), vé có hiệu lực đến hết ngày trước đó
+    function monthEnd(startIso, months) {
+        const [y, m, d] = startIso.split('-').map(Number);
+        const total = (m - 1) + months;
+        const year = y + Math.floor(total / 12), month = total % 12;
+        const last = new Date(year, month + 1, 0).getDate();
+        const end = new Date(year, month, Math.min(d, last));
+        end.setDate(end.getDate() - 1);
+        return end;
+    }
+
+    function addRow(data) {
+        data = data || {};
+        const row = tpl.content.firstElementChild.cloneNode(true);
+        const plate = row.querySelector('.vr-plate');
+        const type = row.querySelector('.vr-type');
+        const ticket = row.querySelector('.vr-ticket');
+        const monthsWrap = row.querySelector('.vr-months-wrap');
+        const months = row.querySelector('.vr-months');
+        const priceBox = row.querySelector('.vr-price');
+        const status = row.querySelector('.vr-status');
+        const file = row.querySelector('.vr-file');
+
+        plate.value = data.plate || '';
+        type.value = data.type || '';
+        ticket.value = data.ticket || 'turn';
+        months.value = data.months || '1';
+
+        // Cập nhật chữ trên lựa chọn vé + dòng giá theo loại xe / loại vé / số tháng
+        function refresh() {
+            const info = priceInfo[type.value];
+            const isMonth = ticket.value === 'month';
+            monthsWrap.style.display = isMonth ? '' : 'none';
+            priceBox.className = 'vr-price';
+
+            ticket.options[0].textContent = 'Vé lượt';
+            ticket.options[1].textContent = 'Vé tháng' + (info && info.month != null ? ' — ' + money(info.month) + '/tháng' : '');
+
+            if (!info) { priceBox.textContent = 'Chọn loại xe để xem giá vé.'; return; }
+            if (!isMonth) {
+                priceBox.textContent = info.turn.length
+                    ? 'Vé lượt — tính khi xe vào/ra bãi theo khung giờ: ' +
+                      info.turn.map(t => t.name + ' ' + money(t.amount)).join(' · ')
+                    : 'Loại xe này chưa có giá vé lượt trong Bảng giá.';
+                return;
+            }
+            if (info.month == null) {
+                priceBox.textContent = 'Bảng giá chưa có giá vé tháng cho loại xe này — hãy thêm ở trang Giá xe hoặc chọn vé lượt.';
+                priceBox.className = 'vr-price err';
+                return;
+            }
+            let n = parseInt(months.value, 10);
+            if (!n || n < 1 || n > MAX_MONTHS) {
+                priceBox.textContent = 'Số tháng thuê phải từ 1 đến ' + MAX_MONTHS + '.';
+                priceBox.className = 'vr-price err';
+                return;
+            }
+            const [y, m, d] = TODAY.split('-').map(Number);
+            priceBox.innerHTML = '';
+            const strong = document.createElement('strong');
+            strong.textContent = money(info.month * n);
+            priceBox.append(money(info.month) + ' × ' + n + ' tháng = ', strong,
+                ' · hiệu lực từ ' + fmt(new Date(y, m - 1, d)) + ' (hôm nay) đến ' + fmt(monthEnd(TODAY, n)));
+            priceBox.className = 'vr-price ok';
+        }
+        type.addEventListener('change', refresh);
+        ticket.addEventListener('change', refresh);
+        months.addEventListener('input', refresh);
+        refresh();
+
+        row.querySelector('.vr-remove').addEventListener('click', () => row.remove());
+
+        file.addEventListener('change', async () => {
+            if (!file.files.length) return;
+            const fd = new FormData();
+            fd.append('image', file.files[0]);
+            status.className = 'vr-status';
+            status.textContent = 'Đang nhận diện biển số...';
+            try {
+                const res = await fetch(recognizeUrl, { method: 'POST', body: fd });
+                const json = await res.json();
+                if (json.plate) {
+                    plate.value = json.plate;
+                    status.textContent = 'Đã nhận diện: ' + json.plate + ' — hãy kiểm tra lại, sửa nếu chưa đúng.';
+                    status.className = 'vr-status ok';
+                } else {
+                    status.textContent = json.error || 'Không nhận diện được biển số.';
+                    status.className = 'vr-status err';
+                }
+            } catch (e) {
+                status.textContent = 'Lỗi khi nhận diện biển số, vui lòng thử lại hoặc nhập tay.';
+                status.className = 'vr-status err';
+            }
+            file.value = '';
+        });
+
+        rowsEl.appendChild(row);
+        return row;
+    }
+
+    document.getElementById('add-vehicle-btn').addEventListener('click', () => addRow());
+
+    window.VehicleRows = {
+        add: addRow,
+        reset: function (list) {
+            rowsEl.innerHTML = '';
+            if (list && list.length) list.forEach(addRow); else addRow();
+        }
+    };
+    window.VehicleRows.reset({{ (form_vehicles or [])|tojson }});
+})();
+</script>

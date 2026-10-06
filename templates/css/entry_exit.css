@@ -1,0 +1,189 @@
+/* entry_exit.css - Trang Xe vào / Xe ra, đồng bộ màu sắc với giao diện demo_TH1 */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f6f9;
+    min-height: 100vh;
+}
+
+.page-wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 28px 24px 60px;
+}
+
+/* HEADER (đồng bộ với parking.css / users.css) */
+
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: white;
+    border-radius: 14px;
+    padding: 20px 26px;
+    margin-bottom: 22px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.header-left { display: flex; align-items: center; gap: 18px; }
+
+.back-button {
+    width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    background: #eef2f9;
+    border-radius: 10px;
+    color: #1e3c72;
+    text-decoration: none;
+    font-size: 18px;
+    flex-shrink: 0;
+}
+.back-button:hover { background: #dde6f5; }
+
+.header-left h1 { font-size: 20px; color: #1e3c72; margin-bottom: 4px; }
+.header-left p { font-size: 13px; color: #888; }
+
+.user-info { display: flex; align-items: center; gap: 10px; text-align: right; }
+.user-info strong { display: block; font-size: 14px; color: #222; }
+.user-info small { font-size: 12px; color: #888; }
+
+/* THÔNG BÁO FLASH */
+
+.flash {
+    padding: 14px 18px;
+    border-radius: 10px;
+    margin-bottom: 18px;
+    font-weight: 500;
+    font-size: 14px;
+}
+.flash-success { background: #e4f7ea; color: #1c8a4b; border: 1px solid #b7e6c4; }
+.flash-error { background: #fdeceb; color: #c0392b; border: 1px solid #f3bcb6; }
+
+/* CARD CHÍNH */
+
+.card {
+    background: white;
+    border-radius: 14px;
+    padding: 26px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+}
+
+.card h2 { font-size: 17px; color: #1e3c72; margin-bottom: 6px; }
+.card p.hint { font-size: 13px; color: #888; margin-bottom: 18px; }
+
+/* UPLOAD ẢNH */
+
+.upload-box {
+    border: 2px dashed #c7d3e6;
+    border-radius: 12px;
+    padding: 34px 16px;
+    text-align: center;
+    background: #fafcff;
+    cursor: pointer;
+    transition: 0.2s;
+}
+.upload-box:hover { border-color: #1e3c72; background: #f2f6ff; }
+.upload-box input[type="file"] { margin-top: 10px; }
+
+/* CHỌN Ô ĐỖ (radio ẩn + label giống parking-slot) */
+
+.slot-picker-area { margin-top: 24px; }
+.slot-picker-area h3 { font-size: 15px; color: #1e3c72; margin-bottom: 10px; }
+
+.slot-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.slot-picker-grid input[type="radio"] { display: none; }
+
+.slot-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 10px 4px;
+    border-radius: 8px;
+    border: 1.5px solid #b9e2ca;
+    background-color: #edf9f2;
+    color: #27844c;
+    font-size: 12px;
+    cursor: pointer;
+    transition: 0.15s;
+    user-select: none;
+}
+.slot-option strong { font-size: 13px; }
+
+.slot-picker-grid input[type="radio"]:checked + .slot-option {
+    background-color: #1e3c72;
+    border-color: #1e3c72;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 12px rgba(30,60,114,0.25);
+}
+
+.slot-option.disabled {
+    background-color: #f3f3f3;
+    border-color: #ddd;
+    color: #aaa;
+    cursor: not-allowed;
+}
+
+.no-slots-message {
+    color: #c0392b;
+    font-size: 14px;
+    background: #fdeceb;
+    border: 1px solid #f3bcb6;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 18px;
+}
+
+/* NÚT SUBMIT */
+
+.submit-button {
+    width: 100%;
+    height: 50px;
+    border: none;
+    border-radius: 10px;
+    background-color: #1e3c72;
+    color: white;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: 0.2s;
+}
+.submit-button:hover { background-color: #16315f; }
+.submit-button:disabled { background-color: #aab4c8; cursor: not-allowed; }
+
+.exit-button { background-color: #c0392b; }
+.exit-button:hover { background-color: #a5301f; }
+
+/* ===== Bổ sung: thông báo chế độ tự động chọn vị trí ===== */
+
+.auto-mode-note {
+    background: #eef4ff;
+    border: 1px solid #c9ddff;
+    color: #1e3c72;
+    padding: 14px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* CHỌN LOẠI XE */
+.vehicle-select {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1.5px solid #ccd3df;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    background: white;
+}
