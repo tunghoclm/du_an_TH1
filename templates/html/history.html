@@ -6,6 +6,9 @@
     <title>Lịch sử - Smart Parking</title>
     <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
     <link rel="stylesheet" href="{{ url_for('css_files', filename='history.css') }}">
+    {% if session.get('role') == 'user' %}
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='user.css') }}">
+    {% endif %}
 </head>
 <body>
 <div class="wrap">
@@ -15,8 +18,8 @@
         <div class="topbar-left">
             <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
             <div>
-                <h1>Lịch sử hoạt động</h1>
-                <p>Theo dõi toàn bộ lịch sử xe ra vào bãi đỗ xe</p>
+                <h1>{{ 'Lịch sử xe của tôi' if user_mode else 'Lịch sử hoạt động' }}</h1>
+                <p>{{ 'Lịch sử ra vào của các xe bạn đã đăng ký' if user_mode else 'Theo dõi toàn bộ lịch sử xe ra vào bãi đỗ xe' }}</p>
             </div>
         </div>
         <div class="topbar-right">
@@ -26,6 +29,8 @@
             </div>
         </div>
     </header>
+
+    {% if session.get('role') == 'user' %}{% include '_user_nav.html' %}{% endif %}
 
     <!-- ============ THÔNG BÁO ============ -->
     <div class="toasts" id="toasts">
@@ -131,7 +136,7 @@
             {% else %}
             <div class="empty">
                 <div class="empty-icon">📭</div>
-                <p>Không tìm thấy bản ghi phù hợp. Hãy thử thay đổi bộ lọc.</p>
+                <p>{{ 'Chưa có lượt ra vào nào của xe bạn đã đăng ký (hoặc không có kết quả phù hợp với bộ lọc).' if user_mode else 'Không tìm thấy bản ghi phù hợp. Hãy thử thay đổi bộ lọc.' }}</p>
             </div>
             {% endif %}
         </div>

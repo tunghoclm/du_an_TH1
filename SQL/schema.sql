@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS users (
     fullname  TEXT NOT NULL,
     password  TEXT NOT NULL,                  -- demo: lưu dạng plain text, thực tế nên hash
     role      TEXT NOT NULL DEFAULT 'user',   -- admin | manager | user
-    status    TEXT NOT NULL DEFAULT 'active'  -- active | locked
+    status    TEXT NOT NULL DEFAULT 'active', -- active | locked
+    password_changes INTEGER NOT NULL DEFAULT 0, -- số lần người dùng tự đổi mật khẩu (tối đa 3)
+    plate_changes    INTEGER NOT NULL DEFAULT 0  -- số lần người dùng tự đổi biển số (tối đa 3)
 );
 
 -- Bảng cấu hình hệ thống (key-value), dùng cho trang Cài đặt

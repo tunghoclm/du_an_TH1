@@ -57,7 +57,9 @@ def init_db():
                     "ALTER TABLE parking_records ADD COLUMN note TEXT",
                     "ALTER TABLE user_vehicles ADD COLUMN start_on TEXT",
                     "ALTER TABLE user_vehicles ADD COLUMN months INTEGER",
-                    "ALTER TABLE user_vehicles ADD COLUMN paid_amount INTEGER"):
+                    "ALTER TABLE user_vehicles ADD COLUMN paid_amount INTEGER",
+                    "ALTER TABLE users ADD COLUMN password_changes INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN plate_changes INTEGER NOT NULL DEFAULT 0"):
         try:
             conn.execute(col_sql)
         except sqlite3.OperationalError:
@@ -384,6 +386,25 @@ def update_user(user_id: int, fullname: str, role: str):
 def set_user_password(user_id: int, new_password: str):
     conn = get_connection()
     conn.execute("UPDATE users SET password = ? WHERE id = ?", (new_password, user_id))
+    conn.commit()
+    conn.close()
+
+
+def change_own_password(user_id: int, new_password: str):
+    """Người dùng tự đổi mật khẩu: lưu mật khẩu mới và tăng bộ đếm số lần đổi."""
+    conn = get_connection()
+    conn.execute("UPDATE users SET password = ?, password_changes = password_changes + 1 WHERE id = ?",
+                 (new_password, user_id))
+    conn.commit()
+    conn.close()
+
+
+def change_vehicle_plate(vehicle_id: int, user_id: int, plate_number: str, key: str):
+    """Người dùng tự đổi biển số xe đã đăng ký: cập nhật biển số và tăng bộ đếm số lần đổi."""
+    conn = get_connection()
+    conn.execute("UPDATE user_vehicles SET plate_number = ?, plate_key = ? WHERE id = ? AND user_id = ?",
+                 (plate_number, key, vehicle_id, user_id))
+    conn.execute("UPDATE users SET plate_changes = plate_changes + 1 WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
 

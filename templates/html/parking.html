@@ -6,6 +6,9 @@
     <title>Bãi đỗ xe - Smart Parking</title>
     <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
     <link rel="stylesheet" href="{{ url_for('css_files', filename='parking.css') }}">
+    {% if session.get('role') == 'user' %}
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='user.css') }}">
+    {% endif %}
 </head>
 <body>
 <div class="wrap">
@@ -27,6 +30,8 @@
             </div>
         </div>
     </header>
+
+    {% if session.get('role') == 'user' %}{% include '_user_nav.html' %}{% endif %}
 
     <!-- ============ THÔNG BÁO ============ -->
     <div class="toasts" id="toasts">
