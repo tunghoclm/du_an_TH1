@@ -77,7 +77,7 @@
                 <div class="card-content">
                     <span>Tổng doanh thu</span>
                     <strong>{{ '{:,}'.format(stats.total_revenue) }} đ</strong>
-                    <small>Từ trước đến nay</small>
+                    <small>Gửi xe {{ '{:,}'.format(stats.parking_revenue) }} đ + Vé tháng {{ '{:,}'.format(stats.month_revenue) }} đ</small>
                 </div>
             </div>
             <div class="overview-card">
@@ -93,7 +93,7 @@
                 <div class="card-content">
                     <span>Doanh thu hôm nay</span>
                     <strong>{{ '{:,}'.format(stats.today_revenue) }} đ</strong>
-                    <small>Xe đã ra bãi</small>
+                    <small>Xe ra bãi + vé tháng mới</small>
                 </div>
             </div>
         </section>

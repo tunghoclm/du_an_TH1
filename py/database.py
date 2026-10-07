@@ -515,7 +515,13 @@ def get_statistics():
     total_out = cur.fetchone()['c']
 
     cur.execute("SELECT COALESCE(SUM(fee), 0) AS s FROM parking_records WHERE status = 'OUT'")
-    total_revenue = cur.fetchone()['s']
+    parking_revenue = cur.fetchone()['s']
+
+    # Tiền vé tháng thu khi tạo tài khoản / thuê thêm tháng (paid_amount cộng dồn theo từng xe)
+    cur.execute("SELECT COALESCE(SUM(paid_amount), 0) AS s FROM user_vehicles WHERE ticket_type = 'month'")
+    month_revenue = cur.fetchone()['s']
+
+    total_revenue = parking_revenue + month_revenue
 
     today_str = datetime.now().strftime('%Y-%m-%d')
     cur.execute(
@@ -531,6 +537,15 @@ def get_statistics():
     )
     today_revenue = cur.fetchone()['s']
 
+    # Vé tháng bắt đầu tính từ hôm nay (tạo mới hoặc thuê lại sau khi hết hạn) -> thu trong hôm nay
+    cur.execute(
+        "SELECT COALESCE(SUM(paid_amount), 0) AS s FROM user_vehicles "
+        "WHERE ticket_type = 'month' AND start_on = ?",
+        (today_str,)
+    )
+    today_month_revenue = cur.fetchone()['s']
+    today_revenue += today_month_revenue
+
     conn.close()
 
     return {
@@ -538,6 +553,8 @@ def get_statistics():
         'total_in': total_in,
         'total_out': total_out,
         'total_revenue': total_revenue,
+        'parking_revenue': parking_revenue,
+        'month_revenue': month_revenue,
         'today_entries': today_entries,
         'today_revenue': today_revenue,
     }
