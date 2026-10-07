@@ -4,127 +4,148 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Thống kê - Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
     <link rel="stylesheet" href="{{ url_for('css_files', filename='thongke.css') }}">
 </head>
 <body>
-    <main class="main-content">
-        <header class="page-header">
-            <div class="header-left">
-                <a href="{{ url_for('index') }}" class="back-button">← Quay lại</a>
-                <div>
-                    <h1>Thống kê</h1>
-                    <p>Tổng quan tình hình hoạt động của bãi đỗ xe</p>
-                </div>
-            </div>
-            <div class="user-info">
-                <strong>{{ session.get('fullname') }}</strong>
-                <span>{{ role_label }}</span>
-            </div>
-        </header>
+<div class="wrap">
 
-        <section class="section-title">
+    <!-- ============ TIÊU ĐỀ ============ -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
             <div>
-                <h2>Tổng quan</h2>
-                <p>Tình trạng hiện tại của bãi đỗ</p>
+                <h1>Thống kê</h1>
+                <p>Tổng quan tình hình hoạt động của bãi đỗ xe</p>
             </div>
-        </section>
+        </div>
+        <div class="topbar-right">
+            <div class="user-chip">
+                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
+                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
+            </div>
+        </div>
+    </header>
 
-        <section class="overview-grid">
-            <div class="overview-card">
-                <div class="card-icon">🅿️</div>
-                <div class="card-content">
-                    <span>Tổng vị trí</span>
-                    <strong>{{ slot_stats.total }}</strong>
-                    <small>3 khu vực</small>
-                </div>
+    <!-- ============ THÔNG BÁO ============ -->
+    <div class="toasts" id="toasts">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="toast toast-{{ category }}" role="status">
+                <span>{{ message }}</span>
+                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
             </div>
-            <div class="overview-card">
-                <div class="card-icon">🚗</div>
-                <div class="card-content">
-                    <span>Đang đỗ</span>
-                    <strong>{{ slot_stats.occupied }}</strong>
-                    <small>{{ ((slot_stats.occupied / slot_stats.total * 100) if slot_stats.total else 0) | round(1) }}% công suất</small>
-                </div>
-            </div>
-            <div class="overview-card">
-                <div class="card-icon">🟢</div>
-                <div class="card-content">
-                    <span>Còn trống</span>
-                    <strong>{{ slot_stats.available }}</strong>
-                    <small>Có thể tiếp nhận</small>
-                </div>
-            </div>
-            <div class="overview-card">
-                <div class="card-icon">📊</div>
-                <div class="card-content">
-                    <span>Tổng lượt xe</span>
-                    <strong>{{ stats.total_records }}</strong>
-                    <small>Từ trước đến nay</small>
-                </div>
-            </div>
-        </section>
+            {% endfor %}
+        {% endwith %}
+    </div>
 
-        <section class="section-title">
+    <!-- ============ DOANH THU ============ -->
+    <section class="panel">
+        <div class="panel-head">
             <div>
                 <h2>Doanh thu</h2>
-                <p>Tổng hợp doanh thu gửi xe</p>
+                <p>Doanh thu = phí gửi xe (xe đã ra bãi) + tiền vé tháng đã thu</p>
             </div>
-        </section>
+            <form method="get" action="{{ url_for('statistics') }}" id="stats-filter" class="range-form">
+                <span class="range-label">Xem theo thời gian · đang xem: <strong>{{ range_label }}</strong></span>
+                <select name="range" id="time-range" class="input range-select">
+                    <option value="today" {{ 'selected' if range_key == 'today' }}>Hôm nay</option>
+                    <option value="yesterday" {{ 'selected' if range_key == 'yesterday' }}>Hôm qua</option>
+                    <option value="7days" {{ 'selected' if range_key == '7days' }}>7 ngày qua</option>
+                    <option value="30days" {{ 'selected' if range_key == '30days' }}>30 ngày qua</option>
+                    <option value="month" {{ 'selected' if range_key == 'month' }}>Tháng này</option>
+                    <option value="custom" {{ 'selected' if range_key == 'custom' }}>Chọn ngày…</option>
+                </select>
+                <span class="custom-dates" id="custom-dates" {{ '' if range_key == 'custom' else 'hidden' }}>
+                    <input type="date" name="from" class="input" value="{{ date_from }}" max="{{ today_iso }}">
+                    <span>→</span>
+                    <input type="date" name="to" class="input" value="{{ date_to }}" max="{{ today_iso }}">
+                    <button type="submit" class="btn btn-navy">Xem</button>
+                </span>
+            </form>
+        </div>
+        <div class="panel-body">
+            <div class="stats cols-4 flat">
+                <div class="stat">
+                    <span class="stat-icon amber">💰</span>
+                    <div>
+                        <b class="money-big">{{ '{:,}'.format(stats.total_revenue).replace(',', '.') }} đ</b>
+                        <small>Tổng doanh thu</small>
+                        <span class="sub">Từ trước đến nay · Gửi xe {{ '{:,}'.format(stats.parking_revenue).replace(',', '.') }} đ + Vé tháng {{ '{:,}'.format(stats.month_revenue).replace(',', '.') }} đ</span>
+                    </div>
+                </div>
+                <div class="stat">
+                    <span class="stat-icon blue">📅</span>
+                    <div>
+                        <b>{{ stats.period_entries }}</b>
+                        <small>Lượt vào {{ range_label }}</small>
+                        <span class="sub">Xe vào bãi</span>
+                    </div>
+                </div>
+                <div class="stat">
+                    <span class="stat-icon green">💵</span>
+                    <div>
+                        <b class="money-big">{{ '{:,}'.format(stats.period_revenue).replace(',', '.') }} đ</b>
+                        <small>Doanh thu {{ range_label }}</small>
+                        <span class="sub">Gửi xe {{ '{:,}'.format(stats.period_parking_revenue).replace(',', '.') }} đ + Vé tháng {{ '{:,}'.format(stats.period_month_revenue).replace(',', '.') }} đ</span>
+                    </div>
+                </div>
+                <div class="stat">
+                    <span class="stat-icon purple">📊</span>
+                    <div>
+                        <b>{{ stats.period_records }}</b>
+                        <small>Tổng lượt xe {{ range_label }}</small>
+                        <span class="sub">Vào {{ stats.period_entries }} · Ra {{ stats.period_exits }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-        <section class="overview-grid">
-            <div class="overview-card">
-                <div class="card-icon">💰</div>
-                <div class="card-content">
-                    <span>Tổng doanh thu</span>
-                    <strong>{{ '{:,}'.format(stats.total_revenue) }} đ</strong>
-                    <small>Gửi xe {{ '{:,}'.format(stats.parking_revenue) }} đ + Vé tháng {{ '{:,}'.format(stats.month_revenue) }} đ</small>
-                </div>
-            </div>
-            <div class="overview-card">
-                <div class="card-icon">📅</div>
-                <div class="card-content">
-                    <span>Lượt vào hôm nay</span>
-                    <strong>{{ stats.today_entries }}</strong>
-                    <small>Xe vào bãi</small>
-                </div>
-            </div>
-            <div class="overview-card">
-                <div class="card-icon">💵</div>
-                <div class="card-content">
-                    <span>Doanh thu hôm nay</span>
-                    <strong>{{ '{:,}'.format(stats.today_revenue) }} đ</strong>
-                    <small>Xe ra bãi + vé tháng mới</small>
-                </div>
-            </div>
-        </section>
-
-        <section class="section-title area-title">
+    <!-- ============ TÌNH TRẠNG THEO KHU VỰC ============ -->
+    <section class="panel">
+        <div class="panel-head">
             <div>
                 <h2>Tình trạng theo khu vực</h2>
                 <p>Mức độ sử dụng của từng khu vực</p>
             </div>
-        </section>
-
-        <section class="area-grid">
-            {% for area, data in area_stats.items() %}
-            <div class="area-card">
-                <div class="area-card-header">
-                    <div>
-                        <h3>Khu {{ area }}</h3>
-                        <span>{{ data.total }} vị trí</span>
+        </div>
+        <div class="panel-body">
+            <div class="area-grid">
+                {% for area, data in area_stats.items() %}
+                <div class="area-card">
+                    <div class="area-card-header">
+                        <div>
+                            <h3>Khu {{ area }}</h3>
+                            <span>{{ data.total }} vị trí</span>
+                        </div>
+                        <strong>{{ data.percent }}%</strong>
                     </div>
-                    <strong>{{ data.percent }}%</strong>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{ data.percent }}%;"></div>
+                    </div>
+                    <div class="area-info">
+                        <span>Đang đỗ: <strong>{{ data.occupied }}</strong></span>
+                        <span>Trống: <strong>{{ data.available }}</strong></span>
+                    </div>
                 </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: {{ data.percent }}%;"></div>
-                </div>
-                <div class="area-info">
-                    <span>Đang đỗ: <strong>{{ data.occupied }}</strong></span>
-                    <span>Trống: <strong>{{ data.available }}</strong></span>
-                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
-        </section>
-    </main>
+        </div>
+    </section>
+</div>
+
+<script>
+(function () {
+    const form = document.getElementById('stats-filter');
+    const select = document.getElementById('time-range');
+    const custom = document.getElementById('custom-dates');
+    select.addEventListener('change', function () {
+        if (select.value === 'custom') { custom.hidden = false; }   // chọn ngày rồi bấm "Xem"
+        else { form.submit(); }
+    });
+    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
+})();
+</script>
 </body>
 </html>

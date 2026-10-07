@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='user.css') }}">
+</head>
+<body>
+<div class="wrap narrow">
+
+    <!-- ============ TIÊU ĐỀ ============ -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <span class="logo">P</span>
+            <div>
+                <h1>Smart Parking</h1>
+                <p>Xin chào, <strong>{{ session.get('fullname') }}</strong></p>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <a href="{{ url_for('logout') }}" class="btn btn-soft btn-sm">🚪 Đăng xuất</a>
+        </div>
+    </header>
+
+    <!-- ============ THÔNG BÁO ============ -->
+    <div class="toasts" id="toasts">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="toast toast-{{ category }}" role="status">
+                <span>{{ message }}</span>
+                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
+            </div>
+            {% endfor %}
+        {% endwith %}
+    </div>
+
+    <!-- ============ XE CỦA TÔI ============ -->
+    <section class="panel">
+        <div class="panel-head">
+            <div>
+                <h2>Xe của tôi</h2>
+                <p>Các xe và vé bạn đã đăng ký</p>
+            </div>
+        </div>
+        <div class="panel-body">
+            {% if vehicles %}
+            <div class="vlist">
+                {% for v in vehicles %}
+                {% set is_month = v['ticket_type'] == 'month' %}
+                {% set active = is_month and v['expires_on'] and v['expires_on'] >= today %}
+                <div class="vcard">
+                    <div class="vplate">{{ v['plate_number'] }}</div>
+                    <div class="vmeta">{{ v['vehicle_type_name'] or 'Chưa chọn loại xe' }}</div>
+                    {% if active %}
+                        {% set left = v['expires_on']|days_left %}
+                        <span class="badge {{ 'badge-amber' if left <= 7 else 'badge-green' }}">
+                            Vé tháng · đến {{ v['expires_on']|vdate }} ({{ 'hôm nay là ngày cuối' if left == 0 else 'còn ' ~ left ~ ' ngày' }})
+                        </span>
+                    {% elif is_month %}
+                        <span class="badge badge-red">Vé tháng đã hết hạn {{ v['expires_on']|vdate }}</span>
+                    {% else %}
+                        <span class="badge badge-gray">Vé lượt</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="callout">Bạn chưa đăng ký xe nào. Vào <a href="{{ url_for('settings') }}#add">Cài đặt → Đăng ký thêm biển số</a> để đăng ký xe.</div>
+            {% endif %}
+        </div>
+    </section>
+
+    <!-- ============ CHỨC NĂNG ============ -->
+    <section class="home-grid">
+        <a href="{{ url_for('pricing') }}" class="tile">
+            <span class="tile-icon t-amber">💰</span>
+            <strong>Giá xe</strong>
+            <small>Bảng giá gửi xe</small>
+        </a>
+        <a href="{{ url_for('parking') }}" class="tile">
+            <span class="tile-icon t-blue">🅿️</span>
+            <strong>Bãi đỗ xe</strong>
+            <small>Còn {{ counts.available }} vị trí trống</small>
+        </a>
+        <a href="{{ url_for('history') }}" class="tile">
+            <span class="tile-icon t-green">📋</span>
+            <strong>Lịch sử</strong>
+            <small>Lượt ra vào của xe bạn</small>
+        </a>
+        <a href="{{ url_for('settings') }}" class="tile">
+            <span class="tile-icon t-purple">⚙️</span>
+            <strong>Cài đặt</strong>
+            <small>Mật khẩu, vé, biển số</small>
+        </a>
+    </section>
+</div>
+<script>setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);</script>
+</body>
+</html>

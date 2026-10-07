@@ -168,6 +168,17 @@ def staff_required(view_func):
     return wrapped
 
 
+def user_required(view_func):
+    """Chỉ dành cho tài khoản người dùng thường (role = 'user') — các chức năng tự phục vụ ở /me/..."""
+    @functools.wraps(view_func)
+    def wrapped(*args, **kwargs):
+        if session.get('role') != 'user':
+            flash('Chức năng này chỉ dành cho tài khoản người dùng.', 'error')
+            return redirect(url_for('index'))
+        return view_func(*args, **kwargs)
+    return wrapped
+
+
 ROLE_LABELS = {'admin': 'Quản trị viên', 'manager': 'Nhân viên', 'user': 'Người dùng'}
 
 
@@ -221,6 +232,9 @@ def logout():
 @login_required
 def index():
     counts = database.slot_counts()
+    if session.get('role') == 'user':      # người dùng: trang chủ riêng, chỉ có 4 chức năng
+        return render_template('user_home.html', counts=counts, today=date.today().isoformat(),
+                               vehicles=database.get_user_vehicles(session['user_id']))
     total_in = database.count_open()
     return render_template('index.html', counts=counts, total_in=total_in)
 
@@ -324,7 +338,8 @@ def render_gate(token='', plate='', note='', form=None):
     ctx = {'token': token, 'plate': plate, 'note': note, 'form': form or {}, 'now': now,
            'mode': None, 'record': None, 'fee_preview': None, 'preview_url': None,
            'type_options': [], 'slots_by_area': {}, 'entry_mode': None, 'no_slots': False,
-           'registered': None, 'reg_month_ok': False, 'reg_expired': False, 'suggest': None}
+           'registered': None, 'reg_month_ok': False, 'reg_expired': False, 'suggest': None,
+           'reg_type': None}
 
     if token and os.path.exists(os.path.join(TMP_FOLDER, f'{token}_ann.jpg')):
         ctx['preview_url'] = url_for('tmp_preview', filename=f'{token}_ann.jpg',
@@ -353,16 +368,16 @@ def render_gate(token='', plate='', note='', form=None):
                                'price': database.find_turn_price(t['id'], now)}
                               for t in database.get_vehicle_types()],
             )
-            # Xe đã đăng ký: tự chọn sẵn loại xe theo đăng ký (vẫn đổi được)
-            if registered and registered['vehicle_type_id'] and not ctx['form'].get('vehicle_type_id'):
-                base = form.to_dict() if hasattr(form, 'to_dict') else dict(form or {})
-                base['vehicle_type_id'] = str(registered['vehicle_type_id'])
-                ctx['form'] = base
+            # Xe đã đăng ký (có loại xe): dùng luôn loại xe đã đăng ký, không cần chọn lại
+            if registered and registered['vehicle_type_id']:
+                ctx['reg_type'] = next((t for t in ctx['type_options']
+                                        if t['id'] == registered['vehicle_type_id']), None)
     return render_template('gate.html', **ctx)
 
 
 @app.route('/gate', methods=['GET', 'POST'])
 @login_required
+@staff_required
 def gate():
     if request.method == 'GET':
         return render_gate()
@@ -448,13 +463,18 @@ def gate_confirm(token, plate, note):
     form = request.form
     entry_mode = database.get_user_setting(session['user_id'], 'entry_mode', 'manual')
 
+    all_types = database.get_vehicle_types()
+    registered = database.get_registered_vehicle(plate_key(plate))
     type_id = _to_int(form.get('vehicle_type_id'))
-    vehicle_type = next((t for t in database.get_vehicle_types() if t['id'] == type_id), None)
+    # Xe đã đăng ký (có loại xe còn tồn tại) -> lấy loại xe theo đăng ký, bỏ qua lựa chọn trên form
+    if registered and registered['vehicle_type_id'] \
+            and any(t['id'] == registered['vehicle_type_id'] for t in all_types):
+        type_id = registered['vehicle_type_id']
+    vehicle_type = next((t for t in all_types if t['id'] == type_id), None)
     if vehicle_type is None:
         flash('Vui lòng chọn loại xe.', 'error')
         return render_gate(token, plate, note, form)
     entry_price = database.find_turn_price(type_id, datetime.now())
-    registered = database.get_registered_vehicle(plate_key(plate))
     month_ok = month_ticket_valid(registered, date.today())
     if entry_price is None and not month_ok:
         flash(f'Chưa có giá cho "{vehicle_type["name"]}" lúc {datetime.now():%H:%M}. '
@@ -489,12 +509,14 @@ def gate_confirm(token, plate, note):
 
 @app.route('/entry')
 @login_required
+@staff_required
 def entry():
     return redirect(url_for('gate'))
 
 
 @app.route('/exit')
 @login_required
+@staff_required
 def exit_gate():
     return redirect(url_for('gate'))
 
@@ -512,6 +534,10 @@ def history():
     date_filter = request.args.get('date', '')
 
     records = database.get_all_records()
+    is_user = session.get('role') == 'user'
+    if is_user:    # người dùng chỉ xem lịch sử của các xe mình đã đăng ký
+        my_keys = {v['plate_key'] for v in database.get_user_vehicles(session['user_id'])}
+        records = [r for r in records if plate_key(r['plate_number']) in my_keys]
 
     in_count = sum(1 for r in records if r['status'] == 'IN')
     out_count = sum(1 for r in records if r['status'] == 'OUT')
@@ -540,6 +566,7 @@ def history():
         in_count=in_count,
         out_count=out_count,
         today_count=today_count,
+        user_mode=is_user,
     )
 
 
@@ -549,11 +576,42 @@ def history():
 
 @app.route('/statistics')
 @login_required
+@staff_required
 def statistics():
-    stats = database.get_statistics()
-    slot_stats = database.slot_counts()
+    start, end, range_key, label = parse_stats_range(request.args)
+    stats = database.get_statistics(start.isoformat(), end.isoformat())
     area_stats = database.area_stats()
-    return render_template('statistics.html', stats=stats, slot_stats=slot_stats, area_stats=area_stats)
+    return render_template('statistics.html', stats=stats, area_stats=area_stats,
+                           range_key=range_key, range_label=label,
+                           date_from=start.isoformat(), date_to=end.isoformat(),
+                           today_iso=date.today().isoformat())
+
+
+def parse_stats_range(args):
+    """Đọc bộ lọc thời gian của trang Thống kê -> (ngày bắt đầu, ngày kết thúc, mã lọc, nhãn hiển thị)."""
+    today = date.today()
+    key = args.get('range', 'today')
+    if key == 'yesterday':
+        d = today - timedelta(days=1)
+        return d, d, key, 'hôm qua'
+    if key == '7days':
+        return today - timedelta(days=6), today, key, '7 ngày qua'
+    if key == '30days':
+        return today - timedelta(days=29), today, key, '30 ngày qua'
+    if key == 'month':
+        return today.replace(day=1), today, key, 'tháng này'
+    if key == 'custom':
+        try:
+            start = date.fromisoformat(args.get('from', ''))
+            end = date.fromisoformat(args.get('to', '')) if args.get('to') else start
+        except ValueError:
+            start = end = today
+        if start > end:
+            start, end = end, start
+        if start == end:
+            return start, end, key, f'ngày {start:%d/%m/%Y}'
+        return start, end, key, f'{start:%d/%m/%Y} – {end:%d/%m/%Y}'
+    return today, today, 'today', 'hôm nay'
 
 
 # ============================================================
@@ -563,6 +621,8 @@ def statistics():
 @app.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings():
+    if session.get('role') == 'user':      # người dùng: trang cài đặt tài khoản riêng
+        return render_user_settings()
     if request.method == 'POST':
         mode = request.form.get('entry_mode')
         if mode not in ('auto', 'manual'):
@@ -755,6 +815,15 @@ def vdate_filter(value):
         return date.fromisoformat(value).strftime('%d/%m/%Y')
     except (TypeError, ValueError):
         return value or '—'
+
+
+@app.template_filter('days_left')
+def days_left_filter(value):
+    """Số ngày còn lại từ hôm nay đến ngày YYYY-MM-DD (0 = hôm nay là ngày cuối)."""
+    try:
+        return (date.fromisoformat(value) - date.today()).days
+    except (TypeError, ValueError):
+        return 0
 
 
 @app.template_filter('vnd')
@@ -1011,6 +1080,33 @@ def add_user_vehicles(user_id):
     return redirect(url_for('edit_user', user_id=user_id))
 
 
+def renew_vehicle(vehicle, months):
+    """Thuê thêm tháng: gia hạn vé tháng (nối tiếp ngày hết hạn nếu còn hạn) hoặc đổi vé lượt -> vé tháng
+    (bắt đầu tính từ hôm nay). Tiền = giá tháng trong Bảng giá x số tháng; ghi vào nhật ký doanh thu.
+    Trả về (thông báo lỗi hoặc None, {'start','expires','total'})."""
+    if not months or not 1 <= months <= MAX_MONTHS:
+        return f'Số tháng thuê phải từ 1 đến {MAX_MONTHS}.', None
+    today = date.today()
+    price = database.find_month_price(vehicle['vehicle_type_id'], today)
+    if price is None:
+        return 'Bảng giá chưa có giá vé tháng cho loại xe này.', None
+    total = price['amount'] * months
+
+    active = (vehicle['ticket_type'] == 'month' and vehicle['expires_on']
+              and vehicle['expires_on'] >= today.isoformat())
+    if active:   # còn hạn -> nối tiếp từ ngày hết hạn cũ
+        new_start = date.fromisoformat(vehicle['expires_on']) + timedelta(days=1)
+        start_on = vehicle['start_on'] or vehicle['created_at'][:10]
+        all_months = (vehicle['months'] or 0) + months
+        paid = (vehicle['paid_amount'] or 0) + total
+    else:        # vé lượt hoặc đã hết hạn -> bắt đầu từ hôm nay
+        new_start, start_on, all_months, paid = today, today.isoformat(), months, total
+    expires_on = month_ticket_period(new_start, months).isoformat()
+    database.set_vehicle_month_ticket(vehicle['id'], start_on, expires_on, all_months, paid)
+    database.add_ticket_payment(vehicle['id'], vehicle['plate_number'], total, months)   # ghi vào doanh thu
+    return None, {'start': new_start.isoformat(), 'expires': expires_on, 'total': total}
+
+
 @app.route('/users/<int:user_id>/vehicles/<int:vehicle_id>/renew', methods=['POST'])
 @login_required
 @staff_required
@@ -1025,29 +1121,12 @@ def renew_user_vehicle(user_id, vehicle_id):
     back = redirect(url_for('edit_user', user_id=user_id))
 
     months = _to_int(request.form.get('months'))
-    if not months or not 1 <= months <= MAX_MONTHS:
-        flash(f'Số tháng thuê phải từ 1 đến {MAX_MONTHS}.', 'error')
+    error, info = renew_vehicle(vehicle, months)
+    if error:
+        flash(error, 'error')
         return back
-    today = date.today()
-    price = database.find_month_price(vehicle['vehicle_type_id'], today)
-    if price is None:
-        flash('Bảng giá chưa có giá vé tháng cho loại xe này. Hãy thêm giá tháng ở trang Giá xe.', 'error')
-        return back
-    total = price['amount'] * months
-
-    active = (vehicle['ticket_type'] == 'month' and vehicle['expires_on']
-              and vehicle['expires_on'] >= today.isoformat())
-    if active:   # còn hạn -> nối tiếp từ ngày hết hạn cũ
-        new_start = date.fromisoformat(vehicle['expires_on']) + timedelta(days=1)
-        start_on = vehicle['start_on'] or vehicle['created_at'][:10]
-        all_months = (vehicle['months'] or 0) + months
-        paid = (vehicle['paid_amount'] or 0) + total
-    else:        # vé lượt hoặc đã hết hạn -> bắt đầu từ hôm nay
-        new_start, start_on, all_months, paid = today, today.isoformat(), months, total
-    expires_on = month_ticket_period(new_start, months).isoformat()
-    database.set_vehicle_month_ticket(vehicle_id, start_on, expires_on, all_months, paid)
     flash(f'Đã thuê {months} tháng cho xe {vehicle["plate_number"]}: '
-          f'{vdate_filter(new_start.isoformat())} → {vdate_filter(expires_on)} — cần thu {vnd_filter(total)}.',
+          f'{vdate_filter(info["start"])} → {vdate_filter(info["expires"])} — cần thu {vnd_filter(info["total"])}.',
           'success')
     return back
 
@@ -1090,6 +1169,124 @@ def remove_user(user_id):
     database.delete_user(user_id)
     flash('Đã xóa người dùng.', 'success')
     return redirect(url_for('users'))
+
+
+# ============================================================
+# NGƯỜI DÙNG TỰ PHỤC VỤ (/me/...): đổi mật khẩu, gia hạn vé, đổi biển số, đăng ký thêm xe
+# ============================================================
+
+MAX_SELF_CHANGES = 3   # số lần tối đa người dùng tự đổi mật khẩu / tự đổi biển số
+
+
+def render_user_settings(**extra):
+    me = database.get_user_by_id(session['user_id'])
+    return render_template('user_settings.html', me=me,
+                           vehicles=database.get_user_vehicles(me['id']),
+                           vehicle_types=database.get_vehicle_types(),
+                           ticket_labels=TICKET_LABELS, today=date.today().isoformat(),
+                           price_info=build_price_info(), max_months=MAX_MONTHS,
+                           max_changes=MAX_SELF_CHANGES, **extra)
+
+
+def my_vehicle(vehicle_id):
+    """Xe đăng ký của chính người đang đăng nhập (hoặc None)."""
+    v = database.get_user_vehicle(vehicle_id)
+    return v if v is not None and v['user_id'] == session['user_id'] else None
+
+
+@app.route('/me/password', methods=['POST'])
+@login_required
+@user_required
+def me_password():
+    me = database.get_user_by_id(session['user_id'])
+    current = request.form.get('current_password', '')
+    new_pw = request.form.get('new_password', '')
+    confirm = request.form.get('confirm_password', '')
+    if me['password_changes'] >= MAX_SELF_CHANGES:
+        flash(f'Bạn đã đổi mật khẩu đủ {MAX_SELF_CHANGES} lần. Vui lòng liên hệ nhân viên nếu cần đổi thêm.', 'error')
+    elif current != me['password']:
+        flash('Mật khẩu hiện tại không đúng.', 'error')
+    elif len(new_pw) < MIN_PASSWORD_LEN:
+        flash(f'Mật khẩu mới tối thiểu {MIN_PASSWORD_LEN} ký tự.', 'error')
+    elif new_pw == current:
+        flash('Mật khẩu mới phải khác mật khẩu hiện tại.', 'error')
+    elif new_pw != confirm:
+        flash('Mật khẩu nhập lại không khớp.', 'error')
+    else:
+        database.change_own_password(me['id'], new_pw)
+        left = MAX_SELF_CHANGES - me['password_changes'] - 1
+        flash(f'Đã đổi mật khẩu. Bạn còn {left} lần đổi mật khẩu.', 'success')
+    return redirect(url_for('settings') + '#password')
+
+
+@app.route('/me/vehicles/<int:vehicle_id>/renew', methods=['POST'])
+@login_required
+@user_required
+def me_renew(vehicle_id):
+    vehicle = my_vehicle(vehicle_id)
+    if vehicle is None:
+        flash('Không tìm thấy xe đăng ký.', 'error')
+        return redirect(url_for('settings'))
+    months = _to_int(request.form.get('months'))
+    error, info = renew_vehicle(vehicle, months)
+    if error:
+        flash(error, 'error')
+    else:
+        flash(f'Đã gia hạn {months} tháng cho xe {vehicle["plate_number"]}: '
+              f'{vdate_filter(info["start"])} → {vdate_filter(info["expires"])}. '
+              f'Số tiền cần thanh toán: {vnd_filter(info["total"])}.', 'success')
+    return redirect(url_for('settings') + '#vehicles')
+
+
+@app.route('/me/vehicles/<int:vehicle_id>/plate', methods=['POST'])
+@login_required
+@user_required
+def me_change_plate(vehicle_id):
+    vehicle = my_vehicle(vehicle_id)
+    back = redirect(url_for('settings') + '#vehicles')
+    if vehicle is None:
+        flash('Không tìm thấy xe đăng ký.', 'error')
+        return back
+    me = database.get_user_by_id(session['user_id'])
+    if me['plate_changes'] >= MAX_SELF_CHANGES:
+        flash(f'Bạn đã đổi biển số đủ {MAX_SELF_CHANGES} lần. Vui lòng liên hệ nhân viên nếu cần đổi thêm.', 'error')
+        return back
+    plate = clean_plate_input(request.form.get('plate', ''))
+    key = plate_key(plate)
+    if len(key) < 4:
+        flash('Biển số mới quá ngắn (tối thiểu 4 ký tự).', 'error')
+        return back
+    if key == vehicle['plate_key']:
+        flash('Biển số mới trùng với biển số hiện tại.', 'error')
+        return back
+    if database.find_vehicle_owner(key) is not None:
+        flash('Biển số này đã được đăng ký cho một tài khoản khác.', 'error')
+        return back
+    if any(plate_key(r['plate_number']) == vehicle['plate_key'] for r in database.get_open_records()):
+        flash('Xe đang gửi trong bãi, không thể đổi biển số lúc này. Hãy đổi sau khi lấy xe ra.', 'error')
+        return back
+    database.change_vehicle_plate(vehicle_id, me['id'], plate, key)
+    left = MAX_SELF_CHANGES - me['plate_changes'] - 1
+    flash(f'Đã đổi biển số {vehicle["plate_number"]} → {plate}. Bạn còn {left} lần đổi biển số.', 'success')
+    return back
+
+
+@app.route('/me/vehicles/add', methods=['POST'])
+@login_required
+@user_required
+def me_add_vehicle():
+    vehicles, errors, prefill = parse_vehicle_forms(request.form)
+    if not vehicles and not errors:
+        errors.append('Vui lòng nhập biển số xe cần đăng ký.')
+    if errors:
+        for e in errors:
+            flash(e, 'error')
+        return render_user_settings(prefill=prefill[0] if prefill else None)
+    save_vehicles(session['user_id'], vehicles[:1])
+    v = vehicles[0]
+    money = f' Số tiền vé tháng cần thanh toán: {vnd_filter(v["paid_amount"])}.' if v['paid_amount'] else ''
+    flash(f'Đã đăng ký thêm xe {v["plate_number"]}.{money}', 'success')
+    return redirect(url_for('settings') + '#vehicles')
 
 
 if __name__ == '__main__':

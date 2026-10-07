@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS users (
     fullname  TEXT NOT NULL,
     password  TEXT NOT NULL,                  -- demo: lưu dạng plain text, thực tế nên hash
     role      TEXT NOT NULL DEFAULT 'user',   -- admin | manager | user
-    status    TEXT NOT NULL DEFAULT 'active'  -- active | locked
+    status    TEXT NOT NULL DEFAULT 'active', -- active | locked
+    password_changes INTEGER NOT NULL DEFAULT 0, -- số lần người dùng tự đổi mật khẩu (tối đa 3)
+    plate_changes    INTEGER NOT NULL DEFAULT 0  -- số lần người dùng tự đổi biển số (tối đa 3)
 );
 
 -- Bảng cấu hình hệ thống (key-value), dùng cho trang Cài đặt
@@ -90,4 +92,16 @@ CREATE TABLE IF NOT EXISTS user_vehicles (
     paid_amount      INTEGER,                       -- tổng tiền vé tháng (giá tháng x số tháng)
     created_at       TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Nhật ký thu tiền vé tháng (mỗi lần tạo tài khoản có vé tháng / thuê thêm tháng = 1 dòng).
+-- Giữ nguyên khi hủy xe hoặc xóa tài khoản để doanh thu không bị mất.
+CREATE TABLE IF NOT EXISTS ticket_payments (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_vehicle_id  INTEGER,
+    plate_number     TEXT,
+    amount           INTEGER NOT NULL,
+    months           INTEGER,
+    paid_on          TEXT NOT NULL,                 -- YYYY-MM-DD (ngày thu tiền)
+    created_at       TEXT NOT NULL
 );

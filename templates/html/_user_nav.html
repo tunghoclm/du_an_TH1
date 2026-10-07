@@ -1,0 +1,8 @@
+{# Thanh điều hướng của tài khoản người dùng: 4 mục. Trên điện thoại cố định ở đáy màn hình. #}
+{% set ep = request.endpoint %}
+<nav class="user-nav" aria-label="Điều hướng">
+    <a href="{{ url_for('pricing') }}" class="{{ 'active' if ep == 'pricing' }}"><span class="ni">💰</span><span class="nt">Giá xe</span></a>
+    <a href="{{ url_for('parking') }}" class="{{ 'active' if ep == 'parking' }}"><span class="ni">🅿️</span><span class="nt">Bãi đỗ xe</span></a>
+    <a href="{{ url_for('history') }}" class="{{ 'active' if ep == 'history' }}"><span class="ni">📋</span><span class="nt">Lịch sử</span></a>
+    <a href="{{ url_for('settings') }}" class="{{ 'active' if ep == 'settings' }}"><span class="ni">⚙️</span><span class="nt">Cài đặt</span></a>
+</nav>

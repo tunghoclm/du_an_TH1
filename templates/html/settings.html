@@ -4,50 +4,49 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cài đặt - Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
     <link rel="stylesheet" href="{{ url_for('css_files', filename='entry_exit.css') }}">
-    <style>
-        .mode-options { display: flex; flex-direction: column; gap: 14px; margin: 18px 0 24px; }
-        .mode-option {
-            display: flex; align-items: flex-start; gap: 14px;
-            border: 2px solid #e6e6e6; border-radius: 12px; padding: 16px 18px;
-            cursor: pointer; transition: 0.15s;
-        }
-        .mode-option:hover { border-color: #b9c9ec; }
-        .mode-option.selected { border-color: #1e3c72; background: #f3f6ff; }
-        .mode-option input { margin-top: 3px; accent-color: #1e3c72; }
-        .mode-option .mode-icon { font-size: 22px; }
-        .mode-option h4 { margin: 0 0 4px; font-size: 15px; color: #222; }
-        .mode-option p { margin: 0; font-size: 13px; color: #888; line-height: 1.5; }
-    </style>
 </head>
 <body>
-    <div class="page-wrap">
-        <header class="page-header">
-            <div class="header-left">
-                <a href="{{ url_for('index') }}" class="back-button">←</a>
-                <div>
-                    <h1>⚙️ Cài đặt hệ thống</h1>
-                    <p>Lựa chọn của riêng bạn — không cần nhờ nhân viên hay admin</p>
-                </div>
-            </div>
-            <div class="user-info">
-                <div>
-                    <strong>{{ session.get('fullname') }}</strong>
-                    <small>{{ role_label }}</small>
-                </div>
-            </div>
-        </header>
+<div class="wrap narrow">
 
+    <!-- ============ TIÊU ĐỀ ============ -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
+            <div>
+                <h1>⚙️ Cài đặt hệ thống</h1>
+                <p>Lựa chọn của riêng bạn — không cần nhờ nhân viên hay admin</p>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <div class="user-chip">
+                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
+                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ============ THÔNG BÁO ============ -->
+    <div class="toasts" id="toasts">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}
-                <div class="flash flash-{{ category }}">{{ message }}</div>
+            <div class="toast toast-{{ category }}" role="status">
+                <span>{{ message }}</span>
+                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
+            </div>
             {% endfor %}
         {% endwith %}
+    </div>
 
-        <div class="card">
-            <h2>Cách chọn vị trí đỗ khi xe vào bãi</h2>
-            <p class="hint">Chỉ áp dụng cho tài khoản của bạn khi dùng chức năng "Xe vào bãi". Người khác không bị ảnh hưởng.</p>
-
+    <section class="panel">
+        <div class="panel-head">
+            <div>
+                <h2>Cách chọn vị trí đỗ khi xe vào bãi</h2>
+                <p>Chỉ áp dụng cho tài khoản của bạn khi dùng chức năng "Xe vào bãi". Người khác không bị ảnh hưởng.</p>
+            </div>
+        </div>
+        <div class="panel-body">
             <form method="POST" id="settings-form">
                 <div class="mode-options">
                     <label class="mode-option {{ 'selected' if entry_mode == 'auto' }}">
@@ -69,20 +68,20 @@
                     </label>
                 </div>
 
-                <button type="submit" class="submit-button">Lưu cài đặt</button>
+                <button type="submit" class="btn btn-green submit-button">Lưu cài đặt</button>
             </form>
         </div>
-    </div>
+    </section>
+</div>
 
-    <script>
-        document.querySelectorAll('.mode-option input').forEach(function (input) {
-            input.addEventListener('change', function () {
-                document.querySelectorAll('.mode-option').forEach(function (el) {
-                    el.classList.remove('selected');
-                });
-                input.closest('.mode-option').classList.add('selected');
-            });
+<script>
+    document.querySelectorAll('.mode-option input').forEach(function (input) {
+        input.addEventListener('change', function () {
+            document.querySelectorAll('.mode-option').forEach(function (el) { el.classList.remove('selected'); });
+            input.closest('.mode-option').classList.add('selected');
         });
-    </script>
+    });
+    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
+</script>
 </body>
 </html>

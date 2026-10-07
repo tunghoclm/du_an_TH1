@@ -57,13 +57,25 @@ def init_db():
                     "ALTER TABLE parking_records ADD COLUMN note TEXT",
                     "ALTER TABLE user_vehicles ADD COLUMN start_on TEXT",
                     "ALTER TABLE user_vehicles ADD COLUMN months INTEGER",
-                    "ALTER TABLE user_vehicles ADD COLUMN paid_amount INTEGER"):
+                    "ALTER TABLE user_vehicles ADD COLUMN paid_amount INTEGER",
+                    "ALTER TABLE users ADD COLUMN password_changes INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN plate_changes INTEGER NOT NULL DEFAULT 0"):
         try:
             conn.execute(col_sql)
         except sqlite3.OperationalError:
             pass  # cột đã tồn tại
 
     conn.commit()
+
+    # Dữ liệu cũ: chưa có nhật ký thu tiền vé tháng -> lập từ các vé tháng đã đăng ký
+    cur0 = conn.cursor()
+    cur0.execute("SELECT COUNT(*) AS c FROM ticket_payments")
+    if cur0.fetchone()['c'] == 0:
+        conn.execute(
+            "INSERT INTO ticket_payments (user_vehicle_id, plate_number, amount, months, paid_on, created_at) "
+            "SELECT id, plate_number, paid_amount, months, COALESCE(start_on, substr(created_at, 1, 10)), created_at "
+            "FROM user_vehicles WHERE ticket_type = 'month' AND paid_amount > 0")
+        conn.commit()
 
     # Seed 60 vị trí đỗ (A01..A20, B01..B20, C01..C20) nếu bảng đang trống
     cur = conn.cursor()
@@ -378,6 +390,25 @@ def set_user_password(user_id: int, new_password: str):
     conn.close()
 
 
+def change_own_password(user_id: int, new_password: str):
+    """Người dùng tự đổi mật khẩu: lưu mật khẩu mới và tăng bộ đếm số lần đổi."""
+    conn = get_connection()
+    conn.execute("UPDATE users SET password = ?, password_changes = password_changes + 1 WHERE id = ?",
+                 (new_password, user_id))
+    conn.commit()
+    conn.close()
+
+
+def change_vehicle_plate(vehicle_id: int, user_id: int, plate_number: str, key: str):
+    """Người dùng tự đổi biển số xe đã đăng ký: cập nhật biển số và tăng bộ đếm số lần đổi."""
+    conn = get_connection()
+    conn.execute("UPDATE user_vehicles SET plate_number = ?, plate_key = ? WHERE id = ? AND user_id = ?",
+                 (plate_number, key, vehicle_id, user_id))
+    conn.execute("UPDATE users SET plate_changes = plate_changes + 1 WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+
 def toggle_user_status(user_id: int):
     conn = get_connection()
     cur = conn.cursor()
@@ -439,13 +470,33 @@ def find_vehicle_owner(key: str):
 def add_user_vehicle(user_id: int, plate_number: str, key: str, vehicle_type_id,
                      ticket_type: str, expires_on, start_on=None, months=None, paid_amount=None):
     conn = get_connection()
-    conn.execute(
+    now = datetime.now()
+    cur = conn.execute(
         """INSERT INTO user_vehicles
            (user_id, plate_number, plate_key, vehicle_type_id, ticket_type, expires_on,
             start_on, months, paid_amount, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (user_id, plate_number, key, vehicle_type_id, ticket_type, expires_on,
-         start_on, months, paid_amount, datetime.now().isoformat(timespec='seconds')))
+         start_on, months, paid_amount, now.isoformat(timespec='seconds')))
+    if ticket_type == 'month' and paid_amount:
+        conn.execute(
+            "INSERT INTO ticket_payments (user_vehicle_id, plate_number, amount, months, paid_on, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (cur.lastrowid, plate_number, paid_amount, months,
+             now.strftime('%Y-%m-%d'), now.isoformat(timespec='seconds')))
+    conn.commit()
+    conn.close()
+
+
+def add_ticket_payment(vehicle_id: int, plate_number: str, amount: int, months: int):
+    """Ghi nhận 1 lần thu tiền vé tháng (thuê thêm tháng) vào doanh thu."""
+    now = datetime.now()
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO ticket_payments (user_vehicle_id, plate_number, amount, months, paid_on, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (vehicle_id, plate_number, amount, months,
+         now.strftime('%Y-%m-%d'), now.isoformat(timespec='seconds')))
     conn.commit()
     conn.close()
 
@@ -501,62 +552,56 @@ def delete_user_vehicle(vehicle_id: int):
 # THỐNG KÊ
 # ============================================================
 
-def get_statistics():
+def get_statistics(start_date: str = None, end_date: str = None):
+    """Thống kê doanh thu & lượt xe.
+    - Tổng doanh thu: toàn thời gian = phí gửi xe (xe đã ra) + tiền vé tháng đã thu.
+    - Các số theo kỳ: tính cho khoảng ngày [start_date, end_date] (YYYY-MM-DD, gồm cả 2 đầu);
+      mặc định là hôm nay."""
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    start_date = start_date or today_str
+    end_date = end_date or start_date
+
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("SELECT COUNT(*) AS c FROM parking_records")
-    total_records = cur.fetchone()['c']
+    def one(sql, params=()):
+        cur.execute(sql, params)
+        return cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) AS c FROM parking_records WHERE status = 'IN'")
-    total_in = cur.fetchone()['c']
+    # ----- Toàn thời gian -----
+    parking_revenue = one("SELECT COALESCE(SUM(fee), 0) FROM parking_records WHERE status = 'OUT'")
+    month_revenue = one("SELECT COALESCE(SUM(amount), 0) FROM ticket_payments")
 
-    cur.execute("SELECT COUNT(*) AS c FROM parking_records WHERE status = 'OUT'")
-    total_out = cur.fetchone()['c']
-
-    cur.execute("SELECT COALESCE(SUM(fee), 0) AS s FROM parking_records WHERE status = 'OUT'")
-    parking_revenue = cur.fetchone()['s']
-
-    # Tiền vé tháng thu khi tạo tài khoản / thuê thêm tháng (paid_amount cộng dồn theo từng xe)
-    cur.execute("SELECT COALESCE(SUM(paid_amount), 0) AS s FROM user_vehicles WHERE ticket_type = 'month'")
-    month_revenue = cur.fetchone()['s']
-
-    total_revenue = parking_revenue + month_revenue
-
-    today_str = datetime.now().strftime('%Y-%m-%d')
-    cur.execute(
-        "SELECT COUNT(*) AS c FROM parking_records WHERE substr(entry_time, 1, 10) = ?",
-        (today_str,)
-    )
-    today_entries = cur.fetchone()['c']
-
-    cur.execute(
-        "SELECT COALESCE(SUM(fee), 0) AS s FROM parking_records "
-        "WHERE status = 'OUT' AND substr(exit_time, 1, 10) = ?",
-        (today_str,)
-    )
-    today_revenue = cur.fetchone()['s']
-
-    # Vé tháng bắt đầu tính từ hôm nay (tạo mới hoặc thuê lại sau khi hết hạn) -> thu trong hôm nay
-    cur.execute(
-        "SELECT COALESCE(SUM(paid_amount), 0) AS s FROM user_vehicles "
-        "WHERE ticket_type = 'month' AND start_on = ?",
-        (today_str,)
-    )
-    today_month_revenue = cur.fetchone()['s']
-    today_revenue += today_month_revenue
+    # ----- Theo kỳ -----
+    period_entries = one(
+        "SELECT COUNT(*) FROM parking_records WHERE substr(entry_time, 1, 10) BETWEEN ? AND ?",
+        (start_date, end_date))
+    period_exits = one(
+        "SELECT COUNT(*) FROM parking_records WHERE status = 'OUT' "
+        "AND substr(exit_time, 1, 10) BETWEEN ? AND ?", (start_date, end_date))
+    # Tổng lượt xe: lượt có xe vào HOẶC xe ra trong kỳ (mỗi lượt đếm 1 lần)
+    period_records = one(
+        "SELECT COUNT(*) FROM parking_records WHERE substr(entry_time, 1, 10) BETWEEN ?1 AND ?2 "
+        "OR (status = 'OUT' AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2)", (start_date, end_date))
+    period_parking_revenue = one(
+        "SELECT COALESCE(SUM(fee), 0) FROM parking_records WHERE status = 'OUT' "
+        "AND substr(exit_time, 1, 10) BETWEEN ? AND ?", (start_date, end_date))
+    period_month_revenue = one(
+        "SELECT COALESCE(SUM(amount), 0) FROM ticket_payments WHERE paid_on BETWEEN ? AND ?",
+        (start_date, end_date))
 
     conn.close()
 
     return {
-        'total_records': total_records,
-        'total_in': total_in,
-        'total_out': total_out,
-        'total_revenue': total_revenue,
+        'total_revenue': parking_revenue + month_revenue,
         'parking_revenue': parking_revenue,
         'month_revenue': month_revenue,
-        'today_entries': today_entries,
-        'today_revenue': today_revenue,
+        'period_entries': period_entries,
+        'period_exits': period_exits,
+        'period_records': period_records,
+        'period_revenue': period_parking_revenue + period_month_revenue,
+        'period_parking_revenue': period_parking_revenue,
+        'period_month_revenue': period_month_revenue,
     }
 
 

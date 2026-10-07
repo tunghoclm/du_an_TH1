@@ -4,33 +4,41 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Xe vào / ra - Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
     <link rel="stylesheet" href="{{ url_for('css_files', filename='entry_exit.css') }}">
     <link rel="stylesheet" href="{{ url_for('css_files', filename='gate.css') }}">
 </head>
 <body>
-<div class="page-wrap">
+<div class="wrap narrow">
 
-    <header class="page-header">
-        <div class="header-left">
-            <a href="{{ url_for('index') }}" class="back-button">←</a>
+    <!-- ============ TIÊU ĐỀ ============ -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
             <div>
                 <h1>🚗 Xe vào / ra</h1>
                 <p>Chọn ảnh biển số → Nhận diện → Xác nhận. Biển số chưa có trong bãi là xe vào, đang gửi là xe ra.</p>
             </div>
         </div>
-        <div class="user-info">
-            <div>
-                <strong>{{ session.get('fullname') }}</strong>
-                <small>{{ role_label }}</small>
+        <div class="topbar-right">
+            <div class="user-chip">
+                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
+                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
             </div>
         </div>
     </header>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for category, message in messages %}
-            <div class="flash flash-{{ category }}">{{ message }}</div>
-        {% endfor %}
-    {% endwith %}
+    <!-- ============ THÔNG BÁO ============ -->
+    <div class="toasts" id="toasts">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="toast toast-{{ category }}" role="status">
+                <span>{{ message }}</span>
+                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
+            </div>
+            {% endfor %}
+        {% endwith %}
+    </div>
 
     <div class="card">
         <form method="POST" enctype="multipart/form-data" id="gate-form">
@@ -107,6 +115,19 @@
             <div class="mode-panel mode-entry">
                 <div class="mode-title">🚗 XE VÀO BÃI — biển số <strong>{{ plate }}</strong> chưa có trong bãi</div>
 
+                {% if reg_type %}
+                <div class="field">
+                    <label>Loại xe:</label>
+                    <input type="hidden" name="vehicle_type_id" value="{{ reg_type.id }}">
+                    <div class="reg-info">
+                        <strong>{{ reg_type.name }}</strong> (theo đăng ký của tài khoản)
+                        {% if reg_month_ok %}· vé tháng còn hạn, không tính phí lượt
+                        {% elif reg_type.price %}· {{ '{:,}'.format(reg_type.price.amount).replace(',', '.') }}đ/lượt (khung {{ reg_type.price.period_name }})
+                        {% else %}· <span class="reg-note">chưa có giá lúc {{ now.strftime('%H:%M') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% else %}
                 <div class="field">
                     <label for="vehicle_type_id">Loại xe:</label>
                     <select name="vehicle_type_id" id="vehicle_type_id" class="vehicle-select" required>
@@ -124,6 +145,7 @@
                         <div class="no-slots-message">⚠️ Chưa có loại xe nào. Hãy nhờ nhân viên/admin tạo ở trang Giá xe.</div>
                     {% endif %}
                 </div>
+                {% endif %}
 
                 {% if entry_mode == 'auto' %}
                     {% if no_slots %}
@@ -161,8 +183,8 @@
             {% endif %}
 
             <div class="button-row">
-                <button type="submit" name="action" value="recognize" class="btn btn-blue">🔍 Nhận diện biển số</button>
-                <button type="submit" name="action" value="confirm" class="btn btn-orange"
+                <button type="submit" name="action" value="recognize" class="btn btn-navy">🔍 Nhận diện biển số</button>
+                <button type="submit" name="action" value="confirm" class="btn btn-green"
                         {% if not mode or (mode == 'entry' and no_slots) %}disabled{% endif %}>
                     💾 {% if mode == 'exit' %}Xác nhận xe ra{% elif mode == 'entry' %}Xác nhận xe vào{% else %}Xác nhận{% endif %}
                 </button>
@@ -194,6 +216,7 @@
             if (ev.persisted) location.reload();
         });
     })();
+    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
 </script>
 </body>
 </html>

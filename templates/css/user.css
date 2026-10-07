@@ -1,0 +1,103 @@
+/* user.css — giao diện riêng cho tài khoản người dùng (xem tốt trên điện thoại).
+   Dùng chung với theme.css; riêng pricing.html chỉ cần file này vì đã có sẵn các biến màu. */
+
+.wrap.narrow { max-width: 860px; }
+
+/* ===== Thanh điều hướng 4 mục ===== */
+.user-nav {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 18px;
+    overflow-x: auto;
+}
+.user-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 16px;
+    border-radius: 999px;
+    background: #fff;
+    color: #44506b;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+    box-shadow: 0 2px 8px rgba(20, 48, 107, .06);
+    white-space: nowrap;
+}
+.user-nav a:hover { background: #eef2fb; }
+.user-nav a.active { background: var(--navy); color: #fff; }
+
+/* ===== Trang chủ ===== */
+.logo {
+    width: 46px; height: 46px; border-radius: 14px; flex: none;
+    background: linear-gradient(135deg, var(--navy), var(--blue));
+    color: #fff; font-weight: 800; font-size: 22px;
+    display: flex; align-items: center; justify-content: center;
+}
+.btn-sm { padding: 8px 14px; font-size: 13px; }
+.vlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.vcard { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; background: #fafbfe; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.vplate { font-size: 20px; font-weight: 800; color: var(--navy); letter-spacing: .5px; }
+.vmeta { color: var(--muted); font-size: 13.5px; }
+.vcard .badge { white-space: normal; text-align: left; line-height: 1.35; }
+
+.home-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 18px; }
+.tile {
+    background: #fff; border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 20px 14px; text-decoration: none; color: var(--text);
+    display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px;
+    transition: transform .15s, box-shadow .15s;
+}
+.tile:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(20, 48, 107, .14); }
+.tile strong { font-size: 16px; color: var(--navy); }
+.tile small { color: var(--muted); font-size: 12.5px; }
+.tile-icon { width: 54px; height: 54px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 4px; }
+.t-amber { background: #fff3dc; } .t-blue { background: #e8f0ff; } .t-green { background: #e4f6ec; } .t-purple { background: #efe6fb; }
+
+/* ===== Cài đặt ===== */
+.stack-form { display: flex; flex-direction: column; gap: 14px; }
+.stack-form .btn.block, .btn.block { width: 100%; justify-content: center; padding: 13px; font-size: 15px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+.field input:disabled { background: #f1f4fa; color: var(--muted); }
+.hint { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.hint.pad { padding: 12px 4px 4px; }
+.callout.warn { background: #fdeaea; color: var(--red-d); }
+.callout a { color: var(--blue); font-weight: 600; }
+.panel[id] { scroll-margin-top: 14px; }
+
+.vbox { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 14px; background: #fff; }
+.vbox:last-child { margin-bottom: 0; }
+.vbox-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+
+details.fold { border-top: 1px solid var(--line); }
+details.fold summary {
+    list-style: none; cursor: pointer; padding: 13px 4px; font-weight: 700; color: var(--navy-2); font-size: 14.5px;
+    display: flex; align-items: center; justify-content: space-between;
+}
+details.fold summary::-webkit-details-marker { display: none; }
+details.fold summary::after { content: '▾'; color: var(--muted); transition: transform .15s; }
+details.fold[open] summary::after { transform: rotate(180deg); }
+details.fold > form { padding: 4px 4px 14px; }
+
+[hidden] { display: none !important; }
+
+/* ===== Điện thoại ===== */
+@media (max-width: 760px) {
+    /* thanh điều hướng cố định ở đáy màn hình */
+    .user-nav {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; margin: 0; gap: 0;
+        background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -6px 22px rgba(20, 48, 107, .10);
+        padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px)); overflow: visible;
+    }
+    .user-nav a {
+        flex: 1; flex-direction: column; gap: 2px; padding: 7px 2px; border-radius: 12px;
+        box-shadow: none; background: transparent; font-size: 11.5px;
+    }
+    .user-nav a .ni { font-size: 21px; line-height: 1; }
+    .user-nav a.active { background: #e8f0ff; color: var(--navy); }
+    body:has(.user-nav) .wrap { padding-bottom: 96px; }
+
+    .home-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .tile { padding: 16px 10px; }
+    .vlist { grid-template-columns: 1fr; }
+}
