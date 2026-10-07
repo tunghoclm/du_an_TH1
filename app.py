@@ -324,7 +324,8 @@ def render_gate(token='', plate='', note='', form=None):
     ctx = {'token': token, 'plate': plate, 'note': note, 'form': form or {}, 'now': now,
            'mode': None, 'record': None, 'fee_preview': None, 'preview_url': None,
            'type_options': [], 'slots_by_area': {}, 'entry_mode': None, 'no_slots': False,
-           'registered': None, 'reg_month_ok': False, 'reg_expired': False, 'suggest': None}
+           'registered': None, 'reg_month_ok': False, 'reg_expired': False, 'suggest': None,
+           'reg_type': None}
 
     if token and os.path.exists(os.path.join(TMP_FOLDER, f'{token}_ann.jpg')):
         ctx['preview_url'] = url_for('tmp_preview', filename=f'{token}_ann.jpg',
@@ -353,11 +354,10 @@ def render_gate(token='', plate='', note='', form=None):
                                'price': database.find_turn_price(t['id'], now)}
                               for t in database.get_vehicle_types()],
             )
-            # Xe đã đăng ký: tự chọn sẵn loại xe theo đăng ký (vẫn đổi được)
-            if registered and registered['vehicle_type_id'] and not ctx['form'].get('vehicle_type_id'):
-                base = form.to_dict() if hasattr(form, 'to_dict') else dict(form or {})
-                base['vehicle_type_id'] = str(registered['vehicle_type_id'])
-                ctx['form'] = base
+            # Xe đã đăng ký (có loại xe): dùng luôn loại xe đã đăng ký, không cần chọn lại
+            if registered and registered['vehicle_type_id']:
+                ctx['reg_type'] = next((t for t in ctx['type_options']
+                                        if t['id'] == registered['vehicle_type_id']), None)
     return render_template('gate.html', **ctx)
 
 
@@ -448,13 +448,18 @@ def gate_confirm(token, plate, note):
     form = request.form
     entry_mode = database.get_user_setting(session['user_id'], 'entry_mode', 'manual')
 
+    all_types = database.get_vehicle_types()
+    registered = database.get_registered_vehicle(plate_key(plate))
     type_id = _to_int(form.get('vehicle_type_id'))
-    vehicle_type = next((t for t in database.get_vehicle_types() if t['id'] == type_id), None)
+    # Xe đã đăng ký (có loại xe còn tồn tại) -> lấy loại xe theo đăng ký, bỏ qua lựa chọn trên form
+    if registered and registered['vehicle_type_id'] \
+            and any(t['id'] == registered['vehicle_type_id'] for t in all_types):
+        type_id = registered['vehicle_type_id']
+    vehicle_type = next((t for t in all_types if t['id'] == type_id), None)
     if vehicle_type is None:
         flash('Vui lòng chọn loại xe.', 'error')
         return render_gate(token, plate, note, form)
     entry_price = database.find_turn_price(type_id, datetime.now())
-    registered = database.get_registered_vehicle(plate_key(plate))
     month_ok = month_ticket_valid(registered, date.today())
     if entry_price is None and not month_ok:
         flash(f'Chưa có giá cho "{vehicle_type["name"]}" lúc {datetime.now():%H:%M}. '
@@ -550,10 +555,40 @@ def history():
 @app.route('/statistics')
 @login_required
 def statistics():
-    stats = database.get_statistics()
-    slot_stats = database.slot_counts()
+    start, end, range_key, label = parse_stats_range(request.args)
+    stats = database.get_statistics(start.isoformat(), end.isoformat())
     area_stats = database.area_stats()
-    return render_template('statistics.html', stats=stats, slot_stats=slot_stats, area_stats=area_stats)
+    return render_template('statistics.html', stats=stats, area_stats=area_stats,
+                           range_key=range_key, range_label=label,
+                           date_from=start.isoformat(), date_to=end.isoformat(),
+                           today_iso=date.today().isoformat())
+
+
+def parse_stats_range(args):
+    """Đọc bộ lọc thời gian của trang Thống kê -> (ngày bắt đầu, ngày kết thúc, mã lọc, nhãn hiển thị)."""
+    today = date.today()
+    key = args.get('range', 'today')
+    if key == 'yesterday':
+        d = today - timedelta(days=1)
+        return d, d, key, 'hôm qua'
+    if key == '7days':
+        return today - timedelta(days=6), today, key, '7 ngày qua'
+    if key == '30days':
+        return today - timedelta(days=29), today, key, '30 ngày qua'
+    if key == 'month':
+        return today.replace(day=1), today, key, 'tháng này'
+    if key == 'custom':
+        try:
+            start = date.fromisoformat(args.get('from', ''))
+            end = date.fromisoformat(args.get('to', '')) if args.get('to') else start
+        except ValueError:
+            start = end = today
+        if start > end:
+            start, end = end, start
+        if start == end:
+            return start, end, key, f'ngày {start:%d/%m/%Y}'
+        return start, end, key, f'{start:%d/%m/%Y} – {end:%d/%m/%Y}'
+    return today, today, 'today', 'hôm nay'
 
 
 # ============================================================
@@ -1046,6 +1081,7 @@ def renew_user_vehicle(user_id, vehicle_id):
         new_start, start_on, all_months, paid = today, today.isoformat(), months, total
     expires_on = month_ticket_period(new_start, months).isoformat()
     database.set_vehicle_month_ticket(vehicle_id, start_on, expires_on, all_months, paid)
+    database.add_ticket_payment(vehicle_id, vehicle['plate_number'], total, months)   # ghi vào doanh thu
     flash(f'Đã thuê {months} tháng cho xe {vehicle["plate_number"]}: '
           f'{vdate_filter(new_start.isoformat())} → {vdate_filter(expires_on)} — cần thu {vnd_filter(total)}.',
           'success')

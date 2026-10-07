@@ -4,98 +4,83 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bãi đỗ xe - Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
     <link rel="stylesheet" href="{{ url_for('css_files', filename='parking.css') }}">
 </head>
 <body>
-    <div class="parking-page">
+<div class="wrap">
 
-        <header class="page-header">
-            <div class="header-left">
-                <a href="{{ url_for('index') }}" class="back-button">←</a>
-                <div>
-                    <h1>Bãi đỗ xe</h1>
-                    <p>
-                        {% if session.get('role') in ('admin', 'manager') %}
-                            Xem và quản lý tình trạng các vị trí đỗ xe theo thời gian thực
-                        {% else %}
-                            Xem tình trạng các vị trí đỗ xe theo thời gian thực (chỉ xem)
-                        {% endif %}
-                    </p>
-                </div>
+    <!-- ============ TIÊU ĐỀ ============ -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
+            <div>
+                <h1>Bãi đỗ xe</h1>
+                <p>{% if session.get('role') in ('admin', 'manager') %}Xem và quản lý tình trạng các vị trí đỗ xe theo thời gian thực
+                    {% else %}Xem tình trạng các vị trí đỗ xe theo thời gian thực (chỉ xem){% endif %}</p>
             </div>
-            <div class="user-info">
-                <div class="avatar">{{ (session.get('fullname') or '?')[0]|upper }}</div>
-                <div>
-                    <strong>{{ session.get('fullname') }}</strong>
-                    <small>{{ role_label }}</small>
-                </div>
+        </div>
+        <div class="topbar-right">
+            <div class="user-chip">
+                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
+                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
             </div>
-        </header>
+        </div>
+    </header>
 
-        <section class="parking-summary">
-            <div class="summary-card">
-                <div class="summary-icon blue">🅿️</div>
-                <div>
-                    <span>Tổng vị trí</span>
-                    <strong>{{ counts.total }}</strong>
-                </div>
+    <!-- ============ THÔNG BÁO ============ -->
+    <div class="toasts" id="toasts">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="toast toast-{{ category }}" role="status">
+                <span>{{ message }}</span>
+                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
             </div>
-            <div class="summary-card">
-                <div class="summary-icon green">✓</div>
-                <div>
-                    <span>Đang trống</span>
-                    <strong>{{ counts.available }}</strong>
-                </div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-icon red">🚗</div>
-                <div>
-                    <span>Đang đỗ</span>
-                    <strong>{{ counts.occupied }}</strong>
-                </div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-icon orange">🔧</div>
-                <div>
-                    <span>Bảo trì</span>
-                    <strong>{{ counts.maintenance }}</strong>
-                </div>
-            </div>
-        </section>
+            {% endfor %}
+        {% endwith %}
+    </div>
 
-        <section class="control-bar">
-            <div class="parking-filter">
-                <label for="area">Khu vực</label>
-                <select id="area" onchange="filterArea(this.value)">
-                    <option value="all">Tất cả khu vực</option>
-                    <option value="A">Khu A</option>
-                    <option value="B">Khu B</option>
-                    <option value="C">Khu C</option>
-                </select>
+    <!-- ============ SỐ LIỆU NHANH ============ -->
+    <section class="stats cols-4">
+        <div class="stat"><span class="stat-icon blue">🅿️</span><div><b>{{ counts.total }}</b><small>Tổng vị trí</small></div></div>
+        <div class="stat"><span class="stat-icon green">✓</span><div><b>{{ counts.available }}</b><small>Đang trống</small></div></div>
+        <div class="stat"><span class="stat-icon red">🚗</span><div><b>{{ counts.occupied }}</b><small>Đang đỗ</small></div></div>
+        <div class="stat"><span class="stat-icon amber">🔧</span><div><b>{{ counts.maintenance }}</b><small>Bảo trì</small></div></div>
+    </section>
+
+    <!-- ============ LỌC KHU VỰC + CHÚ THÍCH ============ -->
+    <section class="panel">
+        <div class="panel-toolbar">
+            <div class="chips" id="area-filter">
+                <button type="button" class="chip active" data-area="all">Tất cả khu vực</button>
+                {% for area in slots_by_area.keys() %}
+                <button type="button" class="chip" data-area="{{ area }}">Khu {{ area }}</button>
+                {% endfor %}
             </div>
             <div class="legend">
-                <div class="legend-item"><span class="legend-dot available"></span>Trống</div>
-                <div class="legend-item"><span class="legend-dot occupied"></span>Đang đỗ</div>
-                <div class="legend-item"><span class="legend-dot maintenance"></span>Bảo trì</div>
+                <span class="legend-item"><span class="legend-dot available"></span>Trống</span>
+                <span class="legend-item"><span class="legend-dot occupied"></span>Đang đỗ</span>
+                <span class="legend-item"><span class="legend-dot maintenance"></span>Bảo trì</span>
             </div>
-        </section>
-
+        </div>
         {% if session.get('role') in ('admin', 'manager') %}
-        <p class="staff-hint">🔧 Bấm vào vị trí đang trống hoặc đang bảo trì để chuyển đổi trạng thái bảo trì.</p>
+        <p class="note">🔧 Bấm vào vị trí đang trống hoặc đang bảo trì để chuyển đổi trạng thái bảo trì.</p>
         {% endif %}
+    </section>
 
-        {% for area, slots in slots_by_area.items() %}
-        <section class="parking-section" data-area="{{ area }}">
-            <div class="section-header">
-                <div>
-                    <h2>Khu {{ area }}</h2>
-                    <p>{{ slots|length }} vị trí</p>
-                </div>
-                <span class="area-status">
-                    {{ slots | selectattr('status', 'equalto', 'available') | list | length }} / {{ slots|length }} vị trí trống
-                </span>
+    <!-- ============ CÁC KHU ============ -->
+    {% for area, slots in slots_by_area.items() %}
+    <section class="panel parking-section" data-area="{{ area }}">
+        <div class="panel-head">
+            <div>
+                <h2>Khu {{ area }}</h2>
+                <p>{{ slots|length }} vị trí</p>
             </div>
-
+            <span class="badge badge-green">
+                {{ slots | selectattr('status', 'equalto', 'available') | list | length }} / {{ slots|length }} vị trí trống
+            </span>
+        </div>
+        <div class="panel-body">
             <div class="parking-grid">
                 {% for slot in slots %}
                 {% if session.get('role') in ('admin', 'manager') and slot['status'] != 'occupied' %}
@@ -119,18 +104,23 @@
                 {% endif %}
                 {% endfor %}
             </div>
-        </section>
-        {% endfor %}
-    </div>
+        </div>
+    </section>
+    {% endfor %}
+</div>
 
-    <script>
-        // Chỉ lọc hiển thị theo khu vực — KHÔNG chỉnh sửa dữ liệu (chỉ xem).
-        function filterArea(selected) {
-            document.querySelectorAll('.parking-section').forEach(function (section) {
-                var area = section.dataset.area;
-                section.style.display = (selected === 'all' || selected === area) ? 'block' : 'none';
+<script>
+    // Chỉ lọc hiển thị theo khu vực — KHÔNG chỉnh sửa dữ liệu.
+    document.querySelectorAll('#area-filter .chip').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            document.querySelectorAll('#area-filter .chip').forEach(function (c) { c.classList.toggle('active', c === chip); });
+            var selected = chip.dataset.area;
+            document.querySelectorAll('.parking-section').forEach(function (s) {
+                s.hidden = !(selected === 'all' || selected === s.dataset.area);
             });
-        }
-    </script>
+        });
+    });
+    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
+</script>
 </body>
 </html>

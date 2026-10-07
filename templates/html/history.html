@@ -4,135 +4,139 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lịch sử - Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
     <link rel="stylesheet" href="{{ url_for('css_files', filename='history.css') }}">
 </head>
 <body>
-    <main class="main-content">
-        <header class="page-header">
-            <div class="header-left">
-                <a href="{{ url_for('index') }}" class="back-button">← Quay lại</a>
-                <div>
-                    <h1>Lịch sử hoạt động</h1>
-                    <p>Theo dõi toàn bộ lịch sử xe ra vào bãi đỗ</p>
-                </div>
-            </div>
-            <div class="user-info">
-                <strong>{{ session.get('fullname') }}</strong>
-                <span>{{ role_label }}</span>
-            </div>
-        </header>
+<div class="wrap">
 
-        <section class="statistics">
-            <div class="stat-card">
-                <div class="stat-icon">📋</div>
-                <div><span>Tổng lượt</span><strong>{{ total_count }}</strong></div>
+    <!-- ============ TIÊU ĐỀ ============ -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
+            <div>
+                <h1>Lịch sử hoạt động</h1>
+                <p>Theo dõi toàn bộ lịch sử xe ra vào bãi đỗ xe</p>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon">🚗</div>
-                <div><span>Đang gửi</span><strong>{{ in_count }}</strong></div>
+        </div>
+        <div class="topbar-right">
+            <div class="user-chip">
+                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
+                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon">🚪</div>
-                <div><span>Đã lấy xe</span><strong>{{ out_count }}</strong></div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">📅</div>
-                <div><span>Hôm nay</span><strong>{{ today_count }}</strong></div>
-            </div>
-        </section>
+        </div>
+    </header>
 
-        <section class="filter-box">
-            <form method="GET" style="display:contents;">
-                <div class="filter-group">
-                    <label for="plate">Biển số</label>
-                    <input type="text" id="plate" name="plate" value="{{ keyword }}" placeholder="Nhập biển số...">
-                </div>
-                <div class="filter-group">
-                    <label for="status">Trạng thái</label>
-                    <select id="status" name="status">
-                        <option value="all" {{ 'selected' if status_filter == 'all' }}>Tất cả</option>
-                        <option value="IN" {{ 'selected' if status_filter == 'IN' }}>Đang gửi</option>
-                        <option value="OUT" {{ 'selected' if status_filter == 'OUT' }}>Đã lấy xe</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label for="date">Ngày</label>
-                    <input type="date" id="date" name="date" value="{{ date_filter }}">
-                </div>
-                <button type="submit" class="reset-button" style="background:#1e3c72;color:white;">Lọc</button>
-                <a href="{{ url_for('history') }}" class="reset-button">↻ Đặt lại</a>
-            </form>
-        </section>
+    <!-- ============ THÔNG BÁO ============ -->
+    <div class="toasts" id="toasts">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="toast toast-{{ category }}" role="status">
+                <span>{{ message }}</span>
+                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
+            </div>
+            {% endfor %}
+        {% endwith %}
+    </div>
 
-        <section class="history-box">
-            <div class="history-header">
-                <div>
-                    <h2>Danh sách lịch sử</h2>
-                    <p>{{ records|length }} bản ghi</p>
-                </div>
+    <!-- ============ SỐ LIỆU NHANH ============ -->
+    <section class="stats cols-4">
+        <div class="stat"><span class="stat-icon blue">📋</span><div><b>{{ total_count }}</b><small>Tổng lượt</small></div></div>
+        <div class="stat"><span class="stat-icon amber">🚗</span><div><b>{{ in_count }}</b><small>Đang gửi</small></div></div>
+        <div class="stat"><span class="stat-icon green">🚪</span><div><b>{{ out_count }}</b><small>Đã lấy xe</small></div></div>
+        <div class="stat"><span class="stat-icon purple">📅</span><div><b>{{ today_count }}</b><small>Hôm nay</small></div></div>
+    </section>
+
+    <!-- ============ BỘ LỌC ============ -->
+    <section class="panel">
+        <form method="GET" class="filters">
+            <div class="field">
+                <label for="plate">Biển số</label>
+                <input type="text" id="plate" name="plate" value="{{ keyword }}" placeholder="Nhập biển số...">
             </div>
-            <div class="table-container">
-                {% if records %}
-                <table>
-                    <thead>
-                        <tr>
-                            <th>STT</th>
-                            <th>Biển số</th>
-                            <th>Loại xe</th>
-                            <th>Vị trí</th>
-                            <th>Giao dịch</th>
-                            <th>Phí (VNĐ)</th>
-                            <th>Thời gian vào</th>
-                            <th>Thời gian ra</th>
-                            <th>Ghi chú</th>
-                            <th>Chi tiết</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for r in records %}
-                        <tr>
-                            <td>{{ loop.index }}</td>
-                            <td><strong>{{ r['plate_number'] }}</strong></td>
-                            <td>{{ r['vehicle_type_name'] or '—' }}</td>
-                            <td>{{ r['slot_name'] or '—' }}</td>
-                            <td>
-                                {% if r['status'] == 'IN' %}
-                                    <span class="badge badge-in">Đang gửi</span>
-                                {% else %}
-                                    <span class="badge badge-out">Đã lấy xe</span>
-                                {% endif %}
-                            </td>
-                            <td>{{ '{:,}'.format(r['fee']) if r['fee'] else '—' }}</td>
-                            <td>{{ r['entry_time'] }}</td>
-                            <td>{{ r['exit_time'] or '—' }}</td>
-                            <td>{{ r['note'] or '—' }}</td>
-                            <td>
-                                <button type="button" class="detail-button"
-                                    data-plate="{{ r['plate_number'] }}"
-                                    data-type="{{ r['vehicle_type_name'] or '—' }}"
-                                    data-slot="{{ r['slot_name'] or '—' }}"
-                                    data-entry-time="{{ r['entry_time'] or '—' }}"
-                                    data-exit-time="{{ r['exit_time'] or '—' }}"
-                                    data-fee="{{ '{:,}'.format(r['fee']) ~ ' VNĐ' if r['fee'] else '—' }}"
-                                    data-entry-img="{{ url_for('static', filename='in/' ~ r['entry_image']) if r['entry_image'] else '' }}"
-                                    data-exit-img="{{ url_for('static', filename='out/' ~ r['exit_image']) if r['exit_image'] else '' }}">
-                                    🔍 Chi tiết
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                {% else %}
-                <div class="empty-history">
-                    <div class="empty-icon">📭</div>
-                    <h3>Không tìm thấy bản ghi phù hợp</h3>
-                    <p>Hãy thử thay đổi bộ lọc.</p>
-                </div>
-                {% endif %}
+            <div class="field">
+                <label for="status">Trạng thái</label>
+                <select id="status" name="status">
+                    <option value="all" {{ 'selected' if status_filter == 'all' }}>Tất cả</option>
+                    <option value="IN" {{ 'selected' if status_filter == 'IN' }}>Đang gửi</option>
+                    <option value="OUT" {{ 'selected' if status_filter == 'OUT' }}>Đã lấy xe</option>
+                </select>
             </div>
-        </section>
-    </main>
+            <div class="field">
+                <label for="date">Ngày</label>
+                <input type="date" id="date" name="date" value="{{ date_filter }}">
+            </div>
+            <button type="submit" class="btn btn-navy">Lọc</button>
+            <a href="{{ url_for('history') }}" class="btn btn-soft">↻ Đặt lại</a>
+        </form>
+    </section>
+
+    <!-- ============ DANH SÁCH ============ -->
+    <section class="panel">
+        <div class="panel-head">
+            <div>
+                <h2>Danh sách lịch sử</h2>
+                <p>{{ records|length }} bản ghi</p>
+            </div>
+        </div>
+        <div class="table-wrap">
+            {% if records %}
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th class="c-stt">STT</th>
+                        <th>Biển số</th>
+                        <th>Loại xe</th>
+                        <th>Vị trí</th>
+                        <th>Giao dịch</th>
+                        <th class="num">Phí (VNĐ)</th>
+                        <th>Thời gian vào</th>
+                        <th>Thời gian ra</th>
+                        <th>Ghi chú</th>
+                        <th class="c-act">Chi tiết</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in records %}
+                    <tr>
+                        <td class="c-stt" data-label="STT"><span class="stt">{{ loop.index }}</span></td>
+                        <td data-label="Biển số"><strong>{{ r['plate_number'] }}</strong></td>
+                        <td data-label="Loại xe">{{ r['vehicle_type_name'] or '—' }}</td>
+                        <td data-label="Vị trí"><span class="pill">{{ r['slot_name'] or '—' }}</span></td>
+                        <td data-label="Giao dịch">
+                            {% if r['status'] == 'IN' %}<span class="badge badge-green">Đang gửi</span>
+                            {% else %}<span class="badge badge-red">Đã lấy xe</span>{% endif %}
+                        </td>
+                        <td class="num" data-label="Phí (VNĐ)">{% if r['fee'] %}<span class="money">{{ '{:,}'.format(r['fee']).replace(',', '.') }}</span>{% else %}—{% endif %}</td>
+                        <td data-label="Thời gian vào">{{ r['entry_time'].replace('T', ' ') if r['entry_time'] else '—' }}</td>
+                        <td data-label="Thời gian ra">{{ r['exit_time'].replace('T', ' ') if r['exit_time'] else '—' }}</td>
+                        <td data-label="Ghi chú">{{ r['note'] or '—' }}</td>
+                        <td class="c-act" data-label="Chi tiết">
+                            <button type="button" class="btn btn-edit detail-button"
+                                data-plate="{{ r['plate_number'] }}"
+                                data-type="{{ r['vehicle_type_name'] or '—' }}"
+                                data-slot="{{ r['slot_name'] or '—' }}"
+                                data-entry-time="{{ r['entry_time'] or '—' }}"
+                                data-exit-time="{{ r['exit_time'] or '—' }}"
+                                data-fee="{{ '{:,}'.format(r['fee']) ~ ' VNĐ' if r['fee'] else '—' }}"
+                                data-entry-img="{{ url_for('static', filename='in/' ~ r['entry_image']) if r['entry_image'] else '' }}"
+                                data-exit-img="{{ url_for('static', filename='out/' ~ r['exit_image']) if r['exit_image'] else '' }}">
+                                🔍 Chi tiết
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty-icon">📭</div>
+                <p>Không tìm thấy bản ghi phù hợp. Hãy thử thay đổi bộ lọc.</p>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+</div>
 
     <!-- Cửa sổ xem chi tiết: ảnh xe lúc vào / lúc ra -->
     <div class="modal-overlay" id="detail-modal" hidden>
@@ -157,6 +161,7 @@
     </div>
 
     <script>
+    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
     (function () {
         const modal = document.getElementById('detail-modal');
         const $ = id => document.getElementById(id);
