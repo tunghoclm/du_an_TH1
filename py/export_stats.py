@@ -82,6 +82,26 @@ def _fmt_time(value) -> str:
     return str(value).replace('T', ' ')
 
 
+def _fmt_date(value) -> str:
+    """ISO 'YYYY-MM-DD' -> 'DD/MM/YYYY' (nếu không parse được thì trả về nguyên bản)."""
+    if not value:
+        return ''
+    try:
+        return datetime.strptime(str(value)[:10], '%Y-%m-%d').strftime('%d/%m/%Y')
+    except ValueError:
+        return str(value)
+
+
+def _fmt_period(date_from, date_to) -> str:
+    """Khoảng ngày dạng 'DD/MM/YYYY → DD/MM/YYYY'; nếu cùng một ngày thì chỉ in một lần."""
+    start, end = _fmt_date(date_from), _fmt_date(date_to)
+    if not start:
+        return end
+    if not end or start == end:
+        return start
+    return f'{start} → {end}'
+
+
 def make_payload(stats, area_stats, records, range_label, date_from, date_to, generated_by):
     """Gom số liệu trang Thống kê + lượt xe trong kỳ thành cấu trúc dùng chung cho Excel/PDF.
 
@@ -263,7 +283,7 @@ def _write_title(ws, payload, ncols):
 
     ws.merge_cells(f'A2:{end}2')
     ws['A2'] = (f"Kỳ báo cáo: {payload['range_label']} "
-                f"({payload['date_from']} → {payload['date_to']})")
+                f"({_fmt_period(payload['date_from'], payload['date_to'])})")
     ws['A2'].font = Font(size=10.5, color=X_MUTED)
 
     ws.merge_cells(f'A3:{end}3')
@@ -469,7 +489,7 @@ def build_pdf(payload) -> BytesIO:
     story = [
         Paragraph(payload['title'], st_title),
         Paragraph(f"Kỳ báo cáo: {payload['range_label']} "
-                  f"({payload['date_from']} → {payload['date_to']})", st_sub),
+                  f"({_fmt_period(payload['date_from'], payload['date_to'])})", st_sub),
         Paragraph(f"Thời điểm xuất: {payload['generated_at']} "
                   f"· Người xuất: {payload['generated_by']}", st_sub),
         Spacer(1, 6),

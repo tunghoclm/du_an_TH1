@@ -53,7 +53,6 @@
                     <option value="yesterday" {{ 'selected' if range_key == 'yesterday' }}>Hôm qua</option>
                     <option value="7days" {{ 'selected' if range_key == '7days' }}>7 ngày qua</option>
                     <option value="30days" {{ 'selected' if range_key == '30days' }}>30 ngày qua</option>
-                    <option value="month" {{ 'selected' if range_key == 'month' }}>Tháng này</option>
                     <option value="custom" {{ 'selected' if range_key == 'custom' }}>Chọn ngày…</option>
                 </select>
                 <span class="custom-dates" id="custom-dates" {{ '' if range_key == 'custom' else 'hidden' }}>

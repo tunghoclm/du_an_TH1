@@ -634,8 +634,6 @@ def parse_stats_range(args):
         return today - timedelta(days=6), today, key, '7 ngày qua'
     if key == '30days':
         return today - timedelta(days=29), today, key, '30 ngày qua'
-    if key == 'month':
-        return today.replace(day=1), today, key, 'tháng này'
     if key == 'custom':
         try:
             start = date.fromisoformat(args.get('from', ''))

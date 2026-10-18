@@ -129,7 +129,7 @@ Với xe cũ chưa có loại xe (hoặc giá đã bị xóa), hệ thống dùn
 "Bãi đỗ đã hết chỗ trống" và không ghi nhận xe vào.
 
 **Xuất báo cáo (Excel / PDF):** tại trang `/statistics`, cạnh bộ lọc thời gian có 2 nút **⬇ Excel** và
-**⬇ PDF** — xuất đúng kỳ đang xem (hôm nay, hôm qua, 7/30 ngày, tháng này hoặc khoảng ngày tự chọn).
+**⬇ PDF** — xuất đúng kỳ đang xem (hôm nay, hôm qua, 7/30 ngày hoặc khoảng ngày tự chọn).
 Mỗi file gồm 3 phần: *Tổng quan* (doanh thu, lượt vào/ra), *Tình trạng theo khu vực* và *Chi tiết lượt xe* trong kỳ.
 - **Excel** (`.xlsx`, thư viện `openpyxl`): 3 sheet cùng tên với 3 phần trên, có dòng tiêu đề, bật lọc và cố định dòng đầu.
 - **PDF** (`.pdf`, thư viện `reportlab`): khổ A4 ngang, tự ngắt trang khi có nhiều lượt xe.
