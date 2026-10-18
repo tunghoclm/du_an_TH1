@@ -1,0 +1,25 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ---- Môi trường ảo & model tải về (các file setup sẽ tạo) ----
+cache/venv/
+cache/easyocr_models/
+
+# ---- Dữ liệu sinh ra khi chạy ----
+cache/parking.db
+cache/tmp/
+
+# ---- Ảnh nhận diện sinh ra khi chạy (giữ thư mục rỗng bằng .gitkeep) ----
+static/in/*
+static/out/*
+!static/in/.gitkeep
+!static/out/.gitkeep
+
+# ---- File tạm của hệ điều hành / trình soạn thảo ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.log

@@ -14,6 +14,9 @@ TMP_DIR = os.path.join(CACHE_DIR, "tmp")                # ảnh tạm giữa bư
 
 SQL_DIR = os.path.join(BASE_DIR, "SQL")                 # chứa các file .sql (đọc tất cả, theo thứ tự tên)
 
+# Font tiếng Việt đi kèm dự án (dùng khi xuất báo cáo PDF — chạy được trên mọi máy)
+FONTS_DIR = os.path.join(BASE_DIR, "assets", "fonts")
+
 TEMPLATES_HTML_DIR = os.path.join(BASE_DIR, "templates", "html")
 TEMPLATES_CSS_DIR = os.path.join(BASE_DIR, "templates", "css")
 

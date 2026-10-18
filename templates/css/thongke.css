@@ -9,6 +9,9 @@
 .custom-dates[hidden] { display: none; }
 .custom-dates .input { width: auto; }
 
+/* nút xuất báo cáo Excel / PDF (cạnh bộ lọc thời gian) */
+.export-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
 /* các thẻ số liệu nằm trong khung (không đổ bóng thêm) */
 .stats.flat { margin-bottom: 0; }
 .stats.flat .stat { box-shadow: none; border: 1px solid var(--line); align-items: flex-start; }

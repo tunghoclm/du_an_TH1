@@ -63,6 +63,10 @@
                     <button type="submit" class="btn btn-navy">Xem</button>
                 </span>
             </form>
+            <div class="export-group">
+                <a class="btn btn-soft" href="{{ url_for('statistics_export', fmt='xlsx') }}?{{ export_qs }}">⬇ Excel</a>
+                <a class="btn btn-soft" href="{{ url_for('statistics_export', fmt='pdf') }}?{{ export_qs }}">⬇ PDF</a>
+            </div>
         </div>
         <div class="panel-body">
             <div class="stats cols-4 flat">

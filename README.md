@@ -27,12 +27,15 @@ smart_parking/
 ├── py/                        # Các file Python
 │   ├── config.py              #   đường dẫn dùng chung
 │   ├── database.py            #   Thao tác SQLite
+│   ├── export_stats.py        #   Xuất báo cáo Thống kê ra Excel (.xlsx) / PDF
 │   ├── plate_recognition.py   #   OCR biển số (OpenCV + EasyOCR)
 │   ├── plate_api.py
 │   ├── plate_utils.py
 │   └── generate_sample_plate.py  # Tạo ảnh biển số mẫu để test
 ├── SQL/
 │   └── schema.sql             # Cấu trúc bảng dữ liệu
+├── assets/
+│   └── fonts/                 # font DejaVu Sans (kèm giấy phép) để xuất báo cáo PDF tiếng Việt
 ├── templates/
 │   ├── html/                  # Các file HTML (Flask templates)
 │   └── css/                   # Các file CSS (phục vụ qua route /css/<file>)
@@ -104,7 +107,7 @@ Tài khoản demo mặc định (đăng nhập tại `/login`):
 | `/gate`        | **Xe vào / ra (1 trang)** — chọn ảnh → *Nhận diện biển số* (xem ảnh có khung đánh dấu) → *Xác nhận*. Biển số chưa có trong bãi = xe **vào** (chọn loại xe, gán vị trí); biển số đang gửi = xe **ra** (tính phí, trả vị trí). Có ô ghi chú và cho sửa biển số nếu nhận diện sai |
 | `/entry`, `/exit` | Đường dẫn cũ, tự chuyển sang `/gate` |
 | `/history`     | Lịch sử toàn bộ lượt gửi xe, có bộ lọc theo biển số / trạng thái / ngày      |
-| `/statistics`  | Thống kê tổng lượt xe, doanh thu, tỉ lệ lấp đầy bãi đỗ                       |
+| `/statistics`  | Thống kê tổng lượt xe, doanh thu, tỉ lệ lấp đầy bãi đỗ; **xuất báo cáo Excel / PDF** |
 | `/users`       | Quản lý tài khoản (chỉ admin thấy) — thêm, khóa/mở khóa, xóa người dùng      |
 | `/pricing`     | Bảng giá xe — 3 bảng: **khung thời gian** (tự đặt giờ/ngày bắt đầu–kết thúc), **loại xe** (tự tạo tên), **giá theo loại xe + thời gian** (lượt/tháng). Ai cũng xem, admin/nhân viên thêm-sửa-xóa |
 | `/settings`    | Cài đặt cá nhân (ai đăng nhập cũng dùng được) — tự chọn chế độ gửi xe: **tự động** hoặc **tự chọn vị trí** |
@@ -124,6 +127,16 @@ Với xe cũ chưa có loại xe (hoặc giá đã bị xóa), hệ thống dùn
 
 **Nếu bãi đỗ hết chỗ** (60/60 vị trí đều occupied/maintenance), trang `/gate` sẽ báo lỗi
 "Bãi đỗ đã hết chỗ trống" và không ghi nhận xe vào.
+
+**Xuất báo cáo (Excel / PDF):** tại trang `/statistics`, cạnh bộ lọc thời gian có 2 nút **⬇ Excel** và
+**⬇ PDF** — xuất đúng kỳ đang xem (hôm nay, hôm qua, 7/30 ngày, tháng này hoặc khoảng ngày tự chọn).
+Mỗi file gồm 3 phần: *Tổng quan* (doanh thu, lượt vào/ra), *Tình trạng theo khu vực* và *Chi tiết lượt xe* trong kỳ.
+- **Excel** (`.xlsx`, thư viện `openpyxl`): 3 sheet cùng tên với 3 phần trên, có dòng tiêu đề, bật lọc và cố định dòng đầu.
+- **PDF** (`.pdf`, thư viện `reportlab`): khổ A4 ngang, tự ngắt trang khi có nhiều lượt xe.
+- Quyền xuất giống quyền xem trang Thống kê: chỉ **admin** và **nhân viên**.
+- PDF dùng font **DejaVu Sans đi kèm sẵn trong dự án** (`assets/fonts/`) nên hiển thị đúng tiếng Việt
+  trên mọi máy, **không cần cài thêm hay cấu hình gì**. Nếu muốn dùng font khác, đặt biến môi trường
+  `REPORT_FONT` (và `REPORT_FONT_BOLD`) trỏ tới file `.ttf`.
 
 ## 5. Test nhanh không cần ảnh xe thật
 

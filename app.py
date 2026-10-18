@@ -24,6 +24,7 @@ import uuid
 import re
 import functools
 from datetime import datetime, timedelta, date
+from urllib.parse import urlencode
 
 # Thư mục py/ chứa các module (config, database, plate_recognition, ...)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'py'))
@@ -32,7 +33,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'py'
 try:
     from flask import (
         Flask, render_template, request, redirect, url_for, flash, session,
-        send_from_directory, jsonify
+        send_from_directory, jsonify, send_file, abort
     )
     import cv2          # noqa: F401  (chỉ để kiểm tra đã cài opencv-python chưa)
     import easyocr       # noqa: F401  (chỉ để kiểm tra đã cài easyocr chưa)
@@ -50,6 +51,7 @@ except ImportError as e:
 
 from config import TMP_DIR, IN_DIR, OUT_DIR, TEMPLATES_HTML_DIR, TEMPLATES_CSS_DIR
 import database
+import export_stats
 from plate_recognition import recognize_plate_annotated, recognize_plate
 from plate_utils import normalize_plate, plate_key
 
@@ -581,10 +583,44 @@ def statistics():
     start, end, range_key, label = parse_stats_range(request.args)
     stats = database.get_statistics(start.isoformat(), end.isoformat())
     area_stats = database.area_stats()
+    export_qs = urlencode({'range': range_key,
+                           'from': start.isoformat(),
+                           'to': end.isoformat()})
     return render_template('statistics.html', stats=stats, area_stats=area_stats,
                            range_key=range_key, range_label=label,
                            date_from=start.isoformat(), date_to=end.isoformat(),
-                           today_iso=date.today().isoformat())
+                           today_iso=date.today().isoformat(),
+                           export_qs=export_qs)
+
+
+@app.route('/statistics/export/<fmt>')
+@login_required
+@staff_required
+def statistics_export(fmt):
+    """Xuất báo cáo trang Thống kê ra file Excel (.xlsx) hoặc PDF (.pdf) theo kỳ đang chọn."""
+    if fmt not in ('xlsx', 'pdf'):
+        abort(404)
+    start, end, _range_key, label = parse_stats_range(request.args)
+    payload = export_stats.make_payload(
+        stats=database.get_statistics(start.isoformat(), end.isoformat()),
+        area_stats=database.area_stats(),
+        records=database.get_records_between(start.isoformat(), end.isoformat()),
+        range_label=label,
+        date_from=start.isoformat(),
+        date_to=end.isoformat(),
+        generated_by=session.get('fullname') or session.get('username') or '—',
+    )
+    try:
+        buf, mimetype, ext = export_stats.build(fmt, payload)
+    except export_stats.ExportError as e:
+        flash(str(e), 'error')
+        return redirect(url_for('statistics', **request.args))
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=f'thong-ke_{start}_{end}.{ext}',
+        mimetype=mimetype,
+    )
 
 
 def parse_stats_range(args):

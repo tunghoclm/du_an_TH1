@@ -552,6 +552,23 @@ def delete_user_vehicle(vehicle_id: int):
 # THỐNG KÊ
 # ============================================================
 
+def get_records_between(start_date: str, end_date: str):
+    """Toàn bộ lượt xe có mặt (vào hoặc ra) trong khoảng ngày [start_date, end_date].
+    Cùng công thức với câu đếm period_records trong get_statistics() để số liệu khớp nhau."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT * FROM parking_records
+           WHERE substr(entry_time, 1, 10) BETWEEN ?1 AND ?2
+              OR (status = 'OUT' AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2)
+           ORDER BY entry_time DESC""",
+        (start_date, end_date)
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
 def get_statistics(start_date: str = None, end_date: str = None):
     """Thống kê doanh thu & lượt xe.
     - Tổng doanh thu: toàn thời gian = phí gửi xe (xe đã ra) + tiền vé tháng đã thu.
