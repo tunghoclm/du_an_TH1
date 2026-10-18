@@ -1,15 +1,32 @@
 # 🅿️ Demo: Bãi đỗ xe thông minh (Smart Parking System)
 
 Dự án demo hệ thống bãi đỗ xe thông minh, nhận diện biển số xe tự động bằng
-**OpenCV + EasyOCR** (deep learning, chính xác hơn Tesseract), quản lý xe
+**YOLOv8 (dò vùng biển số) + OpenCV + EasyOCR** (đọc ký tự), quản lý xe
 vào/ra và tính phí bằng **Python (Flask)**, lưu dữ liệu bằng **SQLite (SQL)**,
 giao diện web bằng **HTML/CSS**.
+
+> **Dò vùng biển số — YOLOv8 hay contour?** Hệ thống dùng **YOLOv8** (model
+> `cache/yolo/plate_yolov8n.pt`) để tìm vùng biển số trong ảnh, chính xác hơn
+> cách dò cạnh contour với ảnh thực tế (nhiều chi tiết, nhiều xe...). Nếu **chưa
+> có model YOLO** (chưa tải được, hoặc máy không cài `ultralytics`), hệ thống
+> **tự động quay về** cách dò contour cũ — không báo lỗi. Đặt biến môi trường
+> `PLATE_DETECTOR=contour` nếu muốn tắt hẳn YOLO để so sánh kết quả.
 
 > **Vì sao đổi từ Tesseract sang EasyOCR?** Tesseract-OCR được huấn luyện cho
 > văn bản in tài liệu, nên đọc biển số xe (font đặc thù, ảnh nghiêng, ánh sáng
 > không đều) thường ra kết quả sai/rối. EasyOCR dùng mô hình deep learning
 > (CRAFT + CRNN), chịu được ảnh thực tế tốt hơn nhiều — và vẫn hoàn toàn miễn
 > phí, mã nguồn mở, cài bằng `pip` mà không cần cài thêm phần mềm hệ thống.
+>
+> **Luồng nhận diện** (`py/plate_recognition.py`, `py/plate_yolo.py`, `py/plate_preprocess.py`):
+> ảnh → **YOLOv8** dò vùng biển số (bounding box) → OpenCV **cắt vùng biển** (nới rộng
+> thêm 15% để không cắt cụt ký tự ở mép) → **tăng tương phản (CLAHE khi cần)** →
+> chuẩn hoá kích thước → **EasyOCR** đọc chữ/số → ghép/đặt dấu `-`.
+>
+> **Deskew (xoay thẳng) mặc định TẮT.** Đã thử nghiệm: EasyOCR vốn đọc tốt biển bị
+> nghiêng, trong khi xoay/warp phối cảnh lại làm biến dạng biển xe máy 2 dòng và đọc
+> **sai** — nên pipeline chỉ **tăng tương phản**. Muốn bật lại deskew (để thử) thì đặt
+> biến môi trường `PLATE_DESKEW=1`.
 
 ## 1. Cấu trúc dự án
 
@@ -22,15 +39,19 @@ smart_parking/
 ├── cache/                     # File sinh ra sau khi chạy setup
 │   ├── venv/                  #   môi trường ảo Python
 │   ├── easyocr_models/        #   model EasyOCR đã tải
+│   ├── yolo/                  #   model YOLOv8 dò biển số (tùy chọn)
 │   ├── parking.db             #   database SQLite
 │   └── tmp/                   #   ảnh tạm giữa bước Nhận diện và Xác nhận
 ├── py/                        # Các file Python
 │   ├── config.py              #   đường dẫn dùng chung
 │   ├── database.py            #   Thao tác SQLite
 │   ├── export_stats.py        #   Xuất báo cáo Thống kê ra Excel (.xlsx) / PDF
-│   ├── plate_recognition.py   #   OCR biển số (OpenCV + EasyOCR)
+│   ├── plate_yolo.py          #   Dò vùng biển số bằng YOLOv8 (tùy chọn)
+│   ├── plate_preprocess.py    #   Tăng tương phản (+ xoay thẳng tùy chọn) vùng biển số
+│   ├── plate_recognition.py   #   OCR biển số (YOLOv8/OpenCV + EasyOCR)
 │   ├── plate_api.py
 │   ├── plate_utils.py
+│   ├── download_yolo_model.py #   Tải model YOLOv8 về cache/yolo/
 │   └── generate_sample_plate.py  # Tạo ảnh biển số mẫu để test
 ├── SQL/
 │   └── schema.sql             # Cấu trúc bảng dữ liệu
@@ -65,9 +86,11 @@ setup.bat
 
 Script sẽ:
 1. Tạo virtual environment (`cache/venv/`)
-2. Cài toàn bộ thư viện trong `requirements.txt`
+2. Cài toàn bộ thư viện trong `requirements.txt` (gồm `ultralytics`/YOLOv8 — khá nặng)
 3. **Tải sẵn model EasyOCR** (bước tốn thời gian nhất, cần Internet — chỉ tải 1 lần)
-4. Khởi tạo file database `cache/parking.db` từ các file `.sql` trong `SQL/`
+4. **Tải model YOLOv8** dò biển số về `cache/yolo/` (tùy chọn; lỗi mạng thì bỏ qua,
+   ứng dụng vẫn chạy bằng cách dò contour)
+5. Khởi tạo file database `cache/parking.db` từ các file `.sql` trong `SQL/`
 
 > Sau bước này, máy đã sẵn sàng chạy offline (trừ khi bạn xoá venv hoặc model).
 
@@ -151,23 +174,42 @@ lần nữa (xe ra) để thử luồng tính phí hoàn chỉnh.
 
 ## 6. Ghi chú kỹ thuật
 
-- **Phát hiện vùng biển số**: dùng Canny edge detection + tìm contour 4 cạnh
-  lớn nhất trong ảnh (cách làm phổ biến cho bài toán ANPR đơn giản, phù hợp demo).
-  Với ảnh thực tế phức tạp (nhiều xe, góc nghiêng, ánh sáng yếu...), nên nâng cấp
-  bằng mô hình deep learning (YOLO để detect + CRNN/OCR chuyên dụng) để tăng độ chính xác.
+- **Phát hiện vùng biển số**: ưu tiên **YOLOv8** (`py/plate_yolo.py`) — model 1 lớp
+  `license_plate` tải sẵn về `cache/yolo/plate_yolov8n.pt`, dò vùng biển số chính xác
+  hơn với ảnh thực tế. Nếu có nhiều biển, chọn khung tin cậy cao nhất. Khi YOLO không
+  đọc ra kết quả đủ tốt (hoặc chưa có model), hệ thống **quay về** cách cũ: Canny edge
+  detection + tìm contour 4 cạnh lớn nhất. Hai cách chạy song song và **chọn kết quả
+  tốt hơn**: đúng cấu trúc biển số VN trước (biển 2 dòng bắt buộc đúng dạng xe máy
+  `29-L131332`), rồi biển đủ dài, rồi độ tin cậy cao hơn. Tắt YOLO bằng
+  `PLATE_DETECTOR=contour`.
+  Có thể đổi model khác qua biến môi trường `PLATE_YOLO_MODEL` (đường dẫn file `.pt`),
+  chỉnh ngưỡng tin cậy bằng `PLATE_YOLO_CONF` (mặc định 0.25).
+- **Cắt vùng biển + tiền xử lý** (`py/plate_recognition.py`, `py/plate_preprocess.py`):
+  khung biển do YOLO/contour trả về thường khoét sát biển nên dễ **cắt cụt ký tự ở mép**
+  (nhất là số `0` đứng đầu dòng dưới của biển xe máy 2 dòng) — vì vậy ảnh được **nới rộng
+  thêm 15%** mỗi phía trước khi đọc. Sau đó **khử nhiễu nhẹ** và chỉ **tăng tương phản
+  CLAHE** khi ảnh thiếu tương phản (tránh kéo tương phản mạnh làm OCR đọc nhầm 1 ký tự).
+  Ảnh còn được **chuẩn hoá kích thước** (cạnh dài ≤ 1000px, phóng to tối đa x2) — vừa tăng
+  độ chính xác vừa tránh EasyOCR chạy rất chậm trên ảnh lớn.
+  > **Deskew (xoay thẳng) mặc định tắt** (`plate_preprocess.straighten`): thử nghiệm cho
+  > thấy xoay/warp phối cảnh làm biến dạng biển 2 dòng và đọc sai, trong khi EasyOCR vốn
+  > đọc tốt biển nghiêng. Bật lại bằng `PLATE_DESKEW=1` nếu muốn thử.
 - **Làm sạch text OCR**: loại bỏ ký tự không phải chữ/số, chuyển về chữ hoa.
 - **OCR engine**: dùng EasyOCR với `allowlist` giới hạn chỉ chữ cái/số thường
   gặp trên biển số, giúp giảm nhiễu so với để engine đoán tự do. Có cơ chế
-  fallback: nếu đọc vùng cắt cho kết quả ngắn/độ tin cậy thấp, sẽ thử lại
-  trên toàn ảnh gốc.
+  fallback: nếu vùng cắt đọc ra **chưa đúng cấu trúc biển số** (đọc nhầm ký tự,
+  quá ngắn hoặc độ tin cậy thấp) thì đọc thêm **trên toàn ảnh gốc**, rồi chọn
+  ứng viên **đúng cấu trúc** VN nhất — nhờ đó vùng cắt đọc sai
+  (vd `29LT-31332`) không còn thắng kết quả đúng đọc được từ toàn ảnh
+  (`29-L131332`) chỉ vì điểm tin cậy cao hơn.
 - **Nếu vẫn cần chính xác hơn nữa** (dùng cho ảnh biển số Việt Nam thực tế,
-  nhiều xe/góc chụp khó), có thể cân nhắc nâng cấp thêm:
-  - **PaddleOCR** — độ chính xác rất cao, nhiều dự án ANPR Việt Nam dùng,
-    nhưng cài đặt nặng hơn EasyOCR.
-  - **YOLOv8 (huấn luyện riêng để detect vùng biển số)** kết hợp EasyOCR/PaddleOCR
-    để đọc ký tự — đây là hướng làm chuẩn cho hệ thống ANPR thực tế, thay vì
-    dùng contour-detection đơn giản như trong demo này.
-  - Bộ dữ liệu biển số Việt Nam có sẵn trên Roboflow/Kaggle nếu muốn tự huấn luyện.
+  nhiều xe/góc chụp khó):
+  - **Huấn luyện lại YOLOv8 trên biển số Việt Nam**: bộ dữ liệu có sẵn trên
+    Roboflow/Kaggle; model tự train thay cho `cache/yolo/plate_yolov8n.pt` sẽ
+    dò vùng biển số VN chính xác hơn nhiều (model mặc định được train trên biển số
+    nước ngoài nên đôi khi bỏ sót biển nhỏ/ảnh cận cảnh).
+  - **PaddleOCR** thay EasyOCR để đọc ký tự — độ chính xác rất cao, nhiều dự án
+    ANPR Việt Nam dùng, nhưng cài đặt nặng hơn.
 - **Đối chiếu xe ra**: so khớp chính xác chuỗi biển số đã làm sạch. Trong thực
   tế nên thêm thuật toán so khớp gần đúng (fuzzy matching) để xử lý sai số OCR.
 

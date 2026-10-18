@@ -72,6 +72,24 @@ def normalize_plate(text) -> str:
     return f'{series}-{digits}'
 
 
+# Cấu trúc biển số hợp lệ theo quy tắc VN — dùng để CHẤM ĐIỂM kết quả OCR (xem plate_recognition)
+_RE_MOTORBIKE = re.compile(r'\d{2}-[A-Z]\d{5,6}$')     # xe máy: 29-L131332 (L1+31332), 61-T32222 (T3+2222)
+_RE_CAR = re.compile(r'\d{2}[A-Z]{1,2}-\d{4,5}$')      # ô tô:   51F-12345, 29AA-12345, 30A-1234
+
+
+def is_valid_plate_format(text: str, rows: int = 1) -> bool:
+    """Chuỗi đã chuẩn hóa có ĐÚNG cấu trúc biển số Việt Nam không?
+    rows = số DÒNG mà OCR đọc được trên ảnh:
+     - rows >= 2 nghĩa là biển in 2 dòng -> chỉ xe máy mới có (dòng trên: mã tỉnh + series
+       '1 chữ + 1 số'), nên BẮT BUỘC đúng dạng '29-L131332'. Dạng ô tô '29LT-31332' bị loại:
+       series 2 chữ ('LT') không tồn tại trên biển xe máy -> đó là OCR đọc nhầm số thành chữ.
+     - rows == 1: chấp nhận cả 2 dạng (xe máy in một dòng hoặc ô tô)."""
+    s = (text or '').strip()
+    if _RE_MOTORBIKE.fullmatch(s):
+        return True
+    return rows < 2 and bool(_RE_CAR.fullmatch(s))
+
+
 # Chữ hay bị OCR nhầm với số (dùng ở vị trí CHẮC CHẮN là số: mã tỉnh và dãy số cuối)
 _TO_DIGIT = str.maketrans({'O': '0', 'Q': '0', 'D': '0', 'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'B': '8', 'G': '6'})
 

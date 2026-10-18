@@ -7,6 +7,7 @@ __pycache__/
 # ---- Môi trường ảo & model tải về (các file setup sẽ tạo) ----
 cache/venv/
 cache/easyocr_models/
+cache/yolo/
 
 # ---- Dữ liệu sinh ra khi chạy ----
 cache/parking.db

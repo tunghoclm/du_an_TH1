@@ -17,20 +17,40 @@ API lỗi / không đọc được thì tự quay về quy trình EasyOCR bên d
 
 Quy trình:
  1. Đọc ảnh -> chuyển xám -> khử nhiễu (bilateral filter)
- 2. Dò cạnh (Canny) -> tìm contour hình chữ nhật (khung biển số)
- 3. Cắt vùng biển số -> phóng to
+ 2. DÒ VÙNG BIỂN SỐ, ưu tiên theo thứ tự:
+      a. YOLOv8 (nếu có model — xem plate_yolo.py): chính xác hơn với ảnh thực tế
+      b. Dò cạnh (Canny) -> tìm contour hình chữ nhật: cách dự phòng, không cần model
+    Kết quả nào cho biển số rõ hơn (đủ dài, tin cậy cao) sẽ được chọn.
+ 3. Cắt vùng biển số -> NỚI RỘNG một chút (PAD_FRAC) để không cắt cụt ký tự ở mép -> TĂNG
+    TƯƠNG PHẢN (plate_preprocess.py) -> chuẩn hoá kích thước (MAX_OCR_SIDE)
  4. Đưa vào EasyOCR để đọc ký tự (giới hạn bảng ký tự = chữ+số biển số)
  5. Gom các ô chữ thành từng dòng, ghép lại và đặt dấu '-' đúng chỗ (vd 61T3-2222, 51F-12345)
- 6. Nếu đọc vùng cắt thất bại -> fallback đọc lại trên toàn ảnh gốc
+ 6. Nếu vùng cắt đọc ra CHƯA đúng cấu trúc biển số (đọc nhầm ký tự / cắt sai vùng)
+    -> đọc thêm TOÀN ẢNH gốc rồi chọn ứng viên ĐÚNG cấu trúc biển số VN nhất
+
+Bật/tắt YOLO bằng biến môi trường PLATE_DETECTOR:
+     auto (mặc định) / yolo   -> dùng YOLO nếu có model, tự quay về contour khi cần
+     contour                  -> tắt YOLO, chỉ dùng cách dò contour cũ
+
+Bật xoay thẳng (deskew) bằng PLATE_DESKEW=1 (mặc định tắt): EasyOCR vốn đọc tốt biển nghiêng,
+mà xoay/warp lại dễ làm biến dạng biển 2 dòng (xe máy) nên mặc định không dùng.
 """
 
+import os
 import re
 import cv2
 import easyocr
+from collections import namedtuple
 
 import plate_api
+import plate_yolo
+import plate_preprocess
 from config import EASYOCR_DIR
-from plate_utils import plate_key, assemble_plate, normalize_plate, fix_ocr_plate
+from plate_utils import plate_key, assemble_plate, normalize_plate, fix_ocr_plate, is_valid_plate_format
+
+# Một ứng viên kết quả OCR: text (chuỗi biển đã định dạng), conf (điểm tin cậy 0-1),
+# img (ảnh vùng biển đã qua xử lý), rect (x,y,w,h vùng biển trên ảnh gốc), rows (các dòng OCR đọc được)
+_Cand = namedtuple('_Cand', 'text conf img rect rows')
 
 # Khởi tạo Reader MỘT LẦN DUY NHẤT ở mức module (nạp model rất tốn thời gian,
 # nếu khởi tạo lại mỗi lần gọi hàm sẽ rất chậm).
@@ -43,6 +63,19 @@ _reader = easyocr.Reader(['en'], gpu=False, model_storage_directory=EASYOCR_DIR,
 # thành một chữ/số khác (thường là '1', 'I', 'T') làm sai biển số. Sau khi đọc, các dấu sẽ được
 # chuẩn hóa lại bằng plate_utils (đặt dấu '-' đúng chỗ giữa series và số).
 PLATE_ALLOWLIST = 'ABCDEFGHKLMNPRSTUVXYZ0123456789-.'
+
+# Cạnh dài tối đa (px) của ảnh đưa vào EasyOCR. EasyOCR rất chậm trên ảnh lớn, mà biển số to
+# hơn mức này cũng không giúp đọc chính xác hơn -> chuẩn hoá kích thước cho vừa nhanh vừa đúng.
+MAX_OCR_SIDE = 1000
+
+# Nới rộng vùng biển số (theo tỉ lệ cạnh) trước khi đọc: khung YOLO/contour thường khoét SÁT
+# biển nên dễ cắt cụt ký tự ở mép (nhất là số 0 đứng đầu dòng dưới của biển xe máy 2 dòng).
+# Nới ra một chút giữ được đủ ký tự -> đọc chính xác hơn nhiều.
+PAD_FRAC = 0.15
+
+# Xoay thẳng (deskew) mặc định TẮT: EasyOCR vốn đọc tốt biển nghiêng, mà xoay/warp phối cảnh
+# lại làm biến dạng biển 2 dòng khiến đọc sai. Bật lại bằng biến môi trường PLATE_DESKEW=1.
+DESKEW = os.environ.get('PLATE_DESKEW', '0').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 def preprocess_image(image_path: str):
@@ -111,13 +144,15 @@ def group_rows(results):
 
 
 def ocr_read(image, allowlist=PLATE_ALLOWLIST):
-    """Chạy EasyOCR trên 1 ảnh. Trả về (biển số đã định dạng có dấu '-', điểm tin cậy trung bình 0-1)."""
+    """Chạy EasyOCR trên 1 ảnh.
+    Trả về (biển_số_đã_định_dạng, điểm_tin_cậy_trung_bình_0-1, danh_sách_dòng_ocr)."""
     results = _reader.readtext(image, detail=1, allowlist=allowlist)
     if not results:
-        return '', 0.0
+        return '', 0.0, []
     confidences = [r[2] for r in results]
     avg_conf = sum(confidences) / len(confidences)
-    return assemble_plate(group_rows(results)), avg_conf
+    rows = group_rows(results)
+    return assemble_plate(rows), avg_conf, rows
 
 
 def _contour_rect(contour):
@@ -150,6 +185,103 @@ def _recognize_api(img, image_path: str):
     return plate, crop, rect
 
 
+def _expand_rect(rect, frac, shape):
+    """Nới rộng rect=(x,y,w,h) ra mỗi phía `frac` lần cạnh (kẹp trong ảnh), trả về rect mới."""
+    x, y, w, h = rect
+    H, W = shape[:2]
+    x0 = max(0, int(x - frac * w))
+    y0 = max(0, int(y - frac * h))
+    x1 = min(W, int(x + w + frac * w))
+    y1 = min(H, int(y + h + frac * h))
+    return x0, y0, x1 - x0, y1 - y0
+
+
+def _read_region(img, rect):
+    """Cắt vùng biển số (rect=(x,y,w,h), hoặc None = đọc cả ảnh) -> NỚI RỘNG một chút để không
+    cắt cụt ký tự -> tăng tương phản -> chuẩn hoá kích thước -> EasyOCR.
+    Trả về (text, conf, ảnh_vùng_đã_xử_lý, danh_sách_dòng_ocr)."""
+    if rect is not None:
+        x, y, w, h = _expand_rect(rect, PAD_FRAC, img.shape)
+        crop = img[y:y + h, x:x + w]
+        if crop.size == 0:
+            crop = img
+        # Biển đã cắt ra -> tăng tương phản cho dễ đọc. Deskew (xoay thẳng) mặc định tắt vì
+        # thử nghiệm cho thấy nó làm biến dạng biển 2 dòng; bật bằng PLATE_DESKEW=1.
+        crop = plate_preprocess.prepare(crop) if DESKEW else plate_preprocess.enhance(crop)
+    else:
+        crop = img   # toàn ảnh gốc: giữ nguyên (không biết đâu là biển để xử lý)
+    # Đưa vùng cắt về kích thước thuận lợi cho EasyOCR: biển nhỏ thì phóng to (tối đa x2),
+    # biển/ảnh lớn thì thu nhỏ bớt — vừa tăng độ chính xác vừa tránh OCR chậm trên ảnh lớn.
+    long_side = max(crop.shape[:2])
+    scale = min(2.0, MAX_OCR_SIDE / long_side)
+    big = cv2.resize(crop, None, fx=scale, fy=scale,
+                     interpolation=cv2.INTER_CUBIC if scale >= 1 else cv2.INTER_AREA)
+    text, conf, rows = ocr_read(big)
+    return text, conf, big, rows
+
+
+def _score(text, confidence, rows=()):
+    """Điểm xếp hạng kết quả OCR (max là tốt nhất), theo thứ tự ưu tiên:
+    1) ĐÚNG cấu trúc biển số VN với số dòng OCR đã đọc (xem plate_utils.is_valid_plate_format)
+    2) đủ dài (>=5 ký tự)  3) dài hơn  4) tin cậy cao hơn.
+    Cấu trúc phải đứng TRƯỚC độ tin cậy: vùng cắt dễ bị EasyOCR đọc nhầm (vd '29-L1' thành
+    '29-LT') nhưng điểm tin cậy vẫn cao, trong khi đọc TOÀN ẢNH lại ra đúng biển với điểm thấp hơn."""
+    n = len(plate_key(text))
+    return (is_valid_plate_format(text, len(rows)), n >= 5, n, confidence)
+
+
+def _use_yolo() -> bool:
+    """YOLO có được phép dùng không (theo cấu hình) và có model hay không."""
+    if os.environ.get('PLATE_DETECTOR', 'auto').strip().lower() == 'contour':
+        return False
+    return plate_yolo.is_available()
+
+
+def _detect_and_read(img, edged):
+    """Dò vùng biển số (YOLO trước, contour sau) + đọc ký tự, chọn kết quả tốt nhất.
+    Nếu cách dò đang cho biển số CHƯA đúng cấu trúc (đọc nhầm ký tự / cắt sai vùng) thì thử tiếp
+    cách dò khác, kể cả đọc TOÀN ẢNH gốc, rồi mới chấm điểm so sánh.
+    Trả về (text, ảnh_vùng_biển, rect)."""
+    cands = []
+
+    def _read(rect):
+        text, conf, big, rows = _read_region(img, rect)
+        return _Cand(text, conf, big, rect, rows)
+
+    def _enough(c):
+        # Đọc được biển đủ dài, tin cậy và ĐÚNG cấu trúc -> không cần thử cách khác (tiết kiệm thời gian)
+        return (c.conf >= 0.4 and len(plate_key(c.text)) >= 5
+                and is_valid_plate_format(c.text, len(c.rows)))
+
+    # 1) YOLOv8 (nếu có model — chính xác hơn với ảnh thực tế)
+    if _use_yolo():
+        box = plate_yolo.detect_best(img)
+        if box:
+            c = _read(box)
+            if _enough(c):
+                return c.text, c.img, c.rect
+            cands.append(c)
+
+    # 2) Dò contour (Canny) — cách cũ, luôn thử để so sánh
+    contour = find_plate_contour(edged)
+    c = _read(_contour_rect(contour))
+    if _enough(c):
+        return c.text, c.img, c.rect
+    cands.append(c)
+
+    # 3) Vùng cắt vẫn chưa đúng cấu trúc -> đọc thêm TOÀN ẢNH gốc để có thêm ứng viên so sánh
+    #    (bỏ qua nếu contour không tìm được vùng riêng thì `_read(None)` bên trên đã đọc cả ảnh rồi)
+    if c.rect is not None:
+        cands.append(_read(None))
+
+    best = max(cands, key=lambda c: _score(c.text, c.conf, c.rows))
+    # Nếu ứng viên thắng là ảnh toàn cảnh (không có rect) thì vẫn giữ khung vùng biển đã dò được
+    # để hiển thị cho người dùng thấy biển số nằm ở đâu.
+    rect = best.rect if best.rect is not None else next(
+        (cc.rect for cc in cands if cc.rect is not None), None)
+    return best.text, best.img, rect
+
+
 def _recognize(image_path: str):
     """Chạy toàn bộ quy trình, trả về (biển số, ảnh vùng biển số, rect (x,y,w,h) hoặc None, ảnh gốc)."""
     img, gray, edged = preprocess_image(image_path)
@@ -159,22 +291,8 @@ def _recognize(image_path: str):
         plate, crop, rect = via_api
         return plate, crop, rect, img
 
-    contour = find_plate_contour(edged)
-    plate_img = crop_plate(img, contour)
-
-    # Phóng to giúp EasyOCR đọc chính xác hơn với ảnh có độ phân giải thấp
-    plate_img_big = cv2.resize(plate_img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-
-    plate_text, confidence = ocr_read(plate_img_big)
-
-    # Nếu kết quả quá ngắn hoặc độ tin cậy thấp (khả năng cắt sai vùng),
-    # thử đọc lại trên toàn bộ ảnh gốc rồi chọn kết quả tốt hơn.
-    if len(plate_key(plate_text)) < 5 or confidence < 0.4:
-        fallback_text, confidence_full = ocr_read(img)
-        if len(plate_key(fallback_text)) > len(plate_key(plate_text)) or confidence_full > confidence:
-            plate_text = fallback_text
-
-    return plate_text, plate_img_big, _contour_rect(contour), img
+    plate_text, plate_img_big, rect = _detect_and_read(img, edged)
+    return plate_text, plate_img_big, rect, img
 
 
 def recognize_plate(image_path: str):

@@ -38,7 +38,11 @@ easyocr.Reader(['en'], gpu=False, model_storage_directory=EASYOCR_DIR, user_netw
 print('Đã tải xong model EasyOCR.')
 "
 
-# 5. Khởi tạo database (cache/parking.db) từ SQL/schema.sql
+# 5. Tải model YOLOv8 phát hiện vùng biển số (tùy chọn — thiếu vẫn chạy nhờ contour)
+echo ">> Đang tải model YOLOv8 nhận diện vùng biển số (tùy chọn, cần Internet)..."
+python py/download_yolo_model.py || true
+
+# 6. Khởi tạo database (cache/parking.db) từ SQL/schema.sql
 echo ">> Đang khởi tạo database..."
 python -c "
 import sys; sys.path.insert(0, 'py')
