@@ -8,7 +8,10 @@ Cấu hình bằng biến môi trường (đặt trước khi chạy app.py):
     PLATE_API_URL      (tùy chọn)  mặc định https://api.platerecognizer.com/v1/plate-reader/
                        (đổi sang địa chỉ máy chủ on-premise nếu bạn tự cài Snapshot SDK)
     PLATE_API_REGIONS  (tùy chọn)  mã quốc gia, cách nhau bằng dấu phẩy, mặc định 'vn'
-    PLATE_API_TIMEOUT  (tùy chọn)  số giây chờ tối đa, mặc định 15
+    PLATE_API_TIMEOUT  (tùy chọn)  số giây chờ tối đa, mặc định 5
+    PLATE_API_MODE     fallback (mặc định) / first / off
+    PLATE_API_CAMERA   1 để cho phép gửi khung camera khi OCR cục bộ chưa tốt
+    PLATE_API_MIN_SCORE ngưỡng chấp nhận kết quả, mặc định 0.8
 
     Windows (cmd):   set PLATE_API_TOKEN=xxxxxxxx
     macOS / Linux:   export PLATE_API_TOKEN=xxxxxxxx
@@ -18,6 +21,8 @@ Kết quả trả về được đưa qua plate_utils để đặt dấu '-' đ�
 
 import json
 import os
+import threading
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -26,10 +31,29 @@ import cv2
 
 DEFAULT_URL = 'https://api.platerecognizer.com/v1/plate-reader/'
 MAX_SIDE = 1600          # thu nhỏ ảnh quá lớn trước khi gửi (nhanh hơn, tránh lỗi 413)
+_state_lock = threading.Lock()
+_retry_after = 0.0
+_last_attempt = float('-inf')
+
+
+class ApiUnavailable(RuntimeError):
+    """A failed/rate-limited API is cooling down; local OCR remains available."""
+
+
+def _number(name, default, low, high):
+    try:
+        return max(low, min(high, float(os.environ.get(name, default))))
+    except (ValueError, TypeError):
+        return default
+
+
+def min_score():
+    return _number('PLATE_API_MIN_SCORE', 0.8, 0.0, 1.0)
 
 
 def is_enabled() -> bool:
-    return bool(os.environ.get('PLATE_API_TOKEN', '').strip())
+    return (os.environ.get('PLATE_API_MODE', 'fallback').lower() != 'off'
+            and bool(os.environ.get('PLATE_API_TOKEN', '').strip()))
 
 
 def _encode_image(image_path: str):
@@ -49,15 +73,22 @@ def _encode_image(image_path: str):
     return buf.tobytes(), scale
 
 
-def recognize(image_path: str):
+def recognize(image_path: str, *, min_interval=0):
     """Gửi ảnh lên API. Trả về (biển số thô viết hoa, (x, y, w, h) trên ẢNH GỐC hoặc None, độ tin cậy 0-1).
     Biển số thô chưa có dấu '-' chuẩn: nơi gọi phải đưa qua plate_utils.normalize_plate.
     Ném exception nếu lỗi mạng / token sai / hết hạn mức (nơi gọi sẽ chuyển sang EasyOCR)."""
     token = os.environ['PLATE_API_TOKEN'].strip()
     url = os.environ.get('PLATE_API_URL', DEFAULT_URL).strip() or DEFAULT_URL
     regions = [r.strip() for r in os.environ.get('PLATE_API_REGIONS', 'vn').split(',') if r.strip()]
-    timeout = float(os.environ.get('PLATE_API_TIMEOUT', '15'))
+    timeout = _number('PLATE_API_TIMEOUT', 5, 0.5, 30)
 
+    # Skip encoding/upload preparation too while the service is cooling down.
+    global _retry_after, _last_attempt
+    with _state_lock:
+        now = time.monotonic()
+        if now < _retry_after or now - _last_attempt < min_interval:
+            raise ApiUnavailable('API cooldown')
+        _last_attempt = now
     jpg, scale = _encode_image(image_path)
 
     # Tự dựng form multipart/form-data bằng thư viện chuẩn (không cần cài thêm 'requests')
@@ -79,7 +110,13 @@ def recognize(image_path: str):
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             payload = json.loads(resp.read().decode('utf-8'))
     except urllib.error.HTTPError as e:
+        with _state_lock:
+            _retry_after = time.monotonic() + (300 if e.code in (401, 403) else 60)
         raise RuntimeError(f'API trả về lỗi HTTP {e.code}') from e
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        with _state_lock:
+            _retry_after = time.monotonic() + 60
+        raise
     results = payload.get('results') or []
     if not results:
         return '', None, 0.0

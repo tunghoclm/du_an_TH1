@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS parking_records (
     entry_image   TEXT,                       -- Tên file ảnh chụp lúc vào
     exit_image    TEXT,                       -- Tên file ảnh chụp lúc ra
     fee           INTEGER,                    -- Phí gửi xe (VNĐ)
-    status        TEXT NOT NULL DEFAULT 'IN'  -- 'IN' = đang gửi, 'OUT' = đã lấy xe
+    status        TEXT NOT NULL DEFAULT 'IN'  -- IN = đang gửi, OUT = đã lấy xe, DELETED = đã xóa khỏi ô
 );
 
 CREATE INDEX IF NOT EXISTS idx_plate_status ON parking_records (plate_number, status);
@@ -24,7 +24,14 @@ CREATE TABLE IF NOT EXISTS parking_slots (
     slot_name     TEXT PRIMARY KEY,           -- vd: A01, B12, C05
     area          TEXT NOT NULL,              -- A, B, C
     status        TEXT NOT NULL DEFAULT 'available', -- available | occupied | maintenance
-    plate_number  TEXT                        -- biển số đang đỗ tại vị trí này (nếu occupied)
+    plate_number  TEXT,                       -- biển số đang đỗ tại vị trí này (nếu occupied)
+    maintenance_reason TEXT                  -- lý do bảo trì hiển thị trên ô
+);
+
+CREATE TABLE IF NOT EXISTS parking_areas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    vehicle_type_id INTEGER                  -- NULL = mọi loại xe; một ID = chỉ loại xe đó
 );
 
 -- Bảng cài đặt hệ thống (key-value)

@@ -1,6 +1,10 @@
 /* history.css — riêng cho trang Lịch sử (phần chung nằm trong theme.css) */
 
 td strong { color: var(--navy); }
+.history-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.badge-deleted { background: #eceff4; color: #5c667a; }
+.history-time-fields { display: flex; gap: 14px; flex-wrap: wrap; flex: 1 1 300px; }
+@media (max-width: 1000px) { .history-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ===== Cửa sổ xem chi tiết: ảnh xe lúc vào / lúc ra ===== */
 .modal-overlay {
@@ -63,6 +67,7 @@ td strong { color: var(--navy); }
     border-radius: 10px;
 }
 .modal-fee { margin-top: 14px; font-size: 15px; }
+.modal-note { margin-top: 12px; font-size: 14px; color: var(--muted); overflow-wrap: anywhere; line-height: 1.6; white-space: pre-wrap; }
 
 @media (max-width: 700px) {
     .modal-photos { grid-template-columns: 1fr; }

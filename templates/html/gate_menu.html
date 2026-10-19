@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xe vào / ra - Smart Parking</title>
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='gate.css') }}">
+</head>
+<body>
+<main class="wrap gate-menu">
+    <header class="topbar">
+        <div class="topbar-left">
+            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại trang chủ">←</a>
+            <div><h1>🚗 Xe vào / ra</h1><p>Chọn chiều xử lý, sau đó nhận diện biển số từ ảnh hoặc camera.</p></div>
+        </div>
+        <div class="user-chip">
+            <span class="avatar">{{ (current_user_fullname or '?')[:1]|upper }}</span>
+            <span><strong>{{ current_user_fullname }}</strong><small>{{ role_label }}</small></span>
+        </div>
+    </header>
+    <div class="gate-choices">
+        <a class="gate-choice gate-choice-entry" href="{{ url_for('entry') }}">
+            <span class="gate-choice-icon" aria-hidden="true">📥</span>
+            <h2>Xe vào</h2>
+            <p>Nhận diện biển số, chọn loại xe và vị trí đỗ để ghi nhận xe vào bãi.</p>
+            <span class="gate-choice-action">Tiếp nhận xe vào →</span>
+        </a>
+        <a class="gate-choice gate-choice-exit" href="{{ url_for('exit_gate') }}">
+            <span class="gate-choice-icon" aria-hidden="true">📤</span>
+            <h2>Xe ra</h2>
+            <p>Nhận diện biển số, kiểm tra lượt gửi và tính phí trước khi xác nhận xe ra.</p>
+            <span class="gate-choice-action">Làm thủ tục xe ra →</span>
+        </a>
+    </div>
+</main>
+</body>
+</html>

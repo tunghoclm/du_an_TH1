@@ -15,9 +15,11 @@ import os
 from datetime import datetime, timedelta
 
 import glob
+from contextlib import contextmanager
 from config import DB_PATH, SQL_DIR
+from plate_utils import plate_key
 
-AREAS = ['A', 'B', 'C']
+DEFAULT_AREAS = ['A', 'B', 'C']
 SLOTS_PER_AREA = 20
 
 
@@ -41,7 +43,7 @@ def init_db():
 
     # Kiểm tra các bảng bắt buộc đã được tạo chưa
     existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    required = {'parking_records', 'parking_slots', 'users', 'settings',
+    required = {'parking_records', 'parking_slots', 'parking_areas', 'users', 'settings',
                 'price_periods', 'vehicle_types', 'prices', 'user_vehicles'}
     missing = required - existing
     if missing:
@@ -52,6 +54,7 @@ def init_db():
 
     # Migration nhẹ: nếu bảng parking_records cũ (từ bản trước) chưa có cột slot_name
     for col_sql in ("ALTER TABLE parking_records ADD COLUMN slot_name TEXT",
+                    "ALTER TABLE parking_slots ADD COLUMN maintenance_reason TEXT",
                     "ALTER TABLE parking_records ADD COLUMN vehicle_type_id INTEGER",
                     "ALTER TABLE parking_records ADD COLUMN vehicle_type_name TEXT",
                     "ALTER TABLE parking_records ADD COLUMN note TEXT",
@@ -67,6 +70,8 @@ def init_db():
 
     conn.commit()
 
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_record_slot_status ON parking_records(slot_name,status)')
+
     # Dữ liệu cũ: chưa có nhật ký thu tiền vé tháng -> lập từ các vé tháng đã đăng ký
     cur0 = conn.cursor()
     cur0.execute("SELECT COUNT(*) AS c FROM ticket_payments")
@@ -80,16 +85,19 @@ def init_db():
     # Seed 60 vị trí đỗ (A01..A20, B01..B20, C01..C20) nếu bảng đang trống
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) AS c FROM parking_slots")
-    if cur.fetchone()['c'] == 0:
+    initialized = conn.execute("SELECT 1 FROM settings WHERE key='parking_layout_initialized'").fetchone()
+    if cur.fetchone()['c'] == 0 and conn.execute('SELECT COUNT(*) FROM parking_areas').fetchone()[0] == 0 and not initialized:
         rows = []
-        for area in AREAS:
+        for area in DEFAULT_AREAS:
             for i in range(1, SLOTS_PER_AREA + 1):
                 rows.append((f"{area}{i:02d}", area))
         conn.executemany(
             "INSERT INTO parking_slots (slot_name, area, status) VALUES (?, ?, 'available')",
             rows
         )
-        conn.commit()
+    conn.execute('INSERT OR IGNORE INTO parking_areas (name) SELECT DISTINCT area FROM parking_slots')
+    conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES ('parking_layout_initialized','1')")
+    conn.commit()
 
     # Seed tài khoản mặc định nếu bảng users đang trống
     cur.execute("SELECT COUNT(*) AS c FROM users")
@@ -141,9 +149,10 @@ def find_open_record(plate_number: str):
     cur = conn.cursor()
     cur.execute(
         """SELECT * FROM parking_records
-           WHERE plate_number = ? AND status = 'IN'
+           WHERE REPLACE(REPLACE(REPLACE(UPPER(plate_number), '-', ''), '.', ''), ' ', '') = ?
+             AND status = 'IN'
            ORDER BY entry_time DESC LIMIT 1""",
-        (plate_number,)
+        (plate_key(plate_number),)
     )
     row = cur.fetchone()
     conn.close()
@@ -152,9 +161,16 @@ def find_open_record(plate_number: str):
 
 def close_record(record_id: int, exit_image: str, fee: int, note: str = None):
     """Đóng lượt gửi xe. Nếu có ghi chú lúc ra thì nối thêm vào ghi chú lúc vào (nếu có)."""
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
+    with _parking_transaction() as conn:
+        record = conn.execute('SELECT * FROM parking_records WHERE id=?', (record_id,)).fetchone()
+        if record is None or record['status'] != 'IN':
+            raise ValueError('Lượt gửi đã được xử lý hoặc đã xóa. Hãy tải lại trang.')
+        if record['slot_name']:
+            slot = conn.execute('SELECT * FROM parking_slots WHERE slot_name=?', (record['slot_name'],)).fetchone()
+            if slot is None:
+                raise ValueError('Không tìm thấy ô đang giữ xe.')
+            _slot_record(conn, slot, record_id)
+        conn.execute(
         """UPDATE parking_records
            SET exit_time = ?, exit_image = ?, fee = ?, status = 'OUT',
                note = CASE
@@ -165,9 +181,10 @@ def close_record(record_id: int, exit_image: str, fee: int, note: str = None):
            WHERE id = ?""",
         (datetime.now().isoformat(timespec='seconds'), exit_image, fee,
          note or None, note, note, record_id)
-    )
-    conn.commit()
-    conn.close()
+        )
+        if record['slot_name']:
+            conn.execute("UPDATE parking_slots SET status='available',plate_number=NULL WHERE slot_name=?", (record['slot_name'],))
+        return record['slot_name']
 
 
 def get_open_records():
@@ -201,119 +218,292 @@ def count_open() -> int:
 # SƠ ĐỒ VỊ TRÍ ĐỖ XE
 # ============================================================
 
-def get_available_slots_by_area():
-    """Trả về dict {area: [slot_row, ...]} chỉ gồm các vị trí đang trống — dùng cho trang xe vào chọn ô."""
+
+@contextmanager
+def _parking_transaction():
     conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT * FROM parking_slots WHERE status = 'available' ORDER BY area, slot_name"
-    )
-    rows = cur.fetchall()
-    conn.close()
-    result = {a: [] for a in AREAS}
-    for row in rows:
-        result.setdefault(row['area'], []).append(row)
+    try:
+        conn.execute('BEGIN IMMEDIATE')
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+def get_areas():
+    return _fetch(
+        "SELECT a.*, v.name AS vehicle_type_name FROM parking_areas a "
+        "LEFT JOIN vehicle_types v ON v.id = a.vehicle_type_id ORDER BY a.id")
+
+
+def save_area(area_id, name, vehicle_type_id=None, slot_count=0):
+    name = (name or '').strip()
+    if not name or len(name) > 60 or any(ord(c) < 32 for c in name):
+        raise ValueError('Tên khu phải có từ 1 đến 60 ký tự.')
+    with _parking_transaction() as conn:
+        if vehicle_type_id is not None and not conn.execute('SELECT id FROM vehicle_types WHERE id=?', (vehicle_type_id,)).fetchone():
+            raise ValueError('Loại xe không hợp lệ.')
+        if conn.execute('SELECT id FROM parking_areas WHERE name=? COLLATE NOCASE AND id != ?',
+                        (name, area_id or 0)).fetchone():
+            raise ValueError('Tên khu đã tồn tại.')
+        if area_id:
+            area = conn.execute('SELECT * FROM parking_areas WHERE id=?', (area_id,)).fetchone()
+            if area is None:
+                raise ValueError('Không tìm thấy khu.')
+            if vehicle_type_id is not None:
+                occupied = conn.execute("SELECT * FROM parking_slots WHERE area=? AND status='occupied'", (area['name'],)).fetchall()
+                for slot in occupied:
+                    record = _slot_record(conn, slot)
+                    if record['vehicle_type_id'] != vehicle_type_id:
+                        raise ValueError('Khu còn xe thuộc loại khác. Hãy xử lý các xe đó trước khi đổi phân khu.')
+            conn.execute('UPDATE parking_areas SET name=?, vehicle_type_id=? WHERE id=?', (name, vehicle_type_id, area_id))
+            conn.execute('UPDATE parking_slots SET area=? WHERE area=?', (name, area['name']))
+            return area_id
+        if not isinstance(slot_count, int) or not 0 <= slot_count <= 1000:
+            raise ValueError('Số lượng ô phải là số nguyên từ 1 đến 1000.')
+        new_id = conn.execute('INSERT INTO parking_areas (name,vehicle_type_id) VALUES (?,?)', (name, vehicle_type_id)).lastrowid
+        import re
+        import unicodedata
+        ascii_name = unicodedata.normalize('NFKD', name.replace('đ', 'D').replace('Đ', 'D')).encode('ascii', 'ignore').decode().upper()
+        prefix = re.sub(r'[^A-Z0-9_-]', '', ascii_name)[:28].strip('_-') or f'K{new_id}'
+        names = [f'{prefix}{i:02d}' for i in range(1, slot_count + 1)]
+        existing = {r[0] for r in conn.execute('SELECT slot_name FROM parking_slots')}
+        duplicate = next((n for n in names if n in existing), None)
+        if duplicate:
+            raise ValueError(f'Tên ô {duplicate} đã tồn tại. Hãy chọn tên khu khác.')
+        conn.executemany("INSERT INTO parking_slots(slot_name,area,status) VALUES (?,?,'available')", [(n, name) for n in names])
+        return new_id
+
+
+def delete_area(area_id):
+    with _parking_transaction() as conn:
+        area = conn.execute('SELECT * FROM parking_areas WHERE id=?', (area_id,)).fetchone()
+        if area is None:
+            raise ValueError('Không tìm thấy khu.')
+        occupied = conn.execute("SELECT 1 FROM parking_slots s WHERE s.area=? AND (s.status='occupied' OR "
+                                "EXISTS (SELECT 1 FROM parking_records r WHERE r.slot_name=s.slot_name AND r.status='IN'))",
+                                (area['name'],)).fetchone()
+        if occupied:
+            raise ValueError('Khu còn xe đang gửi. Hãy xử lý xe trước khi xóa khu.')
+        conn.execute('DELETE FROM parking_slots WHERE area=?', (area['name'],))
+        conn.execute('DELETE FROM parking_areas WHERE id=?', (area_id,))
+
+
+def rename_slot(slot_name, new_name, expected_status, expected_record_id, actor):
+    import re
+    new_name = (new_name or '').strip().upper()
+    if not re.fullmatch(r'[A-Z0-9][A-Z0-9_-]{0,31}', new_name):
+        raise ValueError('Tên ô gồm tối đa 32 chữ cái không dấu, số, dấu - hoặc _.')
+    with _parking_transaction() as conn:
+        slot = conn.execute('SELECT * FROM parking_slots WHERE slot_name=?', (slot_name,)).fetchone()
+        if slot is None or slot['status'] != expected_status:
+            raise ValueError('Trạng thái ô đã thay đổi. Hãy tải lại trang.')
+        record = None
+        if slot['status'] == 'occupied':
+            if not expected_record_id:
+                raise ValueError('Thiếu thông tin xe. Hãy tải lại trang.')
+            record = _slot_record(conn, slot, expected_record_id)
+        elif conn.execute("SELECT 1 FROM parking_records WHERE slot_name=? AND status='IN'", (slot_name,)).fetchone():
+            raise ValueError('Thông tin xe và ô chưa khớp. Hãy kiểm tra dữ liệu.')
+        if new_name == slot_name:
+            return
+        if conn.execute('SELECT 1 FROM parking_slots WHERE slot_name=?', (new_name,)).fetchone():
+            raise ValueError('Tên ô đỗ đã tồn tại.')
+        conn.execute('UPDATE parking_slots SET slot_name=? WHERE slot_name=?', (new_name, slot_name))
+        if record:
+            note = _operation_note(record['note'], actor, f'Đã đổi tên ô {slot_name} thành {new_name}')
+            conn.execute('UPDATE parking_records SET slot_name=?,note=? WHERE id=?', (new_name, note, record['id']))
+
+
+def add_slot(area_id, slot_name):
+    import re
+    slot_name = (slot_name or '').strip().upper()
+    if not re.fullmatch(r'[A-Z0-9][A-Z0-9_-]{0,31}', slot_name):
+        raise ValueError('Tên ô gồm tối đa 32 chữ cái không dấu, số, dấu - hoặc _.')
+    with _parking_transaction() as conn:
+        area = conn.execute('SELECT * FROM parking_areas WHERE id=?', (area_id,)).fetchone()
+        if area is None:
+            raise ValueError('Không tìm thấy khu.')
+        if conn.execute('SELECT 1 FROM parking_slots WHERE slot_name=?', (slot_name,)).fetchone():
+            raise ValueError('Tên ô đỗ đã tồn tại.')
+        conn.execute("INSERT INTO parking_slots(slot_name,area,status) VALUES (?,?,'available')", (slot_name, area['name']))
+    return slot_name
+
+
+def delete_slot(slot_name):
+    with _parking_transaction() as conn:
+        slot = conn.execute('SELECT * FROM parking_slots WHERE slot_name=?', (slot_name,)).fetchone()
+        if slot is None:
+            raise ValueError('Không tìm thấy ô đỗ.')
+        if slot['status'] == 'occupied' or conn.execute("SELECT 1 FROM parking_records WHERE slot_name=? AND status='IN'", (slot_name,)).fetchone():
+            raise ValueError('Ô còn xe đang gửi, không thể xóa ô.')
+        conn.execute('DELETE FROM parking_slots WHERE slot_name=?', (slot_name,))
+
+
+def get_available_slots_by_area(vehicle_type_id=None):
+    areas = get_areas()
+    result = {a['name']: [] for a in areas}
+    for row in get_all_slots():
+        if row['status'] == 'available' and row['record_id'] is None and (vehicle_type_id is None or
+                row['allowed_vehicle_type_id'] is None or row['allowed_vehicle_type_id'] == vehicle_type_id):
+            result.setdefault(row['area'], []).append(row)
     return result
 
 
-def is_slot_available(slot_name: str) -> bool:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT status FROM parking_slots WHERE slot_name = ?", (slot_name,))
-    row = cur.fetchone()
-    conn.close()
-    return row is not None and row['status'] == 'available'
+def is_slot_available(slot_name, vehicle_type_id=None):
+    rows = [s for s in get_all_slots() if s['slot_name'] == slot_name]
+    return bool(rows and rows[0]['status'] == 'available' and rows[0]['record_id'] is None and
+                (vehicle_type_id is None or rows[0]['allowed_vehicle_type_id'] is None or
+                 rows[0]['allowed_vehicle_type_id'] == vehicle_type_id))
 
 
 def get_all_slots():
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM parking_slots ORDER BY area, slot_name")
-    rows = cur.fetchall()
-    conn.close()
-    return rows
+    return _fetch(
+        "SELECT s.*, a.id AS area_id, a.vehicle_type_id AS allowed_vehicle_type_id, "
+        "(SELECT r.id FROM parking_records r WHERE r.slot_name=s.slot_name AND r.status='IN' "
+        "ORDER BY r.id DESC LIMIT 1) AS record_id "
+        "FROM parking_slots s JOIN parking_areas a ON a.name=s.area ORDER BY a.id,s.slot_name")
 
 
-def find_free_slot(area: str = None):
-    """Tìm 1 vị trí trống (ưu tiên theo khu nếu chỉ định). Trả về slot_name hoặc None."""
-    conn = get_connection()
-    cur = conn.cursor()
-    if area:
-        cur.execute(
-            "SELECT slot_name FROM parking_slots WHERE status = 'available' AND area = ? ORDER BY slot_name LIMIT 1",
-            (area,)
-        )
-    else:
-        cur.execute(
-            "SELECT slot_name FROM parking_slots WHERE status = 'available' ORDER BY area, slot_name LIMIT 1"
-        )
-    row = cur.fetchone()
-    conn.close()
-    return row['slot_name'] if row else None
+def find_free_slot(area=None, vehicle_type_id=None):
+    for area_name, slots in get_available_slots_by_area(vehicle_type_id).items():
+        if slots and (area is None or area_name == area):
+            return slots[0]['slot_name']
+    return None
 
 
-def occupy_slot(slot_name: str, plate_number: str):
-    conn = get_connection()
-    conn.execute(
-        "UPDATE parking_slots SET status = 'occupied', plate_number = ? WHERE slot_name = ?",
-        (plate_number, slot_name)
-    )
-    conn.commit()
-    conn.close()
+def occupy_slot(slot_name, plate_number):
+    with _parking_transaction() as conn:
+        changed = conn.execute(
+            "UPDATE parking_slots SET status='occupied',plate_number=?,maintenance_reason=NULL "
+            "WHERE slot_name=? AND status='available'", (plate_number, slot_name))
+        if changed.rowcount != 1:
+            raise ValueError('Ô đỗ không còn trống.')
 
 
-def free_slot(slot_name: str):
-    if not slot_name:
-        return
-    conn = get_connection()
-    conn.execute(
-        "UPDATE parking_slots SET status = 'available', plate_number = NULL WHERE slot_name = ?",
-        (slot_name,)
-    )
-    conn.commit()
-    conn.close()
+def free_slot(slot_name):
+    if slot_name:
+        _exec("UPDATE parking_slots SET status='available',plate_number=NULL,maintenance_reason=NULL WHERE slot_name=?", (slot_name,))
 
 
-def set_slot_maintenance(slot_name: str, in_maintenance: bool):
-    conn = get_connection()
-    new_status = 'maintenance' if in_maintenance else 'available'
-    conn.execute(
-        "UPDATE parking_slots SET status = ?, plate_number = NULL WHERE slot_name = ?",
-        (new_status, slot_name)
-    )
-    conn.commit()
-    conn.close()
+def set_slot_maintenance(slot_name, in_maintenance, reason='', expected_status=None):
+    reason = (reason or '').strip()
+    if in_maintenance and (not reason or len(reason) > 500):
+        raise ValueError('Vui lòng nhập lý do bảo trì, tối đa 500 ký tự.')
+    with _parking_transaction() as conn:
+        slot = conn.execute('SELECT * FROM parking_slots WHERE slot_name=?', (slot_name,)).fetchone()
+        if slot is None:
+            raise ValueError('Không tìm thấy ô đỗ.')
+        if slot['status'] == 'occupied' or conn.execute("SELECT 1 FROM parking_records WHERE slot_name=? AND status='IN'", (slot_name,)).fetchone():
+            raise ValueError('Ô đang có xe, không thể bảo trì.')
+        if expected_status and slot['status'] != expected_status:
+            raise ValueError('Trạng thái ô đã thay đổi. Hãy tải lại trang.')
+        conn.execute('UPDATE parking_slots SET status=?,plate_number=NULL,maintenance_reason=? WHERE slot_name=?',
+                     ('maintenance' if in_maintenance else 'available', reason if in_maintenance else None, slot_name))
+
+
+def _slot_record(conn, slot, expected_record_id=None):
+    rows = conn.execute("SELECT * FROM parking_records WHERE slot_name=? AND status='IN'", (slot['slot_name'],)).fetchall()
+    if (slot['status'] != 'occupied' or len(rows) != 1 or
+            plate_key(rows[0]['plate_number']) != plate_key(slot['plate_number'])):
+        raise ValueError('Thông tin xe trong ô đã thay đổi hoặc không khớp lịch sử. Hãy tải lại trang.')
+    record = rows[0]
+    if expected_record_id is not None and record['id'] != expected_record_id:
+        raise ValueError('Xe trong ô đã thay đổi. Hãy tải lại trang trước khi thao tác.')
+    return record
+
+
+def _operation_note(previous, actor, text):
+    stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    item = f'[{stamp}] {actor}: {text}'
+    return (previous + ' | ' if previous else '') + item
+
+
+def move_parked_vehicle(source_name, target_name, expected_record_id, actor):
+    with _parking_transaction() as conn:
+        source = conn.execute('SELECT * FROM parking_slots WHERE slot_name=?', (source_name,)).fetchone()
+        target = conn.execute('SELECT * FROM parking_slots WHERE slot_name=?', (target_name,)).fetchone()
+        if source is None or target is None:
+            raise ValueError('Không tìm thấy ô nguồn hoặc ô đích.')
+        record = _slot_record(conn, source, expected_record_id)
+        if source_name == target_name or source['area'] != target['area']:
+            raise ValueError('Chỉ được chuyển sang ô khác trong cùng khu.')
+        if target['status'] != 'available' or conn.execute("SELECT 1 FROM parking_records WHERE slot_name=? AND status='IN'", (target_name,)).fetchone():
+            raise ValueError('Ô đích không còn trống.')
+        allowed = conn.execute('SELECT vehicle_type_id FROM parking_areas WHERE name=?', (target['area'],)).fetchone()
+        if allowed['vehicle_type_id'] is not None and allowed['vehicle_type_id'] != record['vehicle_type_id']:
+            raise ValueError('Loại xe không phù hợp với khu.')
+        note = _operation_note(record['note'], actor,
+                               f"Đã di chuyển xe từ ô {source_name} sang ô {target_name} (khu {source['area']})")
+        conn.execute("UPDATE parking_slots SET status='available',plate_number=NULL WHERE slot_name=?", (source_name,))
+        conn.execute("UPDATE parking_slots SET status='occupied',plate_number=?,maintenance_reason=NULL WHERE slot_name=?",
+                     (record['plate_number'], target_name))
+        conn.execute('UPDATE parking_records SET slot_name=?,note=? WHERE id=?', (target_name, note, record['id']))
+
+
+def remove_parked_vehicle(slot_name, expected_record_id, reason, actor):
+    reason = (reason or '').strip()
+    if not reason or len(reason) > 500:
+        raise ValueError('Vui lòng nhập lý do xóa xe, tối đa 500 ký tự.')
+    with _parking_transaction() as conn:
+        slot = conn.execute('SELECT * FROM parking_slots WHERE slot_name=?', (slot_name,)).fetchone()
+        if slot is None:
+            raise ValueError('Không tìm thấy ô đỗ.')
+        record = _slot_record(conn, slot, expected_record_id)
+        note = _operation_note(record['note'], actor, f'Đã xóa xe khỏi ô {slot_name} — Lý do: {reason}')
+        conn.execute("UPDATE parking_records SET status='DELETED',exit_time=?,fee=NULL,note=? WHERE id=?",
+                     (datetime.now().isoformat(timespec='seconds'), note, record['id']))
+        conn.execute("UPDATE parking_slots SET status='available',plate_number=NULL,maintenance_reason=NULL WHERE slot_name=?", (slot_name,))
+
+
+def create_parking_entry(plate, image, slot_name, vehicle_type_id, vehicle_type_name, note=None):
+    with _parking_transaction() as conn:
+        if not conn.execute('SELECT id FROM vehicle_types WHERE id=?', (vehicle_type_id,)).fetchone():
+            raise ValueError('Loại xe đã bị thay đổi hoặc xóa. Hãy tải lại trang.')
+        duplicate = conn.execute(
+            "SELECT 1 FROM parking_records WHERE status='IN' AND "
+            "REPLACE(REPLACE(REPLACE(UPPER(plate_number),'-',''),'.',''),' ','')=?", (plate_key(plate),)).fetchone()
+        if duplicate:
+            raise ValueError('Xe này đang gửi trong bãi.')
+        sql = ("SELECT s.* FROM parking_slots s JOIN parking_areas a ON a.name=s.area "
+               "WHERE s.status='available' AND (a.vehicle_type_id IS NULL OR a.vehicle_type_id=?) "
+               "AND NOT EXISTS (SELECT 1 FROM parking_records r WHERE r.slot_name=s.slot_name AND r.status='IN') ")
+        params = [vehicle_type_id]
+        if slot_name:
+            sql += 'AND s.slot_name=? '
+            params.append(slot_name)
+        slot = conn.execute(sql + 'ORDER BY a.id,s.slot_name LIMIT 1', params).fetchone()
+        if slot is None:
+            raise ValueError('Không còn ô trống phù hợp với loại xe đã chọn.')
+        cur = conn.execute(
+            "INSERT INTO parking_records(plate_number,entry_time,entry_image,slot_name,vehicle_type_id,vehicle_type_name,note,status) "
+            "VALUES (?,?,?,?,?,?,?,'IN')",
+            (plate, datetime.now().isoformat(timespec='seconds'), image, slot['slot_name'], vehicle_type_id, vehicle_type_name, note or None))
+        conn.execute("UPDATE parking_slots SET status='occupied',plate_number=?,maintenance_reason=NULL WHERE slot_name=?",
+                     (plate, slot['slot_name']))
+        return cur.lastrowid, slot['slot_name']
 
 
 def slot_counts():
-    """Trả về dict {available, occupied, maintenance, total}."""
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT status, COUNT(*) AS c FROM parking_slots GROUP BY status")
     counts = {'available': 0, 'occupied': 0, 'maintenance': 0}
-    for row in cur.fetchall():
+    for row in _fetch('SELECT status,COUNT(*) AS c FROM parking_slots GROUP BY status'):
         counts[row['status']] = row['c']
     counts['total'] = sum(counts.values())
-    conn.close()
     return counts
 
 
 def area_stats():
-    """Trả về dict {area: {total, occupied, available, percent}} cho trang thống kê."""
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT area, status, COUNT(*) AS c FROM parking_slots GROUP BY area, status"
-    )
-    result = {a: {'total': 0, 'occupied': 0, 'available': 0, 'maintenance': 0} for a in AREAS}
-    for row in cur.fetchall():
-        area = row['area']
-        result.setdefault(area, {'total': 0, 'occupied': 0, 'available': 0, 'maintenance': 0})
-        result[area][row['status']] = row['c']
-        result[area]['total'] += row['c']
-    for area, data in result.items():
-        data['percent'] = round((data['occupied'] / data['total'] * 100) if data['total'] else 0, 1)
-    conn.close()
+    result = {}
+    for row in _fetch('SELECT a.name AS area,s.status,COUNT(s.slot_name) AS c FROM parking_areas a '
+                      'LEFT JOIN parking_slots s ON s.area=a.name GROUP BY a.id,s.status ORDER BY a.id'):
+        data = result.setdefault(row['area'], dict(total=0, occupied=0, available=0, maintenance=0))
+        if row['status']:
+            data[row['status']] = row['c']
+            data['total'] += row['c']
+    for data in result.values():
+        data['percent'] = round(data['occupied'] / data['total'] * 100, 1) if data['total'] else 0
     return result
 
 
@@ -560,7 +750,7 @@ def get_records_between(start_date: str, end_date: str):
     cur.execute(
         """SELECT * FROM parking_records
            WHERE substr(entry_time, 1, 10) BETWEEN ?1 AND ?2
-              OR (status = 'OUT' AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2)
+              OR (status IN ('OUT','DELETED') AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2)
            ORDER BY entry_time DESC""",
         (start_date, end_date)
     )
@@ -599,7 +789,7 @@ def get_statistics(start_date: str = None, end_date: str = None):
     # Tổng lượt xe: lượt có xe vào HOẶC xe ra trong kỳ (mỗi lượt đếm 1 lần)
     period_records = one(
         "SELECT COUNT(*) FROM parking_records WHERE substr(entry_time, 1, 10) BETWEEN ?1 AND ?2 "
-        "OR (status = 'OUT' AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2)", (start_date, end_date))
+        "OR (status IN ('OUT','DELETED') AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2)", (start_date, end_date))
     period_parking_revenue = one(
         "SELECT COALESCE(SUM(fee), 0) FROM parking_records WHERE status = 'OUT' "
         "AND substr(exit_time, 1, 10) BETWEEN ? AND ?", (start_date, end_date))
@@ -813,7 +1003,7 @@ def find_month_price(vehicle_type_id, on_date):
     return {'amount': rows[0]['amount'], 'period_name': rows[0]['period_name']}
 
 
-# ----- Tra giá theo loại xe + thời điểm xe vào -----
+# ----- Tra giá theo loại xe + khung thời gian -----
 
 def _hhmm_to_minutes(value: str) -> int:
     h, m = value.split(':')
@@ -827,6 +1017,18 @@ def _minute_in_range(minute: int, start: int, end: int) -> bool:
     return minute >= start or minute <= end
 
 
+def get_turn_prices(vehicle_type_id):
+    """All time-window turn prices in the same priority order used at entry."""
+    if not vehicle_type_id:
+        return []
+    return _fetch(
+        "SELECT t.id AS period_id, p.amount, t.name AS period_name, "
+        "t.start_value AS start, t.end_value AS end "
+        "FROM prices p JOIN price_periods t ON t.id = p.period_id "
+        "WHERE p.vehicle_type_id = ? AND p.ticket_type = 'turn' AND t.kind = 'time' "
+        "ORDER BY t.id", (vehicle_type_id,))
+
+
 def find_turn_price(vehicle_type_id: int, when: datetime):
     """Tìm giá vé LƯỢT của loại xe tại thời điểm `when` (so khớp theo phút, bỏ qua giây).
     Trả về dict {amount, period_name, start, end} hoặc None nếu chưa có giá phù hợp.
@@ -834,13 +1036,9 @@ def find_turn_price(vehicle_type_id: int, when: datetime):
     if not vehicle_type_id:
         return None
     minute = when.hour * 60 + when.minute
-    rows = _fetch(
-        "SELECT p.amount, t.name AS period_name, t.start_value, t.end_value "
-        "FROM prices p JOIN price_periods t ON t.id = p.period_id "
-        "WHERE p.vehicle_type_id = ? AND p.ticket_type = 'turn' AND t.kind = 'time' "
-        "ORDER BY t.id", (vehicle_type_id,))
+    rows = get_turn_prices(vehicle_type_id)
     for r in rows:
-        if _minute_in_range(minute, _hhmm_to_minutes(r['start_value']), _hhmm_to_minutes(r['end_value'])):
+        if _minute_in_range(minute, _hhmm_to_minutes(r['start']), _hhmm_to_minutes(r['end'])):
             return {'amount': r['amount'], 'period_name': r['period_name'],
-                    'start': r['start_value'], 'end': r['end_value']}
+                    'start': r['start'], 'end': r['end']}
     return None

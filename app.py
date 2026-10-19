@@ -6,10 +6,8 @@ Chức năng:
   /login, /logout   - Đăng nhập / đăng xuất
   /                  - Menu chính (trang chủ)
   /parking           - Sơ đồ bãi đỗ theo khu A/B/C (dữ liệu thật từ DB)
-  /gate              - Xe vào / ra (gộp 1 trang): chọn ảnh -> "Nhận diện biển số" -> xem ảnh đánh dấu
-                       -> "Xác nhận". Biển số chưa có trong bãi = xe VÀO (chọn loại xe + vị trí),
-                       biển số đang gửi = xe RA (tính phí theo bảng giá, trả vị trí)
-  /entry, /exit      - Đường dẫn cũ, tự chuyển sang /gate
+  /gate              - Chọn chức năng Xe vào hoặc Xe ra
+  /entry, /exit      - Nhận diện từ ảnh / camera -> kiểm tra -> xác nhận đúng chiều vào / ra
   /history           - Lịch sử toàn bộ lượt gửi xe (có bộ lọc)
   /statistics        - Thống kê tổng quan
   /pricing           - Bảng giá xe: khung thời gian, loại xe, giá (ai cũng xem, admin/nhân viên chỉnh sửa)
@@ -23,6 +21,8 @@ import calendar
 import uuid
 import re
 import functools
+import threading
+import time
 from datetime import datetime, timedelta, date
 from urllib.parse import urlencode
 
@@ -52,8 +52,9 @@ except ImportError as e:
 from config import TMP_DIR, IN_DIR, OUT_DIR, TEMPLATES_HTML_DIR, TEMPLATES_CSS_DIR
 import database
 import export_stats
-from plate_recognition import recognize_plate_annotated, recognize_plate
-from plate_utils import normalize_plate, plate_key
+from parking_fees import calculate_turn_fee
+from plate_recognition import recognize_plate_annotated, recognize_plate, recognize_plate_live
+from plate_utils import normalize_plate, plate_key, is_valid_plate_format
 
 TMP_FOLDER = TMP_DIR   # ảnh tạm (cache/tmp) giữa bước "Nhận diện" và bước "Xác nhận"
 UPLOAD_DIRS = {'in': IN_DIR, 'out': OUT_DIR}   # static/in: xe vào, static/out: xe ra
@@ -113,8 +114,8 @@ def find_similar_registered(plate):
 
 def calc_fee(record, exit_time: datetime):
     """Tính phí khi xe ra.
-    - Xe có loại xe và còn giá LƯỢT phù hợp với khung giờ lúc xe VÀO -> tính theo bảng giá (1 lượt).
-    - Ngược lại (xe cũ chưa có loại xe, hoặc giá đã bị xóa) -> dùng đơn giá dự phòng theo giờ.
+    - Cộng giá LƯỢT của từng khung giờ xe đi qua, mỗi lần xuất hiện của khung tính một lần.
+    - Khoảng chưa có giá (hoặc xe cũ chưa có loại xe) dùng đơn giá dự phòng theo giờ.
     Trả về (phí, thời gian gửi, mô tả cách tính)."""
     entry_time = datetime.fromisoformat(record['entry_time'])
     duration = timedelta(seconds=int((exit_time - entry_time).total_seconds()))
@@ -125,18 +126,11 @@ def calc_fee(record, exit_time: datetime):
         return 0, duration, (f"Vé tháng của tài khoản {reg['username']} "
                              f"(còn hạn đến {reg['expires_on']}) · miễn phí")
 
-    price = database.find_turn_price(record['vehicle_type_id'], entry_time)
-    if price is not None:
-        note = (f"{record['vehicle_type_name'] or 'Loại xe'} · khung {price['period_name']} "
-                f"({price['start']}–{price['end']}) · 1 lượt")
-        return price['amount'], duration, note
-
-    total_seconds = duration.total_seconds()
-    hours = int(total_seconds // 3600)
-    if total_seconds % 3600 > 0:
-        hours += 1
-    hours = max(1, hours)
-    return hours * FEE_PER_HOUR, duration, f"đơn giá dự phòng {FEE_PER_HOUR:,}đ/giờ × {hours} giờ"
+    prices = database.get_turn_prices(record['vehicle_type_id'])
+    fee, note = calculate_turn_fee(prices, entry_time, exit_time, FEE_PER_HOUR)
+    if prices:
+        note = f"{record['vehicle_type_name'] or 'Loại xe'} · {note}"
+    return fee, duration, note
 
 
 def login_required(view_func):
@@ -249,39 +243,144 @@ def index():
 @login_required
 def parking():
     slots = database.get_all_slots()
-    slots_by_area = {'A': [], 'B': [], 'C': []}
+    areas = database.get_areas()
+    slots_by_area = {a['name']: [] for a in areas}
     for slot in slots:
         slots_by_area.setdefault(slot['area'], []).append(slot)
     counts = database.slot_counts()
-    return render_template('parking.html', slots_by_area=slots_by_area, counts=counts)
+    return render_template('parking.html', slots_by_area=slots_by_area, counts=counts,
+                           areas=areas, vehicle_types=database.get_vehicle_types())
 
 
 @app.route('/parking/<slot_name>/maintenance', methods=['POST'])
 @login_required
 @staff_required
 def slot_maintenance(slot_name):
-    slots = {s['slot_name']: s for s in database.get_all_slots()}
-    slot = slots.get(slot_name)
-    if slot is None:
-        flash('Không tìm thấy vị trí đỗ.', 'error')
-    elif slot['status'] == 'occupied':
-        flash(f'Không thể đưa {slot_name} vào bảo trì vì đang có xe đỗ.', 'error')
-    else:
-        going_to_maintenance = slot['status'] != 'maintenance'
-        database.set_slot_maintenance(slot_name, going_to_maintenance)
-        if going_to_maintenance:
-            flash(f'{slot_name} đã được đưa vào bảo trì.', 'success')
-        else:
-            flash(f'{slot_name} đã kết thúc bảo trì.', 'success')
+    action = request.form.get('maintenance_action')
+    try:
+        if action not in ('start', 'update', 'finish'):
+            raise ValueError('Thao tác bảo trì không hợp lệ.')
+        database.set_slot_maintenance(slot_name, action != 'finish', request.form.get('reason', ''),
+                                      expected_status='available' if action == 'start' else 'maintenance')
+        flash(f'Đã cập nhật trạng thái bảo trì ô {slot_name}.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/areas/save', methods=['POST'])
+@login_required
+@admin_required
+def parking_area_save():
+    try:
+        raw_id = request.form.get('area_id', '')
+        area_id = _to_int(raw_id)
+        raw_type = request.form.get('vehicle_type_id', '')
+        type_id = _to_int(raw_type)
+        if (raw_id and not area_id) or (raw_type and raw_type != 'all' and not type_id):
+            raise ValueError('Khu hoặc loại xe không hợp lệ.')
+        if area_id and not raw_type:
+            raise ValueError('Hãy chọn loại xe được phép đỗ hoặc Tất cả loại xe.')
+        slot_count = _to_int(request.form.get('slot_count')) if area_id is None else 0
+        if area_id is None and (slot_count is None or not 1 <= slot_count <= 1000):
+            raise ValueError('Vui lòng nhập số lượng ô đỗ từ 1 đến 1000.')
+        database.save_area(area_id, request.form.get('name'), type_id, slot_count=slot_count)
+        flash('Đã lưu khu đỗ xe.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/areas/<int:area_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def parking_area_delete(area_id):
+    try:
+        database.delete_area(area_id)
+        flash('Đã xóa khu và các ô đỗ trong khu.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/<slot_name>/save', methods=['POST'])
+@login_required
+@admin_required
+def parking_slot_save(slot_name):
+    try:
+        database.rename_slot(slot_name, request.form.get('slot_name'), request.form.get('expected_status'),
+                              _to_int(request.form.get('record_id')), session.get('username') or str(session['user_id']))
+        flash('Đã sửa tên ô đỗ.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/slots/add', methods=['POST'])
+@login_required
+@admin_required
+def parking_slot_add():
+    try:
+        database.add_slot(_to_int(request.form.get('area_id')), request.form.get('slot_name'))
+        flash('Đã thêm ô đỗ.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/<slot_name>/delete', methods=['POST'])
+@login_required
+@admin_required
+def parking_slot_delete(slot_name):
+    try:
+        database.delete_slot(slot_name)
+        flash(f'Đã xóa ô đỗ {slot_name}.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/<slot_name>/move', methods=['POST'])
+@login_required
+@staff_required
+def parking_vehicle_move(slot_name):
+    try:
+        record_id = _to_int(request.form.get('record_id'))
+        if not record_id:
+            raise ValueError('Thiếu thông tin xe. Hãy tải lại trang.')
+        database.move_parked_vehicle(slot_name, request.form.get('target_slot'), record_id,
+                                     session.get('username') or str(session['user_id']))
+        flash('Đã di chuyển xe và lưu ghi chú vào lịch sử.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/<slot_name>/remove', methods=['POST'])
+@login_required
+@staff_required
+def parking_vehicle_remove(slot_name):
+    try:
+        record_id = _to_int(request.form.get('record_id'))
+        if not record_id:
+            raise ValueError('Thiếu thông tin xe. Hãy tải lại trang.')
+        database.remove_parked_vehicle(slot_name, record_id, request.form.get('reason', ''),
+                                       session.get('username') or str(session['user_id']))
+        flash('Đã xóa xe khỏi ô; lượt gửi được giữ trong lịch sử với lý do xóa.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
     return redirect(url_for('parking'))
 
 
 # ============================================================
-# XE VÀO / XE RA — GỘP 1 TRANG (OCR BIỂN SỐ, 2 BƯỚC: NHẬN DIỆN -> XÁC NHẬN)
+# XE VÀO / XE RA (ẢNH HOẶC CAMERA, 2 BƯỚC: NHẬN DIỆN -> XÁC NHẬN)
 # ============================================================
 
 TOKEN_RE = re.compile(r'^[0-9a-f]{12}$')
 ALLOWED_EXT = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
+CAMERA_OCR_LOCK = threading.Lock()
+MAX_CAMERA_FRAME_BYTES = 4 * 1024 * 1024
+_last_camera_cleanup = float('-inf')
 
 
 def clean_plate_input(text):
@@ -333,15 +432,16 @@ def promote_tmp(token, prefix):
     return filename
 
 
-def render_gate(token='', plate='', note='', form=None):
-    """Dựng trang /gate. Có biển số hợp lệ -> xác định xe VÀO hay xe RA và chuẩn bị thông tin tương ứng."""
+def gate_context(direction, token='', plate='', note='', form=None):
+    """Thông tin xác nhận dùng chung cho trang đầy đủ và kết quả camera cập nhật trực tiếp."""
     token = token if find_tmp(token) else ''
     now = datetime.now()
     ctx = {'token': token, 'plate': plate, 'note': note, 'form': form or {}, 'now': now,
            'mode': None, 'record': None, 'fee_preview': None, 'preview_url': None,
            'type_options': [], 'slots_by_area': {}, 'entry_mode': None, 'no_slots': False,
            'registered': None, 'reg_month_ok': False, 'reg_expired': False, 'suggest': None,
-           'reg_type': None}
+           'reg_type': None, 'direction': direction, 'gate_error': None,
+           'source': 'camera' if request.form.get('source', request.args.get('source')) == 'camera' else 'upload'}
 
     if token and os.path.exists(os.path.join(TMP_FOLDER, f'{token}_ann.jpg')):
         ctx['preview_url'] = url_for('tmp_preview', filename=f'{token}_ann.jpg',
@@ -355,7 +455,11 @@ def render_gate(token='', plate='', note='', form=None):
                                   and not ctx['reg_month_ok'])
         ctx['suggest'] = None if registered else find_similar_registered(plate)
         record = database.find_open_record(plate)
-        if record is not None:
+        if direction == 'entry' and record is not None:
+            ctx['gate_error'] = f'Xe {plate} đang gửi trong bãi. Hãy chọn Xe ra để làm thủ tục lấy xe.'
+        elif direction == 'exit' and record is None:
+            ctx['gate_error'] = f'Không tìm thấy xe {plate} đang gửi trong bãi. Hãy kiểm tra lại biển số hoặc chọn Xe vào.'
+        elif direction == 'exit':
             fee, duration, fee_note = calc_fee(record, now)
             ctx.update(mode='exit', record=record,
                        fee_preview={'fee': fee, 'duration': duration, 'note': fee_note})
@@ -365,7 +469,7 @@ def render_gate(token='', plate='', note='', form=None):
                 mode='entry',
                 entry_mode=database.get_user_setting(session['user_id'], 'entry_mode', 'manual'),
                 slots_by_area=slots_by_area,
-                no_slots=not any(slots_by_area.get(a) for a in ('A', 'B', 'C')),
+                no_slots=not any(slots_by_area.values()),
                 type_options=[{'id': t['id'], 'name': t['name'],
                                'price': database.find_turn_price(t['id'], now)}
                               for t in database.get_vehicle_types()],
@@ -374,15 +478,78 @@ def render_gate(token='', plate='', note='', form=None):
             if registered and registered['vehicle_type_id']:
                 ctx['reg_type'] = next((t for t in ctx['type_options']
                                         if t['id'] == registered['vehicle_type_id']), None)
-    return render_template('gate.html', **ctx)
+    return ctx
 
 
-@app.route('/gate', methods=['GET', 'POST'])
+def render_gate(direction, token='', plate='', note='', form=None):
+    return render_template('gate.html', **gate_context(direction, token, plate, note, form))
+
+
+@app.route('/gate')
 @login_required
 @staff_required
 def gate():
+    return render_template('gate_menu.html')
+
+
+@app.route('/gate/<direction>/camera', methods=['POST'])
+@login_required
+@staff_required
+def gate_camera(direction):
+    """Nhận diện một khung hình, chỉ lưu ảnh tạm; ghi nhận vào / ra vẫn qua nút Xác nhận."""
+    if direction not in ('entry', 'exit'):
+        abort(404)
+    if request.form.get('action') == 'discard':
+        drop_tmp(request.form.get('token', ''))
+        return '', 204
+    file = request.files.get('image')
+    if not file or not file.filename:
+        return jsonify(error='Chưa có hình ảnh từ camera.'), 400
+    frame = file.read(MAX_CAMERA_FRAME_BYTES + 1)
+    if not frame or len(frame) > MAX_CAMERA_FRAME_BYTES:
+        return jsonify(error='Ảnh camera phải nhỏ hơn 4 MB.'), 400
+    # Không xếp hàng vô hạn khi nhiều camera cùng chạy OCR trên CPU.
+    if not CAMERA_OCR_LOCK.acquire(blocking=False):
+        return jsonify(error='Nhận diện đang bận, sẽ tự thử lại.'), 429
+    token = uuid.uuid4().hex[:12]
+    path = os.path.join(TMP_FOLDER, token + '.jpg')
+    try:
+        global _last_camera_cleanup
+        if time.monotonic() - _last_camera_cleanup > 60:
+            cleanup_tmp()
+            _last_camera_cleanup = time.monotonic()
+        with open(path, 'wb') as out:
+            out.write(frame)
+        plate, annotated, rect, width, height, metrics = recognize_plate_live(path, details=True)
+        plate = clean_plate_input(plate)
+        if not cv2.imwrite(os.path.join(TMP_FOLDER, token + '_ann.jpg'), annotated):
+            raise OSError('Không lưu được ảnh xem trước.')
+        ctx = gate_context(direction, token, plate)
+        ctx['source'] = 'camera'
+        return jsonify(
+            token=token, plate=plate, plate_key=plate_key(plate),
+            valid=is_valid_plate_format(plate) and metrics['confidence'] >= 0.65,
+            confidence=metrics['confidence'], elapsed_ms=metrics['elapsed_ms'], engine=metrics['engine'],
+            rect=list(rect) if rect is not None else None,
+            width=int(width), height=int(height), preview_url=ctx['preview_url'],
+            checked_plate=plate if ctx['mode'] else '',
+            can_confirm=bool(ctx['mode'] and not (ctx['mode'] == 'entry' and ctx['no_slots'])),
+            html=render_template('_gate_result.html', **ctx),
+        )
+    except (ValueError, OSError) as error:
+        drop_tmp(token)
+        return jsonify(error=f'Không đọc được ảnh camera: {error}'), 400
+    except Exception:
+        drop_tmp(token)
+        app.logger.exception('Không nhận diện được khung hình camera')
+        return jsonify(error='Lỗi nhận diện camera. Hãy bấm Bắt đầu để thử lại hoặc chọn Tải ảnh.'), 500
+    finally:
+        CAMERA_OCR_LOCK.release()
+
+
+def handle_gate(direction):
     if request.method == 'GET':
-        return render_gate()
+        return render_gate(direction)
 
     action = request.form.get('action', 'recognize')
     note = request.form.get('note', '').strip()
@@ -391,11 +558,11 @@ def gate():
     plate = clean_plate_input(request.form.get('plate'))
 
     if action == 'confirm':
-        return gate_confirm(token, plate, note)
-    return gate_recognize(token, plate, note)
+        return gate_confirm(direction, token, plate, note)
+    return gate_recognize(direction, token, plate, note)
 
 
-def gate_recognize(token, plate, note):
+def gate_recognize(direction, token, plate, note):
     """Bước 1: nhận diện biển số từ ảnh mới; hoặc (không chọn ảnh mới) làm mới thông tin theo biển số vừa sửa."""
     file = request.files.get('image')
     has_file = bool(file and file.filename)
@@ -414,52 +581,62 @@ def gate_recognize(token, plate, note):
         except Exception as e:
             drop_tmp(token)
             flash(f'Lỗi khi nhận diện biển số: {e}', 'error')
-            return render_gate(note=note)
+            return render_gate(direction, note=note)
         if len(plate_key(plate)) < 4:
             flash('Không nhận diện được biển số rõ ràng. Bạn có thể nhập biển số vào ô bên dưới '
-                  'rồi bấm "Nhận diện biển số" để tiếp tục, hoặc chọn ảnh khác (đủ sáng, ít góc nghiêng).', 'error')
-        return render_gate(token, plate, note)
+                  'rồi bấm "Cập nhật biển số" để tiếp tục, hoặc chọn / chụp ảnh khác (đủ sáng, ít góc nghiêng).', 'error')
+        return render_gate(direction, token, plate, note)
 
     if token:
         if len(plate_key(plate)) < 4:
             flash('Biển số quá ngắn, vui lòng nhập lại (tối thiểu 4 ký tự).', 'error')
-        return render_gate(token, plate, note)
+        return render_gate(direction, token, plate, note)
 
-    flash('Vui lòng chọn hình ảnh biển số.', 'error')
-    return render_gate(note=note)
+    flash('Vui lòng chọn ảnh hoặc bật camera rồi chụp ảnh biển số.', 'error')
+    return render_gate(direction, note=note)
 
 
-def gate_confirm(token, plate, note):
-    """Bước 2: xác nhận. Biển số đang gửi trong bãi -> xe RA, ngược lại -> xe VÀO."""
+def gate_confirm(direction, token, plate, note):
+    """Bước 2: kiểm tra trạng thái xe và xác nhận đúng chiều vào / ra đã chọn."""
     if not token:
-        flash('Chưa có ảnh đã nhận diện (hoặc ảnh đã hết hạn). Vui lòng chọn ảnh và bấm "Nhận diện biển số".', 'error')
-        return render_gate(note=note)
+        flash('Chưa có ảnh đã nhận diện (hoặc ảnh đã hết hạn). Vui lòng nhận diện từ ảnh tải lên hoặc chụp từ camera.', 'error')
+        return render_gate(direction, note=note)
 
     if len(plate_key(plate)) < 4:
         flash('Biển số quá ngắn, vui lòng nhập lại (tối thiểu 4 ký tự).', 'error')
-        return render_gate(token, plate, note)
+        return render_gate(direction, token, plate, note)
 
     # Người dùng vừa sửa biển số sau khi nhận diện -> phải xem lại thông tin theo biển số mới
     checked = clean_plate_input(request.form.get('checked_plate'))
     if plate_key(plate) != plate_key(checked):
         flash('Biển số đã thay đổi — vui lòng xem lại thông tin bên dưới rồi bấm "Xác nhận" lần nữa.', 'error')
-        return render_gate(token, plate, note)
+        return render_gate(direction, token, plate, note)
 
     record = database.find_open_record(plate)
+    if direction == 'entry' and record is not None:
+        flash(f'Xe {plate} đang gửi trong bãi, không thể ghi nhận xe vào lần nữa.', 'error')
+        return render_gate(direction, token, plate, note)
+    if direction == 'exit' and record is None:
+        flash(f'Không tìm thấy xe {plate} đang gửi trong bãi, không thể xác nhận xe ra.', 'error')
+        return render_gate(direction, token, plate, note)
 
     # ---------- XE RA ----------
-    if record is not None:
+    if direction == 'exit':
         now = datetime.now()
         fee, duration, fee_note = calc_fee(record, now)
         filename = promote_tmp(token, 'out')
-        database.close_record(record['id'], filename, fee, note)
-        database.free_slot(record['slot_name'])
+        try:
+            exit_slot = database.close_record(record['id'], filename, fee, note)
+        except ValueError as error:
+            os.remove(os.path.join(OUT_DIR, filename))
+            flash(str(error), 'error')
+            return redirect(url_for('exit_gate', source=request.form.get('source', 'upload')))
         flash(
-            f'✅ Xe {plate} đã ra bãi (vị trí {record["slot_name"] or "?"}). '
+            f'✅ Xe {plate} đã ra bãi (vị trí {exit_slot or "?"}). '
             f'Thời gian gửi: {duration}. Phí: {fee:,} VNĐ ({fee_note})',
             'success'
         )
-        return redirect(url_for('gate'))
+        return redirect(url_for('exit_gate', source=request.form.get('source', 'upload')))
 
     # ---------- XE VÀO ----------
     form = request.form
@@ -475,52 +652,58 @@ def gate_confirm(token, plate, note):
     vehicle_type = next((t for t in all_types if t['id'] == type_id), None)
     if vehicle_type is None:
         flash('Vui lòng chọn loại xe.', 'error')
-        return render_gate(token, plate, note, form)
+        return render_gate(direction, token, plate, note, form)
     entry_price = database.find_turn_price(type_id, datetime.now())
     month_ok = month_ticket_valid(registered, date.today())
     if entry_price is None and not month_ok:
         flash(f'Chưa có giá cho "{vehicle_type["name"]}" lúc {datetime.now():%H:%M}. '
               'Vui lòng nhờ nhân viên/admin bổ sung ở trang Giá xe.', 'error')
-        return render_gate(token, plate, note, form)
+        return render_gate(direction, token, plate, note, form)
 
     if entry_mode == 'auto':
-        chosen_slot = database.find_free_slot()
+        chosen_slot = database.find_free_slot(vehicle_type_id=type_id)
         if not chosen_slot:
-            flash('Bãi đỗ đã hết chỗ trống! Không thể nhận thêm xe.', 'error')
-            return render_gate(token, plate, note, form)
+            flash('Không còn ô trống phù hợp với loại xe đã chọn.', 'error')
+            return render_gate(direction, token, plate, note, form)
     else:
         chosen_slot = form.get('slot_name', '').strip()
         if not chosen_slot:
             flash('Vui lòng chọn một vị trí đỗ.', 'error')
-            return render_gate(token, plate, note, form)
-        if not database.is_slot_available(chosen_slot):
-            flash(f'Vị trí {chosen_slot} vừa có xe khác đỗ vào, vui lòng chọn vị trí khác.', 'error')
-            return render_gate(token, plate, note, form)
+            return render_gate(direction, token, plate, note, form)
+        if not database.is_slot_available(chosen_slot, vehicle_type_id=type_id):
+            flash(f'Ô {chosen_slot} không còn trống hoặc không phù hợp với loại xe. Hãy chọn ô khác.', 'error')
+            return render_gate(direction, token, plate, note, form)
 
     filename = promote_tmp(token, 'in')
-    database.add_entry_record(plate, filename, chosen_slot, type_id, vehicle_type['name'], note)
-    database.occupy_slot(chosen_slot, plate)
+    try:
+        _, chosen_slot = database.create_parking_entry(plate, filename, None if entry_mode == 'auto' else chosen_slot,
+                                                       type_id, vehicle_type['name'], note)
+    except ValueError as error:
+        os.remove(os.path.join(IN_DIR, filename))
+        flash(str(error), 'error')
+        return redirect(url_for('entry', source=request.form.get('source', 'upload')))
     if month_ok:
         price_text = f'Vé tháng còn hạn đến {registered["expires_on"]} (tài khoản {registered["username"]})'
     else:
-        price_text = f'Giá: {entry_price["amount"]:,} VNĐ/lượt (khung {entry_price["period_name"]})'
+        price_text = (f'Giá khung vào: {entry_price["amount"]:,} VNĐ (khung {entry_price["period_name"]}); '
+                      'sang khung giờ khác sẽ cộng thêm phí khung đó')
     flash(f'✅ Xe vào bãi thành công! Biển số: {plate} — {vehicle_type["name"]} — Vị trí: {chosen_slot} '
           f'— {price_text}', 'success')
-    return redirect(url_for('gate'))
+    return redirect(url_for('entry', source=request.form.get('source', 'upload')))
 
 
-@app.route('/entry')
+@app.route('/entry', methods=['GET', 'POST'])
 @login_required
 @staff_required
 def entry():
-    return redirect(url_for('gate'))
+    return handle_gate('entry')
 
 
-@app.route('/exit')
+@app.route('/exit', methods=['GET', 'POST'])
 @login_required
 @staff_required
 def exit_gate():
-    return redirect(url_for('gate'))
+    return handle_gate('exit')
 
 
 # ============================================================
@@ -533,7 +716,21 @@ def history():
     keyword = request.args.get('plate', '').strip().upper()
     keyword_key = plate_key(keyword)     # tìm không phân biệt dấu '-' (61T32222 vẫn ra 61T3-2222)
     status_filter = request.args.get('status', 'all')
+    if status_filter not in ('all', 'IN', 'OUT', 'DELETED'):
+        status_filter = 'all'
     date_filter = request.args.get('date', '')
+    time_from = request.args.get('time_from', '').strip()
+    time_to = request.args.get('time_to', '').strip()
+    time_field = 'exit' if request.args.get('time_field') == 'exit' else 'entry'
+    if any(value and not TIME_RE.fullmatch(value) for value in (time_from, time_to)):
+        flash('Khung giờ không hợp lệ. Vui lòng chọn giờ theo HH:MM.', 'error')
+        time_from = time_to = ''
+    if date_filter:
+        try:
+            date.fromisoformat(date_filter)
+        except ValueError:
+            flash('Ngày lọc không hợp lệ.', 'error')
+            date_filter = ''
 
     records = database.get_all_records()
     is_user = session.get('role') == 'user'
@@ -543,6 +740,7 @@ def history():
 
     in_count = sum(1 for r in records if r['status'] == 'IN')
     out_count = sum(1 for r in records if r['status'] == 'OUT')
+    deleted_count = sum(1 for r in records if r['status'] == 'DELETED')
     today_str = datetime.now().strftime('%Y-%m-%d')
     today_count = sum(1 for r in records if (r['entry_time'] or '').startswith(today_str))
 
@@ -552,11 +750,30 @@ def history():
             return False
         if status_filter != 'all' and r['status'] != status_filter:
             return False
-        if date_filter and not (r['entry_time'] or '').startswith(date_filter):
-            return False
+        if date_filter or time_from or time_to:
+            timestamp = r['entry_time'] if time_field == 'entry' else r['exit_time']
+            if not timestamp:
+                return False
+            minute = timestamp[11:16]
+            if time_from and time_to and time_from > time_to:
+                if date_filter:
+                    next_date = (date.fromisoformat(date_filter) + timedelta(days=1)).isoformat()
+                    return ((timestamp.startswith(date_filter) and minute >= time_from) or
+                            (timestamp.startswith(next_date) and minute <= time_to))
+                if not (minute >= time_from or minute <= time_to):
+                    return False
+            else:
+                if date_filter and not timestamp.startswith(date_filter):
+                    return False
+                if (time_from and minute < time_from) or (time_to and minute > time_to):
+                    return False
         return True
 
     filtered = [r for r in records if matches(r)]
+    time_periods = [p for p in database.get_periods() if p['kind'] == 'time']
+    selected_period = next((str(p['id']) for p in time_periods
+                            if time_from == p['start_value'] and time_to == p['end_value']),
+                           'custom' if time_from or time_to else '')
 
     return render_template(
         'history.html',
@@ -567,6 +784,9 @@ def history():
         total_count=len(records),
         in_count=in_count,
         out_count=out_count,
+        deleted_count=deleted_count,
+        time_from=time_from, time_to=time_to, time_field=time_field,
+        time_periods=time_periods, selected_period=selected_period,
         today_count=today_count,
         user_mode=is_user,
     )

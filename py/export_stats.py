@@ -140,7 +140,7 @@ def make_payload(stats, area_stats, records, range_label, date_from, date_to, ge
             r['plate_number'] or '',
             r['vehicle_type_name'] or '—',
             r['slot_name'] or '—',
-            'Đang gửi' if r['status'] == 'IN' else 'Đã lấy xe',
+            {'IN': 'Đang gửi', 'OUT': 'Đã lấy xe', 'DELETED': 'Đã xóa'}.get(r['status'], r['status']),
             _fmt_time(r['entry_time']),
             _fmt_time(r['exit_time']),
             r['fee'] if r['fee'] is not None else None,

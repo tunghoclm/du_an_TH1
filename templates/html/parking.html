@@ -5,127 +5,194 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bãi đỗ xe - Smart Parking</title>
     <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='parking.css') }}">
-    {% if session.get('role') == 'user' %}
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='user.css') }}">
-    {% endif %}
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='parking.css', v='4') }}">
+    {% if session.get('role') == 'user' %}<link rel="stylesheet" href="{{ url_for('css_files', filename='user.css') }}">{% endif %}
 </head>
 <body>
+{% set staff = session.get('role') in ('admin', 'manager') %}
+{% set admin = session.get('role') == 'admin' %}
 <div class="wrap">
-
-    <!-- ============ TIÊU ĐỀ ============ -->
     <header class="topbar">
         <div class="topbar-left">
             <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
-            <div>
-                <h1>Bãi đỗ xe</h1>
-                <p>{% if session.get('role') in ('admin', 'manager') %}Xem và quản lý tình trạng các vị trí đỗ xe theo thời gian thực
-                    {% else %}Xem tình trạng các vị trí đỗ xe theo thời gian thực (chỉ xem){% endif %}</p>
-            </div>
+            <div><h1>Bãi đỗ xe</h1><p>{{ 'Quản lý khu, ô đỗ và xe đang gửi' if staff else 'Xem tình trạng các vị trí đỗ xe' }}</p></div>
         </div>
-        <div class="topbar-right">
-            <div class="user-chip">
-                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
-                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
-            </div>
-        </div>
+        <div class="user-chip"><span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
+            <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span></div>
     </header>
-
-    {% if session.get('role') == 'user' %}{% include '_user_nav.html' %}{% endif %}
-
-    <!-- ============ THÔNG BÁO ============ -->
+    {% if not staff %}{% include '_user_nav.html' %}{% endif %}
     <div class="toasts" id="toasts">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-            <div class="toast toast-{{ category }}" role="status">
-                <span>{{ message }}</span>
-                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
-            </div>
-            {% endfor %}
-        {% endwith %}
+        {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}
+        <div class="toast toast-{{ category }}" role="status"><span>{{ message }}</span><button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button></div>
+        {% endfor %}{% endwith %}
     </div>
-
-    <!-- ============ SỐ LIỆU NHANH ============ -->
     <section class="stats cols-4">
         <div class="stat"><span class="stat-icon blue">🅿️</span><div><b>{{ counts.total }}</b><small>Tổng vị trí</small></div></div>
         <div class="stat"><span class="stat-icon green">✓</span><div><b>{{ counts.available }}</b><small>Đang trống</small></div></div>
         <div class="stat"><span class="stat-icon red">🚗</span><div><b>{{ counts.occupied }}</b><small>Đang đỗ</small></div></div>
         <div class="stat"><span class="stat-icon amber">🔧</span><div><b>{{ counts.maintenance }}</b><small>Bảo trì</small></div></div>
     </section>
-
-    <!-- ============ LỌC KHU VỰC + CHÚ THÍCH ============ -->
     <section class="panel">
         <div class="panel-toolbar">
             <div class="chips" id="area-filter">
                 <button type="button" class="chip active" data-area="all">Tất cả khu vực</button>
-                {% for area in slots_by_area.keys() %}
-                <button type="button" class="chip" data-area="{{ area }}">Khu {{ area }}</button>
-                {% endfor %}
+                {% for area in areas %}<button type="button" class="chip" data-area="{{ area.id }}">Khu {{ area.name }}</button>{% endfor %}
             </div>
-            <div class="legend">
-                <span class="legend-item"><span class="legend-dot available"></span>Trống</span>
-                <span class="legend-item"><span class="legend-dot occupied"></span>Đang đỗ</span>
-                <span class="legend-item"><span class="legend-dot maintenance"></span>Bảo trì</span>
-            </div>
+            {% if admin %}<button type="button" class="btn btn-navy" data-edit-area data-id="" data-name="" data-type="">＋ Thêm khu mới</button>{% endif %}
         </div>
-        {% if session.get('role') in ('admin', 'manager') %}
-        <p class="note">🔧 Bấm vào vị trí đang trống hoặc đang bảo trì để chuyển đổi trạng thái bảo trì.</p>
-        {% endif %}
+        <div class="parking-legend">
+            <span class="legend-item"><span class="legend-dot available"></span>Trống</span>
+            <span class="legend-item"><span class="legend-dot occupied"></span>Đang đỗ</span>
+            <span class="legend-item"><span class="legend-dot maintenance"></span>Bảo trì</span>
+        </div>
+        {% if staff %}<p class="note">Bấm vào ô để chuyển xe, xóa xe hoặc quản lý bảo trì. Chuyển xe chỉ thực hiện trong cùng khu và được ghi vào lịch sử.</p>{% endif %}
     </section>
-
-    <!-- ============ CÁC KHU ============ -->
-    {% for area, slots in slots_by_area.items() %}
-    <section class="panel parking-section" data-area="{{ area }}">
-        <div class="panel-head">
-            <div>
-                <h2>Khu {{ area }}</h2>
-                <p>{{ slots|length }} vị trí</p>
+    {% for area in areas %}
+    {% set slots = slots_by_area[area.name] %}
+    <section class="panel parking-section" data-area="{{ area.id }}">
+        <div class="panel-head area-heading">
+            <div><h2>Khu {{ area.name }}</h2>
+                <p>{{ slots|length }} ô · {{ area.vehicle_type_name or ('Loại xe đã xóa — cần cấu hình lại' if area.vehicle_type_id else 'Tất cả loại xe') }}</p>
             </div>
-            <span class="badge badge-green">
-                {{ slots | selectattr('status', 'equalto', 'available') | list | length }} / {{ slots|length }} vị trí trống
-            </span>
+            <div class="area-actions">
+                <span class="badge badge-green">{{ slots|selectattr('status', 'equalto', 'available')|list|length }} ô trống</span>
+                {% if admin %}
+                <button type="button" class="btn btn-soft" data-edit-area data-id="{{ area.id }}" data-name="{{ area.name }}" data-type="{{ area.vehicle_type_id or '' }}">Sửa khu</button>
+                <button type="button" class="btn btn-soft" data-delete-area data-name="{{ area.name }}" data-count="{{ slots|length }}" data-url="{{ url_for('parking_area_delete', area_id=area.id) }}">Xóa khu</button>
+                <button type="button" class="btn btn-navy" data-add-slot data-id="{{ area.id }}" data-name="{{ area.name }}">＋ Thêm ô</button>
+                {% endif %}
+            </div>
         </div>
         <div class="panel-body">
             <div class="parking-grid">
                 {% for slot in slots %}
-                {% if session.get('role') in ('admin', 'manager') and slot['status'] != 'occupied' %}
-                <form method="POST" action="{{ url_for('slot_maintenance', slot_name=slot['slot_name']) }}"
-                      class="slot-form"
-                      onsubmit="return confirm('{{ 'Kết thúc bảo trì' if slot['status'] == 'maintenance' else 'Đưa vị trí ' + slot['slot_name'] + ' vào bảo trì' }}?');">
-                    <button type="submit" class="parking-slot {{ slot['status'] }} slot-clickable">
-                        <strong>{{ slot['slot_name'] }}</strong>
-                        <span>{% if slot['status'] == 'available' %}Trống{% else %}Bảo trì{% endif %}</span>
-                    </button>
-                </form>
-                {% else %}
-                <div class="parking-slot {{ slot['status'] }}" title="{% if slot['status'] == 'occupied' %}Xe: {{ slot['plate_number'] }}{% endif %}">
-                    <strong>{{ slot['slot_name'] }}</strong>
-                    <span>
-                        {% if slot['status'] == 'available' %}Trống
-                        {% elif slot['status'] == 'occupied' %}{{ slot['plate_number'] }}
-                        {% else %}Bảo trì{% endif %}
-                    </span>
+                <div class="slot-cell">
+                    {% if staff %}
+                    <button type="button" class="parking-slot {{ slot.status }} slot-clickable" data-open-slot
+                        data-name="{{ slot.slot_name }}" data-status="{{ slot.status }}" data-plate="{{ slot.plate_number or '' }}"
+                        data-reason="{{ slot.maintenance_reason or '' }}" data-area="{{ area.id }}" data-record-id="{{ slot.record_id or '' }}"
+                        data-maintenance-url="{{ url_for('slot_maintenance', slot_name=slot.slot_name) }}"
+                        data-move-url="{{ url_for('parking_vehicle_move', slot_name=slot.slot_name) }}"
+                        data-remove-url="{{ url_for('parking_vehicle_remove', slot_name=slot.slot_name) }}"
+                        {% if admin %}data-save-url="{{ url_for('parking_slot_save', slot_name=slot.slot_name) }}" data-delete-url="{{ url_for('parking_slot_delete', slot_name=slot.slot_name) }}"{% endif %}>
+                    {% else %}<div class="parking-slot {{ slot.status }}">{% endif %}
+                        <strong>{{ slot.slot_name }}</strong>
+                        <span>{{ slot.plate_number if slot.status == 'occupied' else ('Bảo trì' if slot.status == 'maintenance' else 'Trống') }}</span>
+                        {% if slot.status == 'maintenance' %}<span class="slot-reason">{{ slot.maintenance_reason or 'Chưa ghi lý do bảo trì' }}</span>{% endif %}
+                    {% if staff %}</button>{% else %}</div>{% endif %}
                 </div>
-                {% endif %}
-                {% endfor %}
+                {% else %}<p class="muted">Khu chưa có ô đỗ.{% if admin %} Bấm Thêm ô để bắt đầu.{% endif %}</p>{% endfor %}
             </div>
         </div>
     </section>
     {% endfor %}
 </div>
 
-<script>
-    // Chỉ lọc hiển thị theo khu vực — KHÔNG chỉnh sửa dữ liệu.
-    document.querySelectorAll('#area-filter .chip').forEach(function (chip) {
-        chip.addEventListener('click', function () {
-            document.querySelectorAll('#area-filter .chip').forEach(function (c) { c.classList.toggle('active', c === chip); });
-            var selected = chip.dataset.area;
-            document.querySelectorAll('.parking-section').forEach(function (s) {
-                s.hidden = !(selected === 'all' || selected === s.dataset.area);
-            });
-        });
-    });
-    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
-</script>
+{% if staff %}
+<dialog id="slot-actions-dialog" aria-labelledby="slot-actions-title">
+    <div class="dialog-head"><div><h2 id="slot-actions-title">Thao tác ô đỗ</h2><p class="muted" id="slot-actions-description"></p></div><button type="button" class="dialog-close" data-close aria-label="Đóng">×</button></div>
+    <div class="dialog-body slot-menu">
+        {% if admin %}<button type="button" class="btn btn-navy" id="slot-menu-edit">Sửa ô</button><button type="button" class="btn btn-red" id="slot-menu-delete">Xóa ô</button>{% endif %}
+        <button type="button" class="btn btn-maintenance" id="slot-menu-maintenance">Bảo trì</button>
+        <button type="button" class="btn btn-navy" id="slot-menu-vehicle">Chuyển / xóa xe</button>
+        <p class="field-hint">Ô đang có xe chỉ có thể sửa tên hoặc quản lý xe. Xóa ô và bảo trì yêu cầu ô không còn xe.</p>
+    </div>
+</dialog>
+<dialog id="maintenance-dialog" aria-labelledby="maintenance-title">
+    <form method="POST" id="maintenance-form">
+        <div class="dialog-head"><h2 id="maintenance-title">Bảo trì ô đỗ</h2><button type="button" class="dialog-close" data-close aria-label="Đóng">×</button></div>
+        <div class="dialog-body">
+            <div class="field"><label for="maintenance-reason">Lý do bảo trì</label>
+                <textarea id="maintenance-reason" name="reason" required maxlength="500" rows="3" placeholder="Ví dụ: sửa nền, hỏng cảm biến..."></textarea></div>
+            <p class="field-hint">Lý do được hiển thị trực tiếp trên ô đang bảo trì.</p>
+        </div>
+        <div class="dialog-foot">
+            <button type="button" class="btn btn-soft" data-close>Đóng</button>
+            <button type="submit" class="btn btn-soft" id="maintenance-finish" name="maintenance_action" value="finish" formnovalidate>Kết thúc bảo trì</button>
+            <button type="submit" class="btn btn-navy" id="maintenance-save" name="maintenance_action" value="start">Bắt đầu bảo trì</button>
+        </div>
+    </form>
+</dialog>
+<dialog id="vehicle-dialog" aria-labelledby="vehicle-title">
+    <div class="dialog-head"><div><h2 id="vehicle-title">Xe đang đỗ</h2><p id="vehicle-description" class="muted"></p></div><button type="button" class="dialog-close" data-close aria-label="Đóng">×</button></div>
+    <div class="dialog-body">
+        <form method="POST" id="move-form" class="slot-operation">
+            <h3>Di chuyển xe trong khu</h3>
+            <input type="hidden" name="record_id" id="move-record-id">
+            <div class="field"><label for="target-slot">Ô đích đang trống</label><select id="target-slot" name="target_slot" required>
+                <option value="">— Chọn ô đích —</option>
+                {% for area in areas %}{% for s in slots_by_area[area.name] %}{% if s.status == 'available' %}
+                <option value="{{ s.slot_name }}" data-area="{{ area.id }}">{{ s.slot_name }} · Khu {{ area.name }}</option>
+                {% endif %}{% endfor %}{% endfor %}
+            </select></div>
+            <p class="field-hint">Tự lưu người thao tác, thời gian, ô nguồn và ô đích vào ghi chú lượt gửi.</p>
+            <button type="submit" class="btn btn-navy" id="move-submit">Di chuyển xe</button>
+        </form>
+        <form method="POST" id="remove-form" class="slot-operation">
+            <h3>Xóa xe khỏi ô</h3>
+            <input type="hidden" name="record_id" id="remove-record-id">
+            <div class="field"><label for="remove-reason">Lý do xóa xe <span class="required">*</span></label>
+                <textarea name="reason" id="remove-reason" required maxlength="500" rows="3" placeholder="Nhập lý do xóa xe..."></textarea></div>
+            <p class="field-hint">Giải phóng ô, không thu phí và giữ lượt gửi trong lịch sử với giao dịch Đã xóa.</p>
+            <button type="submit" class="btn btn-red" id="remove-submit">Xóa xe khỏi ô</button>
+        </form>
+    </div>
+</dialog>
+{% endif %}
+{% if admin %}
+<dialog id="area-dialog" aria-labelledby="area-title">
+    <form method="POST" action="{{ url_for('parking_area_save') }}">
+        <div class="dialog-head"><h2 id="area-title">Thêm khu mới</h2><button type="button" class="dialog-close" data-close aria-label="Đóng">×</button></div>
+        <div class="dialog-body">
+            <input type="hidden" id="area-id" name="area_id">
+            <div class="field"><label for="area-name">Tên khu</label><input id="area-name" name="name" required maxlength="60" placeholder="Ví dụ: D, Tầng hầm..."></div>
+            <div class="field" id="area-count-field"><label for="area-slot-count">Số lượng ô đỗ</label><input id="area-slot-count" name="slot_count" type="number" min="1" max="1000" step="1" value="10" required>
+                <p class="field-hint" id="area-slot-preview">Ví dụ khu D, 10 ô: D01 đến D10.</p></div>
+            <div class="field"><label for="area-type">Loại xe được phép đỗ</label><select id="area-type" name="vehicle_type_id" required>
+                <option value="all">Tất cả loại xe</option>
+                {% for t in vehicle_types %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+            </select></div>
+            <p class="field-hint">Áp dụng cả khi chọn ô thủ công và khi hệ thống tự gán ô. Cần xử lý xe khác loại đang đỗ trước khi đổi phân khu.</p>
+        </div>
+        <div class="dialog-foot"><button type="button" class="btn btn-soft" data-close>Hủy</button><button type="submit" class="btn btn-navy">Lưu khu</button></div>
+    </form>
+</dialog>
+<dialog id="area-delete-dialog" aria-labelledby="area-delete-title">
+    <form method="POST" id="area-delete-form">
+        <div class="dialog-head"><h2 id="area-delete-title">Xóa khu đỗ xe</h2><button type="button" class="dialog-close" data-close aria-label="Đóng">×</button></div>
+        <div class="dialog-body"><p id="area-delete-description"></p><p class="field-hint">Chỉ xóa được khu không còn xe đang gửi. Các lượt gửi trước đây vẫn được giữ trong lịch sử.</p></div>
+        <div class="dialog-foot"><button type="button" class="btn btn-soft" data-close>Hủy</button><button type="submit" class="btn btn-red">Xóa khu</button></div>
+    </form>
+</dialog>
+<dialog id="slot-edit-dialog" aria-labelledby="slot-edit-title">
+    <form method="POST" id="slot-edit-form">
+        <div class="dialog-head"><h2 id="slot-edit-title">Sửa ô đỗ</h2><button type="button" class="dialog-close" data-close aria-label="Đóng">×</button></div>
+        <div class="dialog-body">
+            <input type="hidden" id="slot-edit-status" name="expected_status"><input type="hidden" id="slot-edit-record" name="record_id">
+            <div class="field"><label for="slot-edit-name">Tên ô</label><input id="slot-edit-name" name="slot_name" required maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,31}"></div>
+            <p class="field-hint">Nếu ô đang có xe, lượt gửi sẽ được cập nhật tên ô và lưu ghi chú thay đổi.</p>
+        </div>
+        <div class="dialog-foot"><button type="button" class="btn btn-soft" data-close>Hủy</button><button type="submit" class="btn btn-navy">Lưu tên ô</button></div>
+    </form>
+</dialog>
+<dialog id="slot-add-dialog" aria-labelledby="slot-add-title">
+    <form method="POST" action="{{ url_for('parking_slot_add') }}">
+        <div class="dialog-head"><h2 id="slot-add-title">Thêm ô đỗ</h2><button type="button" class="dialog-close" data-close aria-label="Đóng">×</button></div>
+        <div class="dialog-body">
+            <input type="hidden" id="slot-add-area" name="area_id"><p id="slot-add-area-label" class="muted"></p>
+            <div class="field"><label for="slot-add-name">Tên ô (duy nhất trong bãi)</label><input id="slot-add-name" name="slot_name" required maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,31}" placeholder="Ví dụ: D01"></div>
+        </div>
+        <div class="dialog-foot"><button type="button" class="btn btn-soft" data-close>Hủy</button><button type="submit" class="btn btn-navy">Thêm ô</button></div>
+    </form>
+</dialog>
+<dialog id="slot-delete-dialog" aria-labelledby="slot-delete-title">
+    <form method="POST" id="slot-delete-form">
+        <div class="dialog-head"><h2 id="slot-delete-title">Xóa ô đỗ</h2><button type="button" class="dialog-close" data-close aria-label="Đóng">×</button></div>
+        <div class="dialog-body"><p id="slot-delete-description"></p><p class="field-hint">Chỉ xóa được ô không có xe đang gửi.</p></div>
+        <div class="dialog-foot"><button type="button" class="btn btn-soft" data-close>Hủy</button><button type="submit" class="btn btn-red">Xóa ô</button></div>
+    </form>
+</dialog>
+{% endif %}
+<script src="{{ url_for('static', filename='js/parking.js', v='2') }}" defer></script>
 </body>
 </html>

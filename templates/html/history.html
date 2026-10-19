@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lịch sử - Smart Parking</title>
     <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='history.css') }}">
+    <link rel="stylesheet" href="{{ url_for('css_files', filename='history.css', v='3') }}">
     {% if session.get('role') == 'user' %}
     <link rel="stylesheet" href="{{ url_for('css_files', filename='user.css') }}">
     {% endif %}
@@ -45,10 +45,11 @@
     </div>
 
     <!-- ============ SỐ LIỆU NHANH ============ -->
-    <section class="stats cols-4">
+    <section class="stats history-stats">
         <div class="stat"><span class="stat-icon blue">📋</span><div><b>{{ total_count }}</b><small>Tổng lượt</small></div></div>
         <div class="stat"><span class="stat-icon amber">🚗</span><div><b>{{ in_count }}</b><small>Đang gửi</small></div></div>
         <div class="stat"><span class="stat-icon green">🚪</span><div><b>{{ out_count }}</b><small>Đã lấy xe</small></div></div>
+        <div class="stat"><span class="stat-icon red">×</span><div><b>{{ deleted_count }}</b><small>Đã xóa</small></div></div>
         <div class="stat"><span class="stat-icon purple">📅</span><div><b>{{ today_count }}</b><small>Hôm nay</small></div></div>
     </section>
 
@@ -65,15 +66,32 @@
                     <option value="all" {{ 'selected' if status_filter == 'all' }}>Tất cả</option>
                     <option value="IN" {{ 'selected' if status_filter == 'IN' }}>Đang gửi</option>
                     <option value="OUT" {{ 'selected' if status_filter == 'OUT' }}>Đã lấy xe</option>
+                    <option value="DELETED" {{ 'selected' if status_filter == 'DELETED' }}>Đã xóa</option>
                 </select>
             </div>
             <div class="field">
                 <label for="date">Ngày</label>
                 <input type="date" id="date" name="date" value="{{ date_filter }}">
             </div>
+            <div class="field">
+                <label for="history-period">Chọn khung giờ</label>
+                <select id="history-period" aria-controls="history-time-fields">
+                    <option value="" {{ 'selected' if selected_period == '' }}>Tất cả</option>
+                    <option value="custom" {{ 'selected' if selected_period == 'custom' }}>Nhập giờ tùy chọn</option>
+                    {% for p in time_periods %}
+                    <option value="{{ p.id }}" data-start="{{ p.start_value }}" data-end="{{ p.end_value }}"
+                        {{ 'selected' if selected_period == p.id|string }}>{{ p.name }} ({{ p.start_value }}–{{ p.end_value }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="history-time-fields" id="history-time-fields" {% if not time_from and not time_to %}hidden{% endif %}>
+                <div class="field"><label for="time-from">Từ giờ</label><input type="time" id="time-from" name="time_from" value="{{ time_from }}" {% if not time_from and not time_to %}disabled{% endif %}></div>
+                <div class="field"><label for="time-to">Đến giờ</label><input type="time" id="time-to" name="time_to" value="{{ time_to }}" {% if not time_from and not time_to %}disabled{% endif %}></div>
+            </div>
             <button type="submit" class="btn btn-navy">Lọc</button>
             <a href="{{ url_for('history') }}" class="btn btn-soft">↻ Đặt lại</a>
         </form>
+        <p class="note">Bấm Chọn khung giờ để hiện Từ giờ / Đến giờ. Với khung qua nửa đêm, ngày đã chọn là ngày bắt đầu; phần sau nửa đêm thuộc ngày hôm sau. Khung giờ áp dụng theo thời gian {{ 'ra / xóa' if time_field == 'exit' else 'vào' }}.</p>
     </section>
 
     <!-- ============ DANH SÁCH ============ -->
@@ -96,7 +114,7 @@
                         <th>Giao dịch</th>
                         <th class="num">Phí (VNĐ)</th>
                         <th>Thời gian vào</th>
-                        <th>Thời gian ra</th>
+                        <th>Thời gian ra / xóa</th>
                         <th>Ghi chú</th>
                         <th class="c-act">Chi tiết</th>
                     </tr>
@@ -110,15 +128,17 @@
                         <td data-label="Vị trí"><span class="pill">{{ r['slot_name'] or '—' }}</span></td>
                         <td data-label="Giao dịch">
                             {% if r['status'] == 'IN' %}<span class="badge badge-green">Đang gửi</span>
+                            {% elif r['status'] == 'DELETED' %}<span class="badge badge-deleted">Đã xóa</span>
                             {% else %}<span class="badge badge-red">Đã lấy xe</span>{% endif %}
                         </td>
                         <td class="num" data-label="Phí (VNĐ)">{% if r['fee'] %}<span class="money">{{ '{:,}'.format(r['fee']).replace(',', '.') }}</span>{% else %}—{% endif %}</td>
                         <td data-label="Thời gian vào">{{ r['entry_time'].replace('T', ' ') if r['entry_time'] else '—' }}</td>
-                        <td data-label="Thời gian ra">{{ r['exit_time'].replace('T', ' ') if r['exit_time'] else '—' }}</td>
+                        <td data-label="Thời gian ra / xóa">{{ r['exit_time'].replace('T', ' ') if r['exit_time'] else '—' }}</td>
                         <td data-label="Ghi chú">{{ r['note'] or '—' }}</td>
                         <td class="c-act" data-label="Chi tiết">
                             <button type="button" class="btn btn-edit detail-button"
                                 data-plate="{{ r['plate_number'] }}"
+                                data-status="{{ r['status'] }}" data-note="{{ r['note'] or '—' }}"
                                 data-type="{{ r['vehicle_type_name'] or '—' }}"
                                 data-slot="{{ r['slot_name'] or '—' }}"
                                 data-entry-time="{{ r['entry_time'] or '—' }}"
@@ -156,12 +176,13 @@
                     <div class="no-photo" id="d-entry-none">Không có ảnh</div>
                 </figure>
                 <figure>
-                    <figcaption>📤 Ảnh lúc ra <small id="d-exit-time"></small></figcaption>
+                    <figcaption><span id="d-exit-caption">📤 Ảnh lúc ra</span> <small id="d-exit-time"></small></figcaption>
                     <img id="d-exit-img" alt="Ảnh xe lúc ra">
                     <div class="no-photo" id="d-exit-none">Xe chưa ra khỏi bãi / không có ảnh</div>
                 </figure>
             </div>
             <p class="modal-fee">Phí: <strong id="d-fee"></strong></p>
+            <p class="modal-note" id="d-note"></p>
         </div>
     </div>
 
@@ -187,6 +208,9 @@
                 $('d-entry-time').textContent = d.entryTime;
                 $('d-exit-time').textContent = d.exitTime === '—' ? '' : d.exitTime;
                 $('d-fee').textContent = d.fee;
+                $('d-note').textContent = 'Ghi chú: ' + d.note;
+                $('d-exit-caption').textContent = d.status === 'DELETED' ? 'Thời điểm xóa xe' : '📤 Ảnh lúc ra';
+                $('d-exit-none').textContent = d.status === 'DELETED' ? 'Xe đã xóa khỏi ô, không có ảnh ra.' : 'Xe chưa ra khỏi bãi / không có ảnh';
                 setPhoto('entry', d.entryImg);
                 setPhoto('exit', d.exitImg);
                 modal.hidden = false;
@@ -197,5 +221,6 @@
         document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
     })();
     </script>
+    <script src="{{ url_for('static', filename='js/history-filter.js', v='1') }}" defer></script>
 </body>
 </html>

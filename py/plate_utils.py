@@ -79,15 +79,14 @@ _RE_CAR = re.compile(r'\d{2}[A-Z]{1,2}-\d{4,5}$')      # ô tô:   51F-12345, 29
 
 def is_valid_plate_format(text: str, rows: int = 1) -> bool:
     """Chuỗi đã chuẩn hóa có ĐÚNG cấu trúc biển số Việt Nam không?
-    rows = số DÒNG mà OCR đọc được trên ảnh:
-     - rows >= 2 nghĩa là biển in 2 dòng -> chỉ xe máy mới có (dòng trên: mã tỉnh + series
-       '1 chữ + 1 số'), nên BẮT BUỘC đúng dạng '29-L131332'. Dạng ô tô '29LT-31332' bị loại:
-       series 2 chữ ('LT') không tồn tại trên biển xe máy -> đó là OCR đọc nhầm số thành chữ.
-     - rows == 1: chấp nhận cả 2 dạng (xe máy in một dòng hoặc ô tô)."""
+    rows là gợi ý bố cục OCR; cả biển một dòng và hai dòng đều có thể chứa
+    series một hoặc hai chữ. Không loại kết quả chỉ vì biển được in hai dòng."""
     s = (text or '').strip()
     if _RE_MOTORBIKE.fullmatch(s):
         return True
-    return rows < 2 and bool(_RE_CAR.fullmatch(s))
+    # Two rows can also contain a car plate or a two-letter series. Layout is
+    # evidence for grouping, not a reason to reject an otherwise valid reading.
+    return bool(_RE_CAR.fullmatch(s))
 
 
 # Chữ hay bị OCR nhầm với số (dùng ở vị trí CHẮC CHẮN là số: mã tỉnh và dãy số cuối)
