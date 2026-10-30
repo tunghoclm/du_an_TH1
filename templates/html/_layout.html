@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Smart Parking | Quản lý bãi xe thông minh{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/images/logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  {% set _fullname = current_user_fullname or session.get('username') or 'Người dùng' %}
+  {% set _words = _fullname.split() %}
+  {% set _initials = (_words[-2][0] ~ _words[-1][0])|upper if _words|length >= 2 else (_fullname[:2]|upper) %}
+  {% set _is_staff = current_user_role in ('admin', 'manager') %}
+  {% set _is_admin = current_user_role == 'admin' %}
+
+  <div class="app-shell" id="app-shell">
+    <aside class="sidebar" id="app-sidebar">
+      <a href="{{ url_for('index') }}" class="brand">
+        <span class="brand-mark">
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+        </span>
+        <span>
+          Smart<span class="brand-blue">Parking</span>
+          <small>QUẢN LÝ BÃI XE THÔNG MINH</small>
+        </span>
+      </a>
+
+      <div class="workspace-label">
+        <span class="workspace-symbol">SP</span>
+        <div>
+          <b>Bãi đỗ xe Trung tâm Smart Parking</b>
+          <small>
+            <span class="live-dot"></span>
+            Đang hoạt động
+          </small>
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+
+      <nav>
+        <div>
+          <div class="nav-group">VẬN HÀNH</div>
+          <a href="{{ url_for('index') }}" title="Tổng quan" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+            <span>Tổng quan</span>
+          </a>
+        </div>
+
+        {% if _is_staff %}
+        <div>
+          <a href="{{ url_for('gate') }}" title="Giám sát bãi xe" class="nav-item {% if active_page in ('gate', 'entry', 'exit') %}active{% endif %}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+            <span>Giám sát bãi xe</span>
+          </a>
+        </div>
+        {% endif %}
+
+        <div>
+          <a href="{{ url_for('parking') }}" title="Quản lý xe & Sơ đồ bãi" class="nav-item {% if active_page == 'parking' %}active{% endif %}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+            <span>Sơ đồ &amp; Quản lý xe</span>
+          </a>
+        </div>
+
+        <div>
+          <a href="{{ url_for('pricing') }}" title="Quản lý vé xe & Bảng giá" class="nav-item {% if active_page == 'pricing' %}active{% endif %}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
+            <span>Quản lý vé &amp; Bảng giá</span>
+          </a>
+        </div>
+
+        {% if _is_staff %}
+        <div>
+          <a href="{{ url_for('users') }}" title="Khách hàng" class="nav-item {% if active_page == 'users' %}active{% endif %}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"/></svg>
+            <span>Khách hàng &amp; Tài khoản</span>
+          </a>
+        </div>
+        {% endif %}
+
+        <div>
+          <div class="nav-group">THỐNG KÊ &amp; QUẢN TRỊ</div>
+          <a href="{{ url_for('history') }}" title="Lịch sử vào / ra" class="nav-item {% if active_page == 'history' %}active{% endif %}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+            <span>Lịch sử vào / ra</span>
+          </a>
+        </div>
+
+        {% if _is_staff %}
+        <div>
+          <a href="{{ url_for('statistics') }}" title="Doanh thu & báo cáo" class="nav-item {% if active_page == 'statistics' %}active{% endif %}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16v5"/><path d="M16 14v7"/><path d="M20 10v11"/><path d="m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15"/><path d="M4 18v3"/><path d="M8 14v7"/></svg>
+            <span>Doanh thu &amp; báo cáo</span>
+          </a>
+        </div>
+        {% endif %}
+
+        <div>
+          <a href="{{ url_for('settings') }}" title="Cài đặt hệ thống" class="nav-item {% if active_page == 'settings' %}active{% endif %}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>Cài đặt hệ thống</span>
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <button type="button" class="help-card" onclick="window.location.href='{{ url_for('settings') }}'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg>
+          <span>
+            <b>Cần hỗ trợ?</b>
+            <small>Liên hệ đội ngũ quản trị</small>
+          </span>
+        </button>
+        <div class="sidebar-foot">
+          <span>Smart Parking <b>v1.0</b></span>
+          <button type="button" id="sidebar-collapse-btn" aria-label="Thu gọn menu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <div class="app-body">
+      <header class="app-header">
+        <div class="breadcrumb">
+          <button type="button" id="header-menu-toggle" aria-label="Đóng/mở menu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+          </button>
+          <span>Hệ thống</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          <b>{% block breadcrumb %}Tổng quan{% endblock %}</b>
+        </div>
+
+        <div class="header-tools">
+          <form action="{{ url_for('history') }}" method="get" class="quick-search">
+            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input
+              type="text"
+              name="plate"
+              value="{{ request.args.get('plate', '') if active_page == 'history' else '' }}"
+              aria-label="Tìm nhanh trang"
+              placeholder="Tìm kiếm nhanh..."
+            >
+            <kbd>↵</kbd>
+          </form>
+
+          <span class="system-status">
+            <span class="live-dot"></span>
+            Hệ thống ổn định
+          </span>
+
+          <div class="dropdown-wrap" id="notif-wrap">
+            <button type="button" class="notification-button" id="notif-btn" aria-label="Thông báo">
+              <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+              <i></i>
+            </button>
+            <div class="popover notifications" id="notif-popover" hidden>
+              <h3>
+                Thông báo <span class="count-pill">2</span>
+              </h3>
+              <a href="{{ url_for('parking') }}">
+                <span class="notice-dot"></span>
+                <div>
+                  <b>Sơ đồ bãi đỗ xe trực tuyến</b>
+                  <small>Trạng thái các phân khu được đồng bộ thời gian thực</small>
+                </div>
+              </a>
+              <a href="{{ url_for('history') }}">
+                <span class="notice-dot"></span>
+                <div>
+                  <b>Nhật ký vào / ra</b>
+                  <small>Tra cứu lịch sử phương tiện và chi tiết thu phí</small>
+                </div>
+              </a>
+            </div>
+          </div>
+
+          <div class="header-divider"></div>
+
+          <div class="dropdown-wrap" id="user-menu-wrap">
+            <button type="button" class="user-button" id="user-menu-btn" aria-label="Menu tài khoản">
+              <span class="avatar">{{ _initials }}</span>
+              <span>
+                <b>{{ _fullname }}</b>
+                <small>{{ role_label }}</small>
+              </span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+
+            <div class="popover user-menu" id="user-menu-popover" hidden>
+              <div>
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                {{ session.get('username') or _fullname }}
+              </div>
+              <a href="{{ url_for('settings') }}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+                Cài đặt hệ thống
+              </a>
+              <a href="{{ url_for('logout') }}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                Đăng xuất
+              </a>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-list">
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">
+                  <span>{{ message }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+
+        <footer class="page-footer">
+          <span>
+            © 2026 Smart Parking. Quản lý thông minh, vận hành an tâm.
+          </span>
+          <span>
+            <span class="live-dot"></span>
+            Hệ thống trực tuyến
+          </span>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var shell = document.getElementById('app-shell');
+      var sidebar = document.getElementById('app-sidebar');
+      var collapseBtn = document.getElementById('sidebar-collapse-btn');
+      var menuToggle = document.getElementById('header-menu-toggle');
+      var userBtn = document.getElementById('user-menu-btn');
+      var userPopover = document.getElementById('user-menu-popover');
+      var userWrap = document.getElementById('user-menu-wrap');
+      var notifBtn = document.getElementById('notif-btn');
+      var notifPopover = document.getElementById('notif-popover');
+      var notifWrap = document.getElementById('notif-wrap');
+
+      function setCollapsed(collapsed) {
+        if (!shell || !sidebar) return;
+        shell.classList.toggle('is-collapsed', collapsed);
+        sidebar.classList.toggle('collapsed', collapsed);
+        try { localStorage.setItem('sp_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+      }
+
+      try {
+        if (localStorage.getItem('sp_sidebar_collapsed') === '1') {
+          setCollapsed(true);
+        }
+      } catch (e) {}
+
+      if (collapseBtn) {
+        collapseBtn.addEventListener('click', function () {
+          setCollapsed(!sidebar.classList.contains('collapsed'));
+        });
+      }
+
+      if (menuToggle) {
+        menuToggle.addEventListener('click', function () {
+          setCollapsed(!sidebar.classList.contains('collapsed'));
+        });
+      }
+
+      if (userBtn && userPopover) {
+        userBtn.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          if (notifPopover) notifPopover.hidden = true;
+          userPopover.hidden = !userPopover.hidden;
+        });
+      }
+
+      if (notifBtn && notifPopover) {
+        notifBtn.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          if (userPopover) userPopover.hidden = true;
+          notifPopover.hidden = !notifPopover.hidden;
+        });
+      }
+
+      document.addEventListener('click', function (ev) {
+        if (userWrap && !userWrap.contains(ev.target) && userPopover) {
+          userPopover.hidden = true;
+        }
+        if (notifWrap && !notifWrap.contains(ev.target) && notifPopover) {
+          notifPopover.hidden = true;
+        }
+      });
+
+      document.querySelectorAll('[data-table-search]').forEach(function (input) {
+        var panel = input.closest('.data-panel');
+        if (!panel) return;
+        var tbody = panel.querySelector('tbody');
+        if (!tbody) return;
+        input.addEventListener('input', function () {
+          var q = (input.value || '').trim().toLowerCase();
+          tbody.querySelectorAll('tr').forEach(function (tr) {
+            if (tr.querySelector('.empty-cell')) return;
+            tr.hidden = q && tr.textContent.toLowerCase().indexOf(q) === -1;
+          });
+        });
+      });
+    })();
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,154 +1,291 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thống kê - Smart Parking</title>
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='thongke.css') }}">
-</head>
-<body>
-<div class="wrap">
+{% extends "_layout.html" %}
+{% set active_page = 'statistics' %}
 
-    <!-- ============ TIÊU ĐỀ ============ -->
-    <header class="topbar">
-        <div class="topbar-left">
-            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
-            <div>
-                <h1>Thống kê</h1>
-                <p>Tổng quan tình hình hoạt động của bãi đỗ xe</p>
-            </div>
-        </div>
-        <div class="topbar-right">
-            <div class="user-chip">
-                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
-                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
-            </div>
-        </div>
-    </header>
+{% block title %}Doanh thu & báo cáo — Smart Parking{% endblock %}
+{% block breadcrumb %}Doanh thu &amp; báo cáo{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/thongke.css">
+{% endblock %}
 
-    <!-- ============ THÔNG BÁO ============ -->
-    <div class="toasts" id="toasts">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-            <div class="toast toast-{{ category }}" role="status">
-                <span>{{ message }}</span>
-                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
-            </div>
-            {% endfor %}
-        {% endwith %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>Doanh thu &amp; báo cáo</h1>
+    <p>Phân tích tài chính, lưu lượng vào/ra và hiệu suất khai thác theo từng phân khu ({{ range_label }})</p>
+  </div>
+  <div class="heading-actions">
+    <div class="segmented">
+      <a href="{{ url_for('statistics', range='today') }}" class="{% if range_key == 'today' %}selected{% endif %}">Hôm nay</a>
+      <a href="{{ url_for('statistics', range='yesterday') }}" class="{% if range_key == 'yesterday' %}selected{% endif %}">Hôm qua</a>
+      <a href="{{ url_for('statistics', range='7days') }}" class="{% if range_key == '7days' %}selected{% endif %}">7 ngày</a>
+      <a href="{{ url_for('statistics', range='30days') }}" class="{% if range_key == '30days' %}selected{% endif %}">30 ngày</a>
     </div>
-
-    <!-- ============ DOANH THU ============ -->
-    <section class="panel">
-        <div class="panel-head">
-            <div>
-                <h2>Doanh thu</h2>
-                <p>Doanh thu = phí gửi xe (xe đã ra bãi) + tiền vé tháng đã thu</p>
-            </div>
-            <form method="get" action="{{ url_for('statistics') }}" id="stats-filter" class="range-form">
-                <span class="range-label">Xem theo thời gian · đang xem: <strong>{{ range_label }}</strong></span>
-                <select name="range" id="time-range" class="input range-select">
-                    <option value="today" {{ 'selected' if range_key == 'today' }}>Hôm nay</option>
-                    <option value="yesterday" {{ 'selected' if range_key == 'yesterday' }}>Hôm qua</option>
-                    <option value="7days" {{ 'selected' if range_key == '7days' }}>7 ngày qua</option>
-                    <option value="30days" {{ 'selected' if range_key == '30days' }}>30 ngày qua</option>
-                    <option value="custom" {{ 'selected' if range_key == 'custom' }}>Chọn ngày…</option>
-                </select>
-                <span class="custom-dates" id="custom-dates" {{ '' if range_key == 'custom' else 'hidden' }}>
-                    <input type="date" name="from" class="input" value="{{ date_from }}" max="{{ today_iso }}">
-                    <span>→</span>
-                    <input type="date" name="to" class="input" value="{{ date_to }}" max="{{ today_iso }}">
-                    <button type="submit" class="btn btn-navy">Xem</button>
-                </span>
-            </form>
-            <div class="export-group">
-                <a class="btn btn-soft" href="{{ url_for('statistics_export', fmt='xlsx') }}?{{ export_qs }}">⬇ Excel</a>
-                <a class="btn btn-soft" href="{{ url_for('statistics_export', fmt='pdf') }}?{{ export_qs }}">⬇ PDF</a>
-            </div>
-        </div>
-        <div class="panel-body">
-            <div class="stats cols-4 flat">
-                <div class="stat">
-                    <span class="stat-icon amber">💰</span>
-                    <div>
-                        <b class="money-big">{{ '{:,}'.format(stats.total_revenue).replace(',', '.') }} đ</b>
-                        <small>Tổng doanh thu</small>
-                        <span class="sub">Từ trước đến nay · Gửi xe {{ '{:,}'.format(stats.parking_revenue).replace(',', '.') }} đ + Vé tháng {{ '{:,}'.format(stats.month_revenue).replace(',', '.') }} đ</span>
-                    </div>
-                </div>
-                <div class="stat">
-                    <span class="stat-icon blue">📅</span>
-                    <div>
-                        <b>{{ stats.period_entries }}</b>
-                        <small>Lượt vào {{ range_label }}</small>
-                        <span class="sub">Xe vào bãi</span>
-                    </div>
-                </div>
-                <div class="stat">
-                    <span class="stat-icon green">💵</span>
-                    <div>
-                        <b class="money-big">{{ '{:,}'.format(stats.period_revenue).replace(',', '.') }} đ</b>
-                        <small>Doanh thu {{ range_label }}</small>
-                        <span class="sub">Gửi xe {{ '{:,}'.format(stats.period_parking_revenue).replace(',', '.') }} đ + Vé tháng {{ '{:,}'.format(stats.period_month_revenue).replace(',', '.') }} đ</span>
-                    </div>
-                </div>
-                <div class="stat">
-                    <span class="stat-icon purple">📊</span>
-                    <div>
-                        <b>{{ stats.period_records }}</b>
-                        <small>Tổng lượt xe {{ range_label }}</small>
-                        <span class="sub">Vào {{ stats.period_entries }} · Ra {{ stats.period_exits }}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ============ TÌNH TRẠNG THEO KHU VỰC ============ -->
-    <section class="panel">
-        <div class="panel-head">
-            <div>
-                <h2>Tình trạng theo khu vực</h2>
-                <p>Mức độ sử dụng của từng khu vực</p>
-            </div>
-        </div>
-        <div class="panel-body">
-            <div class="area-grid">
-                {% for area, data in area_stats.items() %}
-                <div class="area-card">
-                    <div class="area-card-header">
-                        <div>
-                            <h3>Khu {{ area }}</h3>
-                            <span>{{ data.total }} vị trí</span>
-                        </div>
-                        <strong>{{ data.percent }}%</strong>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: {{ data.percent }}%;"></div>
-                    </div>
-                    <div class="area-info">
-                        <span>Đang đỗ: <strong>{{ data.occupied }}</strong></span>
-                        <span>Trống: <strong>{{ data.available }}</strong></span>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </section>
+    <a href="{{ url_for('statistics_export', fmt='xlsx') }}?{{ export_qs }}" class="btn btn-outline">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></svg>
+      Xuất Excel
+    </a>
+    <a href="{{ url_for('statistics_export', fmt='pdf') }}?{{ export_qs }}" class="btn btn-primary">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+      Xuất PDF
+    </a>
+  </div>
 </div>
 
-<script>
-(function () {
-    const form = document.getElementById('stats-filter');
-    const select = document.getElementById('time-range');
-    const custom = document.getElementById('custom-dates');
-    select.addEventListener('change', function () {
-        if (select.value === 'custom') { custom.hidden = false; }   // chọn ngày rồi bấm "Xem"
-        else { form.submit(); }
-    });
-    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
-})();
-</script>
-</body>
-</html>
+<section class="panel chart-card" style="margin-bottom: 18px; padding: 14px 20px;">
+  <form method="GET" action="{{ url_for('statistics') }}" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+    <input type="hidden" name="range" value="custom">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:12px;font-weight:600;color:#546d8f;">Khoảng thời gian tùy chỉnh:</span>
+      <label class="date-control">
+        <span style="font-size:11px;color:#637798;font-weight:600;">Từ</span>
+        <input type="date" name="from" value="{{ date_from }}" max="{{ today_iso }}" required>
+      </label>
+      <label class="date-control">
+        <span style="font-size:11px;color:#637798;font-weight:600;">Đến</span>
+        <input type="date" name="to" value="{{ date_to }}" max="{{ today_iso }}" required>
+      </label>
+      <button type="submit" class="btn btn-primary">Áp dụng bộ lọc</button>
+    </div>
+    <small style="color:#788da9;font-size:12px;">Đang hiển thị báo cáo: <b>{{ range_label }}</b></small>
+  </form>
+</section>
+
+<div class="stats-grid six">
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Doanh thu trong kỳ</span>
+      <span class="stat-icon green">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
+      </span>
+    </div>
+    <strong>{{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Kỳ: {{ range_label }}
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Phí vé lượt</span>
+      <span class="stat-icon blue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+      </span>
+    </div>
+    <strong>{{ "{:,}".format(stats.period_parking_revenue).replace(",", ".") }} ₫</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      {{ stats.period_exits }} lượt xe ra bãi
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Doanh thu vé tháng</span>
+      <span class="stat-icon purple">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>
+      </span>
+    </div>
+    <strong>{{ "{:,}".format(stats.period_month_revenue).replace(",", ".") }} ₫</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Đăng ký &amp; gia hạn vé tháng
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Lượt xe vào</span>
+      <span class="stat-icon blue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      </span>
+    </div>
+    <strong>{{ stats.period_entries }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Trong kỳ chọn ({{ range_label }})
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Lượt xe ra</span>
+      <span class="stat-icon amber">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10"/><path d="M17 7v10H7"/></svg>
+      </span>
+    </div>
+    <strong>{{ stats.period_exits }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Tổng lượt xử lý: {{ stats.period_records }}
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Tổng doanh thu lũy kế</span>
+      <span class="stat-icon green">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+      </span>
+    </div>
+    <strong>{{ "{:,}".format(stats.total_revenue).replace(",", ".") }} ₫</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Toàn thời gian hệ thống
+    </div>
+  </div>
+</div>
+
+<!-- BIỂU ĐỒ DOANH THU & TỶ TRỌNG -->
+<div class="report-charts">
+  <section class="panel chart-card">
+    <div class="panel-heading">
+      <div>
+        <h2>So sánh doanh thu theo nguồn thu</h2>
+        <p>Đơn vị: VNĐ · Kỳ báo cáo: {{ range_label }}</p>
+      </div>
+      <div class="chart-legend">
+        <span><i class="dot blue"></i>Trong kỳ ({{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫)</span>
+        <span><i class="dot green"></i>Lũy kế ({{ "{:,}".format(stats.total_revenue).replace(",", ".") }} ₫)</span>
+      </div>
+    </div>
+    {% set max_bar = [stats.total_revenue, stats.period_revenue, 10000]|max %}
+    {% set h_p_park = ((stats.period_parking_revenue * 150 / max_bar)|round|int) if stats.period_parking_revenue else 8 %}
+    {% set h_t_park = ((stats.parking_revenue * 150 / max_bar)|round|int) if stats.parking_revenue else 8 %}
+    {% set h_p_month = ((stats.period_month_revenue * 150 / max_bar)|round|int) if stats.period_month_revenue else 8 %}
+    {% set h_t_month = ((stats.month_revenue * 150 / max_bar)|round|int) if stats.month_revenue else 8 %}
+    {% set h_p_all = ((stats.period_revenue * 150 / max_bar)|round|int) if stats.period_revenue else 8 %}
+    {% set h_t_all = ((stats.total_revenue * 150 / max_bar)|round|int) if stats.total_revenue else 8 %}
+    <div style="width:100%;height:285px;padding:10px 6px 0;">
+      <svg viewBox="0 0 620 250" style="width:100%;height:100%;overflow:visible;">
+        <line x1="50" y1="40" x2="590" y2="40" stroke="#edf2f9" stroke-dasharray="3 3"/>
+        <line x1="50" y1="95" x2="590" y2="95" stroke="#edf2f9" stroke-dasharray="3 3"/>
+        <line x1="50" y1="150" x2="590" y2="150" stroke="#edf2f9" stroke-dasharray="3 3"/>
+        <line x1="50" y1="200" x2="590" y2="200" stroke="#edf2f9"/>
+
+        <!-- Nhóm 1: Vé lượt -->
+        <rect x="95" y="{{ 200 - h_p_park }}" width="42" height="{{ h_p_park }}" rx="7" fill="#0875f9"/>
+        <rect x="145" y="{{ 200 - h_t_park }}" width="42" height="{{ h_t_park }}" rx="7" fill="#1ca7ec"/>
+        <text x="141" y="226" text-anchor="middle" fill="#647c9b" font-size="12" font-weight="600">Doanh thu vé lượt</text>
+
+        <!-- Nhóm 2: Vé tháng -->
+        <rect x="275" y="{{ 200 - h_p_month }}" width="42" height="{{ h_p_month }}" rx="7" fill="#0875f9"/>
+        <rect x="325" y="{{ 200 - h_t_month }}" width="42" height="{{ h_t_month }}" rx="7" fill="#1ca7ec"/>
+        <text x="321" y="226" text-anchor="middle" fill="#647c9b" font-size="12" font-weight="600">Doanh thu vé tháng</text>
+
+        <!-- Nhóm 3: Tổng cộng -->
+        <rect x="455" y="{{ 200 - h_p_all }}" width="42" height="{{ h_p_all }}" rx="7" fill="#0875f9"/>
+        <rect x="505" y="{{ 200 - h_t_all }}" width="42" height="{{ h_t_all }}" rx="7" fill="#2cad78"/>
+        <text x="501" y="226" text-anchor="middle" fill="#647c9b" font-size="12" font-weight="600">Tổng doanh thu</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="panel chart-card">
+    <div class="panel-heading">
+      <div>
+        <h2>Tỷ trọng theo loại vé</h2>
+        <p>Tỷ lệ đóng góp doanh thu lũy kế</p>
+      </div>
+    </div>
+    {% set tot_rev = stats.total_revenue if stats.total_revenue > 0 else 1 %}
+    {% set pct_turn = ((stats.parking_revenue * 100 / tot_rev)|round|int) if stats.total_revenue > 0 else 50 %}
+    {% set pct_month = (100 - pct_turn) if stats.total_revenue > 0 else 50 %}
+    <div style="display:flex;justify-content:center;align-items:center;height:210px;position:relative;">
+      <svg viewBox="0 0 200 200" width="190" height="190">
+        <circle cx="100" cy="100" r="64" fill="none" stroke="#edf2f9" stroke-width="20"/>
+        <circle cx="100" cy="100" r="64" fill="none" stroke="#0875f9" stroke-width="20"
+                stroke-dasharray="{{ (pct_turn * 4.02)|round(1) }} 402.1"
+                stroke-dashoffset="0"
+                transform="rotate(-90 100 100)"/>
+        <circle cx="100" cy="100" r="64" fill="none" stroke="#1ca7ec" stroke-width="20"
+                stroke-dasharray="{{ (pct_month * 4.02)|round(1) }} 402.1"
+                stroke-dashoffset="-{{ (pct_turn * 4.02)|round(1) }}"
+                transform="rotate(-90 100 100)"/>
+      </svg>
+    </div>
+    <div class="report-legend">
+      <div>
+        <span><i style="background: #0875f9;"></i>Vé lượt ({{ "{:,}".format(stats.parking_revenue).replace(",", ".") }} ₫)</span>
+        <b>{{ pct_turn }}%</b>
+      </div>
+      <div>
+        <span><i style="background: #1ca7ec;"></i>Vé tháng ({{ "{:,}".format(stats.month_revenue).replace(",", ".") }} ₫)</span>
+        <b>{{ pct_month }}%</b>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="dashboard-bottom">
+  <section class="panel chart-card">
+    <div class="panel-heading">
+      <div>
+        <h2>Hiệu suất khai thác theo khu vực</h2>
+        <p>Tỷ lệ lấp đầy hiện tại của từng phân khu đỗ xe</p>
+      </div>
+      <a href="{{ url_for('parking') }}" class="btn btn-outline">Sơ đồ bãi xe</a>
+    </div>
+
+    <div class="area-list">
+      {% if area_stats %}
+        {% for area_name, a in area_stats.items() %}
+          {% set pct = (a.percent|round|int) if a.percent is defined else 0 %}
+          <div class="area-row">
+            <span class="area-icon area-{{ loop.index0 % 3 }}">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+            </span>
+            <div>
+              <div>
+                <b>Khu {{ area_name }}</b>
+                <span><strong>{{ a.occupied }}</strong> / {{ a.total }} chỗ</span>
+              </div>
+              <div class="progress-track">
+                <div style="width: {{ pct }}%; background: {{ '#e89d29' if pct > 80 else '#0875f9' }};"></div>
+              </div>
+              <small>Đang đỗ: {{ a.occupied }} · Còn trống: {{ a.available }} · Bảo trì: {{ a.maintenance }}</small>
+            </div>
+            <b>{{ pct }}%</b>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-inline">Chưa có khu vực đỗ xe.</div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel data-panel">
+    <div class="panel-heading">
+      <h2>Bảng tổng hợp chỉ tiêu tài chính</h2>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Chỉ tiêu doanh thu</th>
+            <th>Trong kỳ ({{ range_label }})</th>
+            <th>Lũy kế toàn thời gian</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Doanh thu vé lượt (thu tại cổng)</b></td>
+            <td>{{ "{:,}".format(stats.period_parking_revenue).replace(",", ".") }} ₫</td>
+            <td>{{ "{:,}".format(stats.parking_revenue).replace(",", ".") }} ₫</td>
+          </tr>
+          <tr>
+            <td><b>Doanh thu vé tháng (đăng ký / gia hạn)</b></td>
+            <td>{{ "{:,}".format(stats.period_month_revenue).replace(",", ".") }} ₫</td>
+            <td>{{ "{:,}".format(stats.month_revenue).replace(",", ".") }} ₫</td>
+          </tr>
+          <tr>
+            <td><b>Tổng cộng doanh thu</b></td>
+            <td><b style="color:var(--primary);">{{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫</b></td>
+            <td><b style="color:#279463;">{{ "{:,}".format(stats.total_revenue).replace(",", ".") }} ₫</b></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

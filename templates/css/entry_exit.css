@@ -1,83 +1,101 @@
-/* entry_exit.css — dùng chung cho trang Xe vào / ra và Cài đặt (phần chung nằm trong theme.css) */
-
-.wrap.narrow { max-width: 1000px; }
-
-/* Khung nội dung chính (thẻ trắng bo góc như .panel) */
-.card {
-    background: var(--card);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 24px;
-    margin-bottom: 20px;
+/* Trang Cổng Xe Vào / Xe Ra */
+.source-switch {
+  display: inline-flex;
+  background: #edf4fc;
+  padding: 4px;
+  border-radius: 10px;
+  gap: 4px;
 }
 
-/* CHỌN Ô ĐỖ (radio ẩn + nhãn giống ô trong trang Bãi đỗ xe) */
-.slot-picker-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-    gap: 8px;
-    margin-bottom: 20px;
-}
-.slot-picker-grid input[type="radio"] { display: none; }
-
-.slot-option {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    padding: 10px 4px;
-    border-radius: 12px;
-    border: 1.5px solid #bfe5cf;
-    background: #e9f7ef;
-    color: var(--green-d);
-    font-size: 12px;
-    cursor: pointer;
-    transition: transform .15s, box-shadow .15s, background .15s;
-    user-select: none;
-}
-.slot-option strong { font-size: 13.5px; }
-.slot-option:hover { transform: translateY(-2px); }
-
-.slot-picker-grid input[type="radio"]:checked + .slot-option {
-    background: var(--navy);
-    border-color: var(--navy);
-    color: #fff;
-    box-shadow: 0 6px 14px rgba(20, 48, 107, .28);
-}
-.slot-option.disabled { background: #f1f2f6; border-color: #e0e3ea; color: #aab0bf; cursor: not-allowed; }
-
-.no-slots-message {
-    color: var(--red-d);
-    font-size: 14px;
-    background: #fdeaea;
-    border-radius: 12px;
-    padding: 14px 18px;
-    margin-bottom: 18px;
-}
-.auto-mode-note {
-    background: #eef4ff;
-    color: var(--navy);
-    padding: 14px 16px;
-    border-radius: 12px;
-    font-size: 14px;
-    line-height: 1.5;
+.source-btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #526789;
+  background: transparent;
+  transition: all 0.15s ease;
 }
 
-/* Nút lớn (Cài đặt) */
-.submit-button { width: 100%; padding: 14px; font-size: 15px; margin-top: 6px; }
-.submit-button:disabled { background: #aab4c8; box-shadow: none; cursor: not-allowed; }
-
-/* CÀI ĐẶT: 2 lựa chọn dạng thẻ */
-.mode-options { display: flex; flex-direction: column; gap: 14px; margin: 0 0 22px; }
-.mode-option {
-    display: flex; align-items: flex-start; gap: 14px;
-    border: 2px solid var(--line); border-radius: 14px; padding: 16px 18px;
-    cursor: pointer; transition: .15s;
+.source-btn.active,
+.source-btn[aria-pressed="true"] {
+  background: #ffffff;
+  color: var(--primary);
+  box-shadow: 0 2px 8px rgba(16, 44, 89, 0.08);
 }
-.mode-option:hover { border-color: #b9c9ec; }
-.mode-option.selected { border-color: var(--navy-2); background: #f3f6ff; }
-.mode-option input { margin-top: 3px; accent-color: var(--navy-2); }
-.mode-option .mode-icon { font-size: 22px; }
-.mode-option h4 { margin: 0 0 4px; font-size: 15px; color: var(--text); }
-.mode-option p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+.camera-Controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.camera-Controls-bar select {
+  flex: 1;
+  min-width: 180px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid #d7e2f1;
+  background: #edf4fc;
+  color: #10244b;
+  font-size: 13px;
+}
+
+.camera-status-bar {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f1f6fd;
+  color: #36507a;
+  border: 1px solid #dce7f7;
+}
+
+.camera-status-bar[data-tone="success"] {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.camera-status-bar[data-tone="warning"] {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.camera-status-bar[data-tone="danger"] {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.gate-result-box {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fee-breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.fee-breakdown-table th,
+.fee-breakdown-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e6eef8;
+  text-align: left;
+}
+
+.fee-breakdown-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #6c80a1;
+}

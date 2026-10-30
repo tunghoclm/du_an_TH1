@@ -1,226 +1,170 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cài đặt - Smart Parking</title>
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='user.css') }}">
-</head>
-<body>
-<div class="wrap narrow">
+{% extends "_layout.html" %}
+{% set active_page = 'settings' %}
 
-    <!-- ============ TIÊU ĐỀ ============ -->
-    <header class="topbar">
-        <div class="topbar-left">
-            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
-            <div>
-                <h1>⚙️ Cài đặt</h1>
-                <p>Mật khẩu, vé xe và biển số của bạn</p>
-            </div>
-        </div>
-        <div class="topbar-right">
-            <div class="user-chip">
-                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
-                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
-            </div>
-        </div>
-    </header>
+{% block title %}Cài đặt tài khoản — Smart Parking{% endblock %}
+{% block breadcrumb %}Cài đặt tài khoản{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/user.css">
+{% endblock %}
 
-    {% include '_user_nav.html' %}
-
-    <!-- ============ THÔNG BÁO ============ -->
-    <div class="toasts" id="toasts">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-            <div class="toast toast-{{ category }}" role="status">
-                <span>{{ message }}</span>
-                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
-            </div>
-            {% endfor %}
-        {% endwith %}
-    </div>
-
-    {% set pw_left = max_changes - me['password_changes'] %}
-    {% set plate_left = max_changes - me['plate_changes'] %}
-
-    <!-- ============ ĐỔI MẬT KHẨU ============ -->
-    <section class="panel" id="password">
-        <div class="panel-head">
-            <div>
-                <h2>🔑 Đổi mật khẩu</h2>
-                <p>Mỗi tài khoản chỉ được tự đổi mật khẩu tối đa {{ max_changes }} lần</p>
-            </div>
-            <span class="badge {{ 'badge-green' if pw_left > 0 else 'badge-red' }}">Còn {{ pw_left }}/{{ max_changes }} lần</span>
-        </div>
-        <div class="panel-body">
-            <form method="POST" action="{{ url_for('me_password') }}" class="stack-form">
-                <div class="field">
-                    <label for="current_password">Mật khẩu hiện tại</label>
-                    <input type="password" id="current_password" name="current_password" autocomplete="current-password" required {{ 'disabled' if pw_left <= 0 }}>
-                </div>
-                <div class="field">
-                    <label for="new_password">Mật khẩu mới</label>
-                    <input type="password" id="new_password" name="new_password" minlength="4" autocomplete="new-password" required {{ 'disabled' if pw_left <= 0 }}>
-                </div>
-                <div class="field">
-                    <label for="confirm_password">Nhập lại mật khẩu mới</label>
-                    <input type="password" id="confirm_password" name="confirm_password" minlength="4" autocomplete="new-password" required {{ 'disabled' if pw_left <= 0 }}>
-                </div>
-                {% if pw_left <= 0 %}
-                <div class="callout warn">Bạn đã dùng hết {{ max_changes }} lần đổi mật khẩu. Vui lòng liên hệ nhân viên nếu cần đổi thêm.</div>
-                {% endif %}
-                <button type="submit" class="btn btn-navy block" {{ 'disabled' if pw_left <= 0 }}>Đổi mật khẩu</button>
-            </form>
-        </div>
-    </section>
-
-    <!-- ============ XE & VÉ CỦA TÔI ============ -->
-    <section class="panel" id="vehicles">
-        <div class="panel-head">
-            <div>
-                <h2>🚗 Xe &amp; vé của tôi</h2>
-                <p>Gia hạn vé tháng hoặc đổi biển số xe đã đăng ký</p>
-            </div>
-            <span class="badge {{ 'badge-green' if plate_left > 0 else 'badge-red' }}">Đổi biển số: còn {{ plate_left }}/{{ max_changes }} lần</span>
-        </div>
-        <div class="panel-body">
-            {% if vehicles %}
-            {% for v in vehicles %}
-            {% set is_month = v['ticket_type'] == 'month' %}
-            {% set active = is_month and v['expires_on'] and v['expires_on'] >= today %}
-            {% set month_price = price_info.get(v['vehicle_type_id'], {}).get('month') %}
-            <div class="vbox">
-                <div class="vbox-head">
-                    <div>
-                        <div class="vplate">{{ v['plate_number'] }}</div>
-                        <div class="vmeta">{{ v['vehicle_type_name'] or 'Chưa chọn loại xe' }}</div>
-                    </div>
-                    {% if active %}<span class="badge badge-green">Vé tháng · đến {{ v['expires_on']|vdate }}</span>
-                    {% elif is_month %}<span class="badge badge-red">Hết hạn {{ v['expires_on']|vdate }}</span>
-                    {% else %}<span class="badge badge-gray">Vé lượt</span>{% endif %}
-                </div>
-
-                <details class="fold">
-                    <summary>📅 {{ 'Gia hạn vé tháng' if is_month else 'Đăng ký vé tháng' }}</summary>
-                    {% if month_price %}
-                    <form method="POST" action="{{ url_for('me_renew', vehicle_id=v['id']) }}" class="stack-form renew-box" data-price="{{ month_price }}">
-                        <div class="field">
-                            <label>Số tháng thuê (tối đa {{ max_months }})</label>
-                            <input type="number" name="months" min="1" max="{{ max_months }}" value="1" inputmode="numeric" required class="months-input">
-                        </div>
-                        <div class="callout">Giá {{ month_price|vnd }}/tháng · Thành tiền: <strong class="total-out">{{ month_price|vnd }}</strong></div>
-                        {% if active %}<p class="hint">Vé còn hạn đến {{ v['expires_on']|vdate }} — thời gian thuê thêm sẽ được nối tiếp sau ngày này.</p>{% endif %}
-                        <button type="submit" class="btn btn-green block">Gia hạn</button>
-                    </form>
-                    {% else %}
-                    <p class="hint pad">Bảng giá chưa có giá vé tháng cho loại xe này. Vui lòng liên hệ nhân viên.</p>
-                    {% endif %}
-                </details>
-
-                <details class="fold">
-                    <summary>✏️ Đổi biển số</summary>
-                    <form method="POST" action="{{ url_for('me_change_plate', vehicle_id=v['id']) }}" class="stack-form"
-                          onsubmit="return confirm('Đổi biển số {{ v['plate_number'] }}? Bạn chỉ có tối đa {{ max_changes }} lần đổi.');">
-                        <div class="field">
-                            <label>Biển số mới</label>
-                            <input type="text" name="plate" placeholder="Ví dụ: 29A-123.45" autocapitalize="characters" autocomplete="off" required {{ 'disabled' if plate_left <= 0 }}>
-                        </div>
-                        {% if plate_left <= 0 %}
-                        <div class="callout warn">Bạn đã dùng hết {{ max_changes }} lần đổi biển số. Vui lòng liên hệ nhân viên nếu cần đổi thêm.</div>
-                        {% else %}
-                        <p class="hint">Xe đang gửi trong bãi thì chưa đổi được. Mỗi lần đổi tính vào tổng {{ max_changes }} lần của tài khoản.</p>
-                        {% endif %}
-                        <button type="submit" class="btn btn-navy block" {{ 'disabled' if plate_left <= 0 }}>Đổi biển số</button>
-                    </form>
-                </details>
-            </div>
-            {% endfor %}
-            {% else %}
-            <div class="callout">Bạn chưa đăng ký xe nào. Hãy đăng ký ở mục bên dưới.</div>
-            {% endif %}
-        </div>
-    </section>
-
-    <!-- ============ ĐĂNG KÝ THÊM BIỂN SỐ ============ -->
-    <section class="panel" id="add">
-        <div class="panel-head">
-            <div>
-                <h2>➕ Đăng ký thêm biển số</h2>
-                <p>Thêm xe mới vào tài khoản của bạn</p>
-            </div>
-        </div>
-        <div class="panel-body">
-            {% set pf = prefill or {} %}
-            <form method="POST" action="{{ url_for('me_add_vehicle') }}" class="stack-form" id="add-form">
-                <div class="field">
-                    <label for="plate">Biển số</label>
-                    <input type="text" id="plate" name="plate" value="{{ pf.get('plate', '') }}" placeholder="Ví dụ: 29A-123.45" autocapitalize="characters" autocomplete="off" required>
-                </div>
-                <div class="field">
-                    <label for="vehicle_type_id">Loại xe</label>
-                    <select id="vehicle_type_id" name="vehicle_type_id" required>
-                        <option value="">— Chọn loại xe —</option>
-                        {% for t in vehicle_types %}
-                        <option value="{{ t['id'] }}" {{ 'selected' if pf.get('type')|string == t['id']|string }}>{{ t['name'] }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field">
-                    <label for="ticket_type">Loại vé</label>
-                    <select id="ticket_type" name="ticket_type">
-                        {% for k, label in ticket_labels.items() %}
-                        <option value="{{ k }}" {{ 'selected' if pf.get('ticket', 'turn') == k }}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="field" id="months-field" hidden>
-                    <label for="months">Số tháng thuê (tối đa {{ max_months }})</label>
-                    <input type="number" id="months" name="months" min="1" max="{{ max_months }}" value="{{ pf.get('months', '1') }}" inputmode="numeric">
-                </div>
-                <div class="callout" id="add-price" hidden></div>
-                <button type="submit" class="btn btn-green block">Đăng ký xe</button>
-            </form>
-        </div>
-    </section>
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>Cài đặt tài khoản cá nhân</h1>
+    <p>Quản lý bảo mật tài khoản, đăng ký thêm xe, đổi biển số và gia hạn vé tháng trực tuyến</p>
+  </div>
 </div>
 
-<script>
-(function () {
-    var PRICES = {{ price_info|tojson }};
-    function vnd(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' đ'; }
+<div class="dashboard-bottom" id="password">
+  <section class="panel settings-panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Thông tin tài khoản</h2>
+        <p>Hồ sơ chủ phương tiện trên hệ thống Smart Parking</p>
+      </div>
+    </div>
 
-    // Gia hạn: cập nhật thành tiền theo số tháng
-    document.querySelectorAll('.renew-box').forEach(function (box) {
-        var price = Number(box.dataset.price), input = box.querySelector('.months-input'), out = box.querySelector('.total-out');
-        input.addEventListener('input', function () { out.textContent = vnd(price * (Number(input.value) || 0)); });
-    });
+    <div class="detail-grid">
+      <div><span>Tên đăng nhập</span><b>{{ me.username }}</b></div>
+      <div><span>Họ và tên</span><b>{{ me.fullname }}</b></div>
+      <div><span>Lượt đổi mật khẩu còn lại</span><b>{{ max_changes - (me.password_changes or 0) }} / {{ max_changes }} lần</b></div>
+      <div><span>Lượt tự đổi biển số còn lại</span><b>{{ max_changes - (me.plate_changes or 0) }} / {{ max_changes }} lần</b></div>
+    </div>
+  </section>
 
-    // Đăng ký thêm: hiện ô số tháng + giá theo loại xe / loại vé
-    var type = document.getElementById('vehicle_type_id'), ticket = document.getElementById('ticket_type'),
-        monthsField = document.getElementById('months-field'), months = document.getElementById('months'),
-        priceBox = document.getElementById('add-price');
-    function refresh() {
-        var isMonth = ticket.value === 'month';
-        monthsField.hidden = !isMonth;
-        var info = PRICES[type.value];
-        if (!info) { priceBox.hidden = true; return; }
-        priceBox.hidden = false;
-        if (isMonth) {
-            priceBox.textContent = info.month == null
-                ? 'Bảng giá chưa có giá vé tháng cho loại xe này — hãy chọn vé lượt.'
-                : 'Giá ' + vnd(info.month) + '/tháng · Thành tiền: ' + vnd(info.month * (Number(months.value) || 0));
-        } else if (info.turn && info.turn.length) {
-            priceBox.textContent = 'Giá vé lượt: ' + info.turn.map(function (t) { return t.name + ' ' + vnd(t.amount); }).join(' · ');
-        } else {
-            priceBox.textContent = 'Chưa có giá vé lượt cho loại xe này.';
-        }
-    }
-    type.addEventListener('change', refresh); ticket.addEventListener('change', refresh); months.addEventListener('input', refresh);
-    refresh();
+  <form method="POST" action="{{ url_for('me_password') }}" class="panel settings-panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Đổi mật khẩu đăng nhập</h2>
+        <p>Bảo vệ tài khoản của bạn bằng mật khẩu mạnh</p>
+      </div>
+    </div>
 
-    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
-})();
-</script>
-</body>
-</html>
+    <div class="form-grid" style="grid-template-columns: 1fr;">
+      <div class="form-field">
+        <label for="current_password">Mật khẩu hiện tại *</label>
+        <input type="password" id="current_password" name="current_password" required placeholder="Nhập mật khẩu đang dùng">
+      </div>
+
+      <div class="form-field">
+        <label for="new_password">Mật khẩu mới *</label>
+        <input type="password" id="new_password" name="new_password" required placeholder="Nhập mật khẩu mới">
+      </div>
+
+      <div class="form-field">
+        <label for="confirm_password">Xác nhận mật khẩu mới *</label>
+        <input type="password" id="confirm_password" name="confirm_password" required placeholder="Nhập lại mật khẩu mới">
+      </div>
+    </div>
+
+    <div class="settings-footer">
+      <button type="submit" class="btn btn-primary">Cập nhật mật khẩu</button>
+    </div>
+  </form>
+</div>
+
+<!-- DANH SÁCH XE ĐÃ ĐĂNG KÝ -->
+<section class="panel data-panel" id="vehicles" style="margin-bottom: 18px;">
+  <div class="panel-heading">
+    <h2>Phương tiện đã đăng ký <span class="count-pill">{{ vehicles|length }}</span></h2>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Biển số</th>
+          <th>Loại xe</th>
+          <th>Loại vé</th>
+          <th>Thời hạn vé tháng</th>
+          <th>Gia hạn vé tháng</th>
+          <th>Đổi biển số</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if vehicles %}
+          {% for v in vehicles %}
+            {% set expired = v.ticket_type == 'month' and v.expires_on and v.expires_on < today %}
+            <tr>
+              <td><span class="plate">{{ v.plate_number }}</span></td>
+              <td><b>{{ v.vehicle_type_name or '—' }}</b></td>
+              <td>
+                {% if v.ticket_type == 'month' and not expired %}
+                  <span class="badge badge-green"><span></span>Vé tháng</span>
+                {% elif expired %}
+                  <span class="badge badge-red"><span></span>Hết hạn</span>
+                {% else %}
+                  <span class="badge badge-blue"><span></span>Vé lượt</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if v.expires_on %}
+                  {{ v.start_on|vdate }} → <b>{{ v.expires_on|vdate }}</b>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                <form method="POST" action="{{ url_for('me_renew', vehicle_id=v.id) }}" style="display:flex;gap:6px;align-items:center;">
+                  <input type="number" name="months" min="1" max="{{ max_months }}" value="1" style="width:68px;height:34px;padding:4px 8px;">
+                  <button type="submit" class="btn btn-outline">Gia hạn</button>
+                </form>
+              </td>
+              <td>
+                <form method="POST" action="{{ url_for('me_change_plate', vehicle_id=v.id) }}" style="display:flex;gap:6px;align-items:center;">
+                  <input type="text" name="plate" placeholder="Biển số mới" required style="width:120px;height:34px;padding:4px 8px;">
+                  <button type="submit" class="btn btn-outline">Đổi</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="6" class="empty-cell">Chưa có phương tiện nào được đăng ký.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ĐĂNG KÝ THÊM XE MỚI -->
+<section class="panel settings-panel">
+  <div class="panel-heading">
+    <div>
+      <h2>Đăng ký thêm phương tiện mới</h2>
+      <p>Thêm xe mới vào tài khoản của bạn</p>
+    </div>
+  </div>
+
+  <form method="POST" action="{{ url_for('me_add_vehicle') }}" class="form-grid" style="grid-template-columns:1.2fr 1fr 1fr 1fr auto;align-items:end;">
+    <div class="form-field">
+      <label>Biển số xe *</label>
+      <input type="text" name="plate" value="{{ prefill.plate if prefill else '' }}" required placeholder="VD: 59A1-12345">
+    </div>
+    <div class="form-field">
+      <label>Loại xe *</label>
+      <select name="vehicle_type_id" required>
+        {% for vt in vehicle_types %}
+          <option value="{{ vt.id }}">{{ vt.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-field">
+      <label>Loại vé</label>
+      <select name="ticket_type">
+        {% for code, label in ticket_labels.items() %}
+          <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-field">
+      <label>Số tháng (nếu vé tháng)</label>
+      <input type="number" name="months" min="1" max="{{ max_months }}" value="1">
+    </div>
+    <div>
+      <button type="submit" class="btn btn-primary">Đăng ký xe</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

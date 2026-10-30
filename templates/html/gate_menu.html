@@ -1,38 +1,224 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xe vào / ra - Smart Parking</title>
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='gate.css') }}">
-</head>
-<body>
-<main class="wrap gate-menu">
-    <header class="topbar">
-        <div class="topbar-left">
-            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại trang chủ">←</a>
-            <div><h1>🚗 Xe vào / ra</h1><p>Chọn chiều xử lý, sau đó nhận diện biển số từ ảnh hoặc camera.</p></div>
-        </div>
-        <div class="user-chip">
-            <span class="avatar">{{ (current_user_fullname or '?')[:1]|upper }}</span>
-            <span><strong>{{ current_user_fullname }}</strong><small>{{ role_label }}</small></span>
-        </div>
-    </header>
-    <div class="gate-choices">
-        <a class="gate-choice gate-choice-entry" href="{{ url_for('entry') }}">
-            <span class="gate-choice-icon" aria-hidden="true">📥</span>
-            <h2>Xe vào</h2>
-            <p>Nhận diện biển số, chọn loại xe và vị trí đỗ để ghi nhận xe vào bãi.</p>
-            <span class="gate-choice-action">Tiếp nhận xe vào →</span>
-        </a>
-        <a class="gate-choice gate-choice-exit" href="{{ url_for('exit_gate') }}">
-            <span class="gate-choice-icon" aria-hidden="true">📤</span>
-            <h2>Xe ra</h2>
-            <p>Nhận diện biển số, kiểm tra lượt gửi và tính phí trước khi xác nhận xe ra.</p>
-            <span class="gate-choice-action">Làm thủ tục xe ra →</span>
-        </a>
+{% extends "_layout.html" %}
+{% set active_page = 'gate' %}
+{% set occ_rate = ((counts.occupied * 100 / counts.total)|round|int) if counts and counts.total else 0 %}
+
+{% block title %}Giám sát vào / ra — Smart Parking{% endblock %}
+{% block breadcrumb %}Giám sát vào / ra{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/gate.css">
+{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>
+      Giám sát vào / ra
+      <span class="simulation-label">
+        <span class="live-dot"></span>
+        TRỰC TUYẾN · AI OCR
+      </span>
+    </h1>
+    <p>Màn hình trực nhân viên cổng: camera nhận diện biển số, chọn làn, đối chiếu vé và điều khiển barrier</p>
+  </div>
+  <div class="heading-actions">
+    <span class="live-clock" id="gate-live-clock">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Đang đồng bộ...</span>
+    </span>
+    <a href="{{ url_for('parking') }}" class="btn btn-outline">Sơ đồ bãi đỗ xe</a>
+    <a href="{{ url_for('history') }}" class="btn btn-outline">Lịch sử vào / ra</a>
+  </div>
+</div>
+
+<div class="monitor-summary">
+  <div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+    <div>
+      <span>Tổng sức chứa</span>
+      <strong>{{ counts.total if counts else 0 }} chỗ</strong>
+      <small>{% if area_stats %}{{ area_stats|length }} phân khu đang vận hành{% else %}Hệ thống bãi đỗ xe{% endif %}</small>
     </div>
-</main>
-</body>
-</html>
+  </div>
+  <div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+    <div>
+      <span>Đang trong bãi</span>
+      <strong>{{ counts.occupied if counts else 0 }} xe</strong>
+      <small>Chiếm {{ occ_rate }}% công suất</small>
+    </div>
+  </div>
+  <div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+    <div>
+      <span>Sẵn sàng tiếp nhận</span>
+      <strong>{{ counts.available if counts else 0 }} chỗ trống</strong>
+      <small>Bảo trì: {{ counts.maintenance if counts else 0 }} vị trí</small>
+    </div>
+  </div>
+  <div class="monitor-area-summary">
+    {% if area_stats %}
+      {% for area_name, a in area_stats.items() %}
+        <span>Khu {{ area_name }}: <b>{{ a.available }} trống</b></span>
+      {% endfor %}
+    {% else %}
+      <span>Trạng thái cổng: <b>Trực tuyến · Sẵn sàng</b></span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="lanes-grid">
+  <section class="panel lane-panel">
+    <div class="lane-heading">
+      <div>
+        <span class="lane-icon entry">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+        </span>
+        <div>
+          <h2>Làn vào — Cổng vào chính</h2>
+          <p>Camera AI nhận diện biển số &amp; kiểm tra điều kiện vào bãi</p>
+        </div>
+      </div>
+      <span class="badge badge-green"><span></span>Hoạt động</span>
+    </div>
+
+    <div class="camera-frame">
+      <div class="camera-photo entry-photo"></div>
+      <div class="camera-top">
+        <span><i class="live-dot"></i>CAM-IN-01 · 1080p · 30fps</span>
+        <span>AI OCR: 98.8%</span>
+      </div>
+      <div class="scan-corners">
+        <i></i><i></i><i></i><i></i>
+      </div>
+      <div class="camera-timestamp">CỔNG VÀO CHÍNH · SẴN SÀNG QUÉT BIỂN SỐ</div>
+      <div class="camera-bottom">
+        <div>
+          <small>TRẠNG THÁI NHẬN DIỆN</small>
+          <strong class="plate">XE VÀO BÃI</strong>
+        </div>
+        <span class="badge badge-blue"><span></span>Camera &amp; Tải ảnh</span>
+      </div>
+    </div>
+
+    <div class="lane-content">
+      <div class="capture-details">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+          <span>Nguồn: <b>Webcam trực tiếp / Tải ảnh</b></span>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+          <span>Chỗ trống: <b>{{ counts.available if counts else 0 }} ô sẵn sàng</b></span>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>
+          <span>Đối chiếu: <b>Tự động kiểm tra vé tháng</b></span>
+        </div>
+      </div>
+
+      <div class="barrier-strip">
+        <div>
+          <span>Barrier làn vào</span>
+          <b>Sẵn sàng đón xe vào bãi</b>
+        </div>
+        <span class="badge badge-green"><span></span>Trực tuyến</span>
+      </div>
+
+      <div class="lane-actions" style="grid-template-columns: 1fr;">
+        <a href="/entry" class="btn btn-primary" style="width:100%;justify-content:center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          Mở Cổng Xe Vào Bãi
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel lane-panel">
+    <div class="lane-heading">
+      <div>
+        <span class="lane-icon exit">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+        <div>
+          <h2>Làn ra — Cổng ra chính</h2>
+          <p>Đối chiếu lượt vào, tự động tính phí và xác nhận thanh toán</p>
+        </div>
+      </div>
+      <span class="badge badge-green"><span></span>Hoạt động</span>
+    </div>
+
+    <div class="camera-frame">
+      <div class="camera-photo exit-photo"></div>
+      <div class="camera-top">
+        <span><i class="live-dot"></i>CAM-OUT-01 · 1080p · 30fps</span>
+        <span>AI OCR: 99.1%</span>
+      </div>
+      <div class="scan-corners">
+        <i></i><i></i><i></i><i></i>
+      </div>
+      <div class="camera-timestamp">CỔNG RA CHÍNH · ĐỐI CHIẾU LƯỢT GỬI &amp; TÍNH PHÍ</div>
+      <div class="camera-bottom">
+        <div>
+          <small>TRẠNG THÁI NHẬN DIỆN</small>
+          <strong class="plate">XE RA BÃI</strong>
+        </div>
+        <span class="badge badge-green"><span></span>Tính phí tự động</span>
+      </div>
+    </div>
+
+    <div class="lane-content">
+      <div class="capture-details">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+          <span>Xe trong bãi: <b>{{ open_records|length if open_records is defined else (counts.occupied if counts else 0) }} lượt đang mở</b></span>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Biểu phí: <b>Tự động theo khung giờ</b></span>
+        </div>
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+          <span>Vé tháng: <b>Miễn phí lượt ra tự động</b></span>
+        </div>
+      </div>
+
+      <div class="payment-strip">
+        <div>
+          <span>Chế độ thanh toán tại cổng ra</span>
+          <strong>Tự động đối chiếu</strong>
+          <small>Áp dụng vé tháng hoặc tính phí theo ca gửi thực tế</small>
+        </div>
+        <span class="badge badge-blue"><span></span>Minh bạch</span>
+      </div>
+
+      <div class="lane-actions" style="grid-template-columns: 1fr;">
+        <a href="/exit" class="btn btn-primary" style="width:100%;justify-content:center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          Mở Cổng Xe Ra Bãi
+        </a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="info-banner">
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+  <span>
+    Mọi thao tác xác nhận xe vào / ra đều tự động cập nhật sơ đồ ô đỗ, lưu ảnh đối chiếu biển số và ghi nhận doanh thu theo thời gian thực.
+  </span>
+</div>
+
+<script>
+  (function () {
+    var el = document.getElementById('gate-live-clock');
+    if (!el) return;
+    var span = el.querySelector('span');
+    function tick() {
+      var now = new Date();
+      span.textContent = now.toLocaleTimeString('vi-VN') + ' · ' + now.toLocaleDateString('vi-VN');
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+</script>
+{% endblock %}

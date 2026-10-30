@@ -1,199 +1,253 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Người dùng - Smart Parking</title>
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='users.css') }}">
-</head>
-<body>
-<div class="wrap">
+{% extends "_layout.html" %}
+{% set active_page = 'users' %}
+{% set is_admin = (current_user_role == 'admin') %}
+{% set active_users = users|selectattr('status', 'equalto', 'active')|list|length %}
 
-    <!-- ============ TIÊU ĐỀ ============ -->
-    <header class="topbar">
-        <div class="topbar-left">
-            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
-            <div>
-                <h1>Người dùng</h1>
-                <p>Quản lý tài khoản sử dụng hệ thống{% if session.get('role') != 'admin' %} (nhân viên chỉ quản lý tài khoản người dùng){% endif %}</p>
-            </div>
-        </div>
-        <div class="topbar-right">
-            <div class="user-chip">
-                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
-                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
-            </div>
-        </div>
-    </header>
+{% block title %}Quản lý người dùng & phương tiện — Smart Parking{% endblock %}
+{% block breadcrumb %}Người dùng &amp; xe{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/users.css">
+{% endblock %}
 
-    <!-- ============ THÔNG BÁO ============ -->
-    {% if not open_modal %}
-    <div class="toasts" id="toasts">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-            <div class="toast toast-{{ category }}" role="status">
-                <span>{{ message }}</span>
-                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
-            </div>
-            {% endfor %}
-        {% endwith %}
-    </div>
-    {% endif %}
-
-    <!-- ============ SỐ LIỆU NHANH ============ -->
-    <section class="stats">
-        <div class="stat"><span class="stat-icon blue">👥</span><div><b>{{ users|length }}</b><small>Tổng người dùng</small></div></div>
-        <div class="stat"><span class="stat-icon green">✓</span><div><b>{{ users|selectattr('status','equalto','active')|list|length }}</b><small>Đang hoạt động</small></div></div>
-        <div class="stat"><span class="stat-icon red">🔒</span><div><b>{{ users|selectattr('status','equalto','locked')|list|length }}</b><small>Đã khóa</small></div></div>
-    </section>
-
-    <!-- ============ DANH SÁCH ============ -->
-    <section class="panel">
-        <div class="panel-toolbar">
-            <div>
-                <strong class="panel-title">Danh sách người dùng</strong>
-                <p class="muted">Thông tin các tài khoản trong hệ thống · {{ users|length }} người dùng</p>
-            </div>
-            <button id="add-user-button" class="btn btn-green" type="button">＋ Thêm tài khoản</button>
-        </div>
-
-        <div class="table-wrap">
-            <table class="data">
-                <thead>
-                    <tr>
-                        <th class="c-stt">STT</th><th>Tài khoản</th><th>Họ tên</th>
-                        <th>Vai trò</th><th>Xe &amp; vé đăng ký</th><th>Trạng thái</th><th class="c-act">Thao tác</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for u in users %}
-                    <tr>
-                        <td class="c-stt" data-label="STT"><span class="stt">{{ loop.index }}</span></td>
-                        <td data-label="Tài khoản"><strong>{{ u['username'] }}</strong></td>
-                        <td data-label="Họ tên">{{ u['fullname'] }}</td>
-                        <td data-label="Vai trò">
-                            <span class="badge {{ 'badge-amber' if u['role'] == 'admin' else ('badge-turn' if u['role'] == 'manager' else 'badge-gray') }}">
-                                {% if u['role'] == 'admin' %}Quản trị viên
-                                {% elif u['role'] == 'manager' %}Nhân viên
-                                {% else %}Người dùng{% endif %}
-                            </span>
-                        </td>
-                        <td data-label="Xe &amp; vé">
-                            {% set vs = vehicles_by_user.get(u['id'], []) %}
-                            {% if u['role'] != 'user' %}
-                                <span class="muted">—</span>
-                            {% elif vs %}
-                                <div class="chip-list">
-                                {% for v in vs %}
-                                <span class="plate-chip {{ 'chip-month' if v['ticket_type'] == 'month' else '' }}"
-                                      title="{{ v['vehicle_type_name'] or '' }} · {{ ticket_labels.get(v['ticket_type'], '') }}{% if v['expires_on'] %} · đến {{ v['expires_on']|vdate }}{% if v['months'] %} ({{ v['months'] }} tháng){% endif %}{% endif %}">
-                                    {{ v['plate_number'] }} · {{ 'Tháng' if v['ticket_type'] == 'month' else 'Lượt' }}
-                                </span>
-                                {% endfor %}
-                                </div>
-                            {% else %}
-                                <span class="muted">Chưa đăng ký</span>
-                            {% endif %}
-                        </td>
-                        <td data-label="Trạng thái">
-                            <span class="badge {{ 'badge-green' if u['status'] == 'active' else 'badge-red' }}">
-                                {{ 'Hoạt động' if u['status'] == 'active' else 'Đã khóa' }}
-                            </span>
-                        </td>
-                        <td class="c-act" data-label="Thao tác">
-                            <div class="actions">
-                                <a href="{{ url_for('edit_user', user_id=u['id']) }}" class="btn btn-edit btn-link">✎ Sửa</a>
-                                {% if session.get('role') == 'admin' and u['username'] != 'admin' %}
-                                <form method="POST" action="{{ url_for('toggle_user', user_id=u['id']) }}" class="inline-form">
-                                    <button type="submit" class="btn btn-soft btn-sm">{{ '🔒 Khóa' if u['status'] == 'active' else '🔓 Mở khóa' }}</button>
-                                </form>
-                                <form method="POST" action="{{ url_for('remove_user', user_id=u['id']) }}" class="inline-form"
-                                      onsubmit="return confirm('Xóa tài khoản {{ u['username'] }}?');">
-                                    <button type="submit" class="btn btn-del">🗑 Xóa</button>
-                                </form>
-                                {% endif %}
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </section>
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>Khách hàng &amp; Phương tiện</h1>
+    <p>Quản lý tài khoản khách hàng, nhân viên vận hành và danh sách biển số đăng ký vé tháng</p>
+  </div>
+  <div class="heading-actions">
+    <button type="button" class="btn btn-primary" id="open-add-user">+ Tạo tài khoản mới</button>
+  </div>
 </div>
 
-    <!-- FORM THÊM TÀI KHOẢN -->
-    <div id="user-modal" class="modal {{ '' if open_modal else 'hidden' }}">
-        <div class="modal-box modal-wide">
-            <div class="modal-header">
-                <div>
-                    <h2>Thêm tài khoản</h2>
-                    <p>Nhập thông tin tài khoản mới{% if session.get('role') != 'admin' %} (loại: Người dùng){% endif %}</p>
-                </div>
-                <button id="close-modal" type="button" class="close-modal">×</button>
-            </div>
+<div class="stats-grid three">
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Tổng số tài khoản</span>
+      <span class="stat-icon blue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </span>
+    </div>
+    <strong>{{ users|length }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Trong phạm vi quản lý
+    </div>
+  </div>
 
-            {% if open_modal %}
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% for category, message in messages %}
-                    <p class="flash-inline {{ 'flash-error' if category == 'error' else 'flash-ok' }}">{{ message }}</p>
-                {% endfor %}
-            {% endwith %}
-            {% endif %}
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Đang hoạt động</span>
+      <span class="stat-icon green">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+      </span>
+    </div>
+    <strong>{{ active_users }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Cho phép đăng nhập hệ thống
+    </div>
+  </div>
 
-            <form method="POST" action="{{ url_for('add_user') }}">
-                <div class="form-group">
-                    <label for="username">Tên đăng nhập</label>
-                    <input type="text" id="username" name="username" required placeholder="Ví dụ: nguyenvana"
-                           value="{{ (form or {}).get('username', '') }}">
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Loại phương tiện hỗ trợ</span>
+      <span class="stat-icon purple">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+      </span>
+    </div>
+    <strong>{{ vehicle_types|length }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Đăng ký vé lượt / vé tháng
+    </div>
+  </div>
+</div>
+
+<section class="panel data-panel">
+  <div class="panel-heading">
+    <h2>Danh sách tài khoản <span class="count-pill">{{ users|length }}</span></h2>
+  </div>
+
+  <div class="table-toolbar">
+    <div class="search-input">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" placeholder="Tìm theo họ tên, tài khoản, biển số xe..." data-table-search>
+    </div>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Người dùng</th>
+          <th>Tài khoản</th>
+          <th>Vai trò</th>
+          <th>Phương tiện đăng ký</th>
+          <th>Trạng thái</th>
+          <th class="right">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if users %}
+          {% for u in users %}
+            <tr>
+              <td>
+                <div class="person-cell">
+                  <div class="mini-avatar">{{ (u.fullname or u.username)[:2]|upper }}</div>
+                  <div>
+                    <b>{{ u.fullname }}</b>
+                    <small>ID: #{{ u.id }}</small>
+                  </div>
                 </div>
-                <div class="form-group">
-                    <label for="fullname">Họ và tên</label>
-                    <input type="text" id="fullname" name="fullname" required placeholder="Nguyễn Văn A"
-                           value="{{ (form or {}).get('fullname', '') }}">
-                </div>
-                {% if session.get('role') == 'admin' %}
-                <div class="form-group">
-                    <label for="role">Vai trò</label>
-                    <select id="role" name="role">
-                        <option value="user" {{ 'selected' if (form or {}).get('role', 'user') == 'user' }}>Người dùng</option>
-                        <option value="manager" {{ 'selected' if (form or {}).get('role') == 'manager' }}>Nhân viên</option>
-                    </select>
-                </div>
+              </td>
+              <td><b>{{ u.username }}</b></td>
+              <td>
+                {% if u.role == 'admin' %}
+                  <span class="badge badge-amber"><span></span>Quản trị viên</span>
+                {% elif u.role == 'manager' %}
+                  <span class="badge badge-blue"><span></span>Nhân viên</span>
                 {% else %}
-                <input type="hidden" id="role" name="role" value="user">
+                  <span class="badge badge-green"><span></span>Khách hàng</span>
                 {% endif %}
-                <div class="form-group">
-                    <label for="password">Mật khẩu</label>
-                    <input type="password" id="password" name="password" required minlength="4" placeholder="Tối thiểu 4 ký tự">
+              </td>
+              <td>
+                {% set u_vehicles = vehicles_by_user.get(u.id, []) %}
+                {% if u_vehicles %}
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    {% for v in u_vehicles %}
+                      {% set expired = v.ticket_type == 'month' and v.expires_on and v.expires_on < today %}
+                      <span class="plate" title="{{ v.vehicle_type_name or '' }} · {{ ticket_labels.get(v.ticket_type, '') }}{% if v.expires_on %} (đến {{ v.expires_on|vdate }}){% endif %}">
+                        {{ v.plate_number }}
+                        {% if v.ticket_type == 'month' and not expired %}★{% elif expired %}!{% endif %}
+                      </span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span style="color:#8596b2;font-size:12px;">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if u.status == 'active' %}
+                  <span class="badge badge-green"><span></span>Hoạt động</span>
+                {% else %}
+                  <span class="badge badge-red"><span></span>Đã khóa</span>
+                {% endif %}
+              </td>
+              <td class="right">
+                <div class="row-actions">
+                  <a href="{{ url_for('edit_user', user_id=u.id) }}" class="btn btn-outline">Chi tiết / Sửa</a>
+                  {% if is_admin and u.username != 'admin' %}
+                    <form method="POST" action="{{ url_for('toggle_user', user_id=u.id) }}">
+                      <button type="submit" class="btn btn-outline">
+                        {{ 'Khóa' if u.status == 'active' else 'Mở khóa' }}
+                      </button>
+                    </form>
+                    <form method="POST" action="{{ url_for('remove_user', user_id=u.id) }}" onsubmit="return confirm('Xóa tài khoản {{ u.username }}?');">
+                      <button type="submit" class="btn btn-danger">Xóa</button>
+                    </form>
+                  {% endif %}
                 </div>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="6" class="empty-cell">Chưa có tài khoản người dùng nào.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
 
-                <div id="vehicle-block" class="form-group">
-                    <label>Đăng ký xe &amp; loại vé <small class="muted">(tùy chọn — nhận diện từ ảnh hoặc nhập tay)</small></label>
-                    {% include '_vehicle_rows.html' %}
-                </div>
+  <div class="pagination">
+    <span>Hiển thị <b>{{ 1 if users else 0 }}-{{ users|length }}</b> trên <b>{{ users|length }}</b> tài khoản</span>
+    <div>
+      <span class="current-page">1 / 1</span>
+    </div>
+  </div>
+</section>
 
-                <div class="modal-actions">
-                    <button type="button" id="cancel-button" class="cancel-button">Hủy</button>
-                    <button type="submit" class="save-button">Lưu tài khoản</button>
-                </div>
-            </form>
-        </div>
+<!-- DIALOG THÊM NGƯỜI DÙNG MỚI -->
+<dialog id="add-user-dialog" class="dialog-wide" {% if open_modal %}open{% endif %}>
+  <form method="POST" action="{{ url_for('add_user') }}" class="dialog-content">
+    <div class="dialog-header">
+      <div>
+        <h3>Tạo tài khoản người dùng mới</h3>
+        <p>Nhập thông tin tài khoản và phương tiện đăng ký ban đầu</p>
+      </div>
+      <button type="button" class="dialog-close" id="close-add-user">×</button>
     </div>
 
-    <script>
-        setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
-        // JS chỉ dùng để ẩn/hiện form — dữ liệu gửi qua form POST thật.
-        const modal = document.getElementById('user-modal');
-        const roleField = document.getElementById('role');
-        const vehicleBlock = document.getElementById('vehicle-block');
-        function syncRole() { vehicleBlock.style.display = roleField.value === 'user' ? '' : 'none'; }
-        roleField.addEventListener('change', syncRole);
+    <div class="form-grid">
+      <div class="form-field">
+        <label for="new-username">Tên đăng nhập *</label>
+        <input type="text" id="new-username" name="username" value="{{ form.username if form else '' }}" required placeholder="VD: nguyenvana">
+      </div>
+      <div class="form-field">
+        <label for="new-password">Mật khẩu khởi tạo *</label>
+        <input type="password" id="new-password" name="password" required placeholder="Nhập mật khẩu">
+      </div>
+      <div class="form-field">
+        <label for="new-fullname">Họ và tên *</label>
+        <input type="text" id="new-fullname" name="fullname" value="{{ form.fullname if form else '' }}" required placeholder="VD: Nguyễn Văn A">
+      </div>
+      <div class="form-field">
+        <label for="new-role">Vai trò trong hệ thống</label>
+        <select id="new-role" name="role">
+          <option value="user" {% if not form or form.role == 'user' %}selected{% endif %}>Người dùng (Chủ phương tiện)</option>
+          {% if is_admin %}
+            <option value="manager" {% if form and form.role == 'manager' %}selected{% endif %}>Nhân viên vận hành</option>
+          {% endif %}
+        </select>
+      </div>
+    </div>
+
+    <div id="new-user-vehicles-section" style="margin-top: 16px;">
+      <h4 style="margin:0 0 10px;font-size:13px;font-weight:650;color:#10244b;">Phương tiện đăng ký (Dành cho Người dùng)</h4>
+      {% include '_vehicle_rows.html' %}
+    </div>
+
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-outline" id="cancel-add-user">Hủy</button>
+      <button type="submit" class="btn btn-primary">Tạo tài khoản</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    var dlg = document.getElementById('add-user-dialog');
+    var openBtn = document.getElementById('open-add-user');
+    var closeBtn = document.getElementById('close-add-user');
+    var cancelBtn = document.getElementById('cancel-add-user');
+    var roleSel = document.getElementById('new-role');
+    var vehSec = document.getElementById('new-user-vehicles-section');
+
+    function syncRole() {
+      if (roleSel && vehSec) {
+        vehSec.hidden = (roleSel.value !== 'user');
+      }
+    }
+    if (roleSel) roleSel.addEventListener('change', syncRole);
+    syncRole();
+
+    if (openBtn && dlg) {
+      openBtn.addEventListener('click', function () {
         syncRole();
-        document.getElementById('add-user-button').addEventListener('click', () => modal.classList.remove('hidden'));
-        document.getElementById('close-modal').addEventListener('click', () => modal.classList.add('hidden'));
-        document.getElementById('cancel-button').addEventListener('click', () => modal.classList.add('hidden'));
-    </script>
-</body>
-</html>
+        if (typeof dlg.showModal === 'function') dlg.showModal();
+        else dlg.setAttribute('open', '');
+      });
+    }
+    function close() {
+      if (!dlg) return;
+      if (typeof dlg.close === 'function') dlg.close();
+      else dlg.removeAttribute('open');
+    }
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    if (cancelBtn) cancelBtn.addEventListener('click', close);
+  })();
+</script>
+{% endblock %}

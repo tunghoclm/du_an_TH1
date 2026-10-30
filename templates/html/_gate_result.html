@@ -1,120 +1,144 @@
-            <div class="field">
-                <label for="plate">Biển số vừa nhận diện được:</label>
-                <input type="text" id="plate" name="plate" value="{{ plate }}" placeholder="Chưa nhận diện" autocomplete="off">
-                {% if token %}
-                <p class="field-hint">Nhận diện sai? Sửa lại biển số rồi bấm <strong>Cập nhật biển số</strong> để kiểm tra lại thông tin trước khi xác nhận.</p>
-                {% endif %}
-            </div>
+<div class="gate-result-box">
+  {% if gate_error %}
+    <div class="flash error" style="margin:0;">
+      <span>{{ gate_error }}</span>
+    </div>
 
-            {% if gate_error %}
-            <div class="gate-error" role="alert">{{ gate_error }}</div>
+  {% elif mode == 'entry' %}
+    <div class="exit-info">
+      <div>
+        <span>Chiều xử lý</span>
+        <b><span class="badge badge-green"><span></span>XE VÀO BÃI</span></b>
+      </div>
+      <div>
+        <span>Biển số nhận diện</span>
+        <b><span class="plate">{{ plate }}</span></b>
+      </div>
+      {% if registered %}
+        <div>
+          <span>Chủ phương tiện</span>
+          <b>{{ registered.fullname }} ({{ registered.username }})</b>
+        </div>
+        <div>
+          <span>Loại vé đăng ký</span>
+          <b>
+            {% if reg_month_ok %}
+              <span class="badge badge-green"><span></span>Vé tháng (đến {{ registered.expires_on|vdate }})</span>
+            {% elif reg_expired %}
+              <span class="badge badge-red"><span></span>Hết hạn ({{ registered.expires_on|vdate }}) — Tính vé lượt</span>
+            {% else %}
+              <span class="badge badge-blue"><span></span>Vé lượt</span>
             {% endif %}
+          </b>
+        </div>
+      {% elif suggest %}
+        <div style="grid-column: 1 / -1;">
+          <span>Gợi ý biển số gần giống</span>
+          <b>{{ suggest.plate_number }} ({{ suggest.username }})</b>
+        </div>
+      {% endif %}
+    </div>
 
-            {% if registered %}
-            <div class="reg-info {{ 'reg-month' if reg_month_ok }}{{ ' reg-expired' if reg_expired }}">
-                ✅ <strong>Xe đã đăng ký</strong> — tài khoản <strong>{{ registered['fullname'] }}</strong> ({{ registered['username'] }})
-                · {{ registered['vehicle_type_name'] or 'chưa chọn loại xe' }}
-                · {{ 'Vé tháng' if registered['ticket_type'] == 'month' else 'Vé lượt' }}
-                {% if registered['ticket_type'] == 'month' %}
-                    · hết hạn {{ registered['expires_on'] }}
-                    {% if reg_month_ok %}<span class="reg-note">(còn hạn)</span>
-                    {% else %}<span class="reg-note">(ĐÃ HẾT HẠN — tính phí như vé lượt)</span>{% endif %}
+    <div class="form-grid">
+      <div class="form-field">
+        <label for="vehicle_type_id">Loại phương tiện</label>
+        {% if reg_type %}
+          <input type="hidden" name="vehicle_type_id" id="vehicle_type_id" value="{{ reg_type.id }}">
+          <input type="text" value="{{ reg_type.name }} (Đã đăng ký cố định)" disabled>
+        {% else %}
+          {% set selected_type = (form.get('vehicle_type_id')|int) if form and form.get('vehicle_type_id') else (type_options[0].id if type_options else 0) %}
+          <select id="vehicle_type_id" name="vehicle_type_id" required>
+            {% for t in type_options %}
+              <option value="{{ t.id }}" {% if t.id == selected_type %}selected{% endif %}>
+                {{ t.name }}
+                {% if t.price %}
+                  — {{ "{:,}".format(t.price.amount).replace(",", ".") }} VNĐ ({{ t.price.period_name }})
                 {% endif %}
-            </div>
-            {% elif suggest %}
-            <div class="reg-suggest">
-                💡 Biển số này gần giống xe đã đăng ký <strong>{{ suggest['plate_number'] }}</strong> (tài khoản {{ suggest['username'] }}).
-                Nếu đúng là xe đó, hãy sửa ô biển số rồi bấm <em>Cập nhật biển số</em>.
-            </div>
-            {% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        {% endif %}
+      </div>
 
-            {% if mode == 'exit' %}
-            <!-- ================= XE RA ================= -->
-            <div class="mode-panel mode-exit">
-                <div class="mode-title">🚪 XE RA BÃI — biển số <strong>{{ plate }}</strong> đang gửi trong bãi</div>
-                <table class="info-table">
-                    <tr><td>Loại xe</td><td>{{ record['vehicle_type_name'] or '—' }}</td></tr>
-                    <tr><td>Vị trí đỗ</td><td>{{ record['slot_name'] or '—' }}</td></tr>
-                    <tr><td>Giờ vào</td><td>{{ record['entry_time'].replace('T', ' ') }}</td></tr>
-                    <tr><td>Đã gửi</td><td>{{ fee_preview.duration }}</td></tr>
-                    <tr><td>Phí tạm tính</td><td><strong>{{ '{:,}'.format(fee_preview.fee).replace(',', '.') }} VNĐ</strong>
-                        <span class="muted">({{ fee_preview.note }})</span></td></tr>
-                    {% if record['note'] %}<tr><td>Ghi chú lúc vào</td><td>{{ record['note'] }}</td></tr>{% endif %}
-                </table>
-                <p class="field-hint">Phí được chốt lại tại thời điểm bấm Xác nhận.</p>
-            </div>
-
-            {% elif mode == 'entry' %}
-            <!-- ================= XE VÀO ================= -->
-            <div class="mode-panel mode-entry">
-                <div class="mode-title">🚗 XE VÀO BÃI — biển số <strong>{{ plate }}</strong> chưa có trong bãi</div>
-
-                {% if reg_type %}
-                <div class="field">
-                    <label>Loại xe:</label>
-                    <input type="hidden" name="vehicle_type_id" id="vehicle_type_id" value="{{ reg_type.id }}">
-                    <div class="reg-info">
-                        <strong>{{ reg_type.name }}</strong> (theo đăng ký của tài khoản)
-                        {% if reg_month_ok %}· vé tháng còn hạn, không tính phí lượt
-                        {% elif reg_type.price %}· {{ '{:,}'.format(reg_type.price.amount).replace(',', '.') }}đ/lượt (khung {{ reg_type.price.period_name }})
-                        {% else %}· <span class="reg-note">chưa có giá lúc {{ now.strftime('%H:%M') }}</span>
-                        {% endif %}
-                    </div>
-                </div>
-                {% else %}
-                <div class="field">
-                    <label for="vehicle_type_id">Loại xe:</label>
-                    <select name="vehicle_type_id" id="vehicle_type_id" class="vehicle-select" required>
-                        <option value="" disabled {{ 'selected' if not form.get('vehicle_type_id') }}>— Chọn loại xe —</option>
-                        {% for t in type_options %}
-                            {% if t.price or reg_month_ok %}
-                            <option value="{{ t.id }}" {{ 'selected' if form.get('vehicle_type_id') == t.id|string }}>{{ t.name }}{% if t.price %} — {{ '{:,}'.format(t.price.amount).replace(',', '.') }}đ/lượt (khung {{ t.price.period_name }}){% else %} — vé tháng{% endif %}</option>
-                            {% else %}
-                            <option value="{{ t.id }}" disabled>{{ t.name }} — chưa có giá lúc {{ now.strftime('%H:%M') }}</option>
-                            {% endif %}
-                        {% endfor %}
-                    </select>
-                    {% if not type_options %}
-                        <div class="no-slots-message">⚠️ Chưa có loại xe nào. Hãy nhờ nhân viên/admin tạo ở trang Giá xe.</div>
-                    {% endif %}
-                </div>
+      {% if entry_mode != 'auto' %}
+        <div class="form-field">
+          <label for="slot-name">Chọn vị trí ô đỗ trống</label>
+          {% if not no_slots %}
+            {% set chosen_slot = form.get('slot_name', '') if form else '' %}
+            <select id="slot-name" name="slot_name" required>
+              <option value="">-- Chọn vị trí ô đỗ --</option>
+              {% for area_name, area_slots in slots_by_area.items() %}
+                {% if area_slots %}
+                  <optgroup label="Khu {{ area_name }}">
+                    {% for s in area_slots %}
+                      <option value="{{ s.slot_name }}"
+                              data-vehicle-type="{{ s.allowed_vehicle_type_id or '' }}"
+                              {% if s.slot_name == chosen_slot %}selected{% endif %}>
+                        {{ s.slot_name }} (Khu {{ area_name }}{% if s.allowed_type_name %} · Chỉ {{ s.allowed_type_name }}{% endif %})
+                      </option>
+                    {% endfor %}
+                  </optgroup>
                 {% endif %}
+              {% endfor %}
+            </select>
+            <small id="slot-compatibility" style="color:#637798;font-size:11px;"></small>
+          {% else %}
+            <div class="flash error" style="margin:0;">Hiện tại bãi xe đã hết chỗ trống!</div>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="form-field">
+          <label>Chế độ xếp ô</label>
+          <input type="text" value="Tự động gán ô trống đầu tiên phù hợp" disabled>
+        </div>
+      {% endif %}
+    </div>
 
-                {% if not reg_month_ok %}
-                <p class="field-hint">Giá hiển thị là giá khung giờ lúc vào ({{ now.strftime('%H:%M') }}).
-                    Khi sang khung giờ khác, phí sẽ cộng thêm giá của khung đó.
-                    Xem chi tiết tại <a href="{{ url_for('pricing') }}">Giá xe</a>.</p>
-                {% endif %}
+    <div class="barrier-strip">
+      <div>
+        <span>Trạng thái Barrier làn vào</span>
+        <b>Sẵn sàng mở cổng khi xác nhận</b>
+      </div>
+      <span class="badge badge-green"><span></span>Hợp lệ</span>
+    </div>
 
-                {% if entry_mode == 'auto' %}
-                    {% if no_slots %}
-                        <div class="no-slots-message">⚠️ Bãi đỗ đã hết chỗ trống.</div>
-                    {% else %}
-                        <div class="auto-mode-note">
-                            🤖 Chế độ <strong>tự động</strong> đang bật cho tài khoản của bạn (đổi tại <a href="{{ url_for('settings') }}">Cài đặt</a>).
-                            Hệ thống sẽ tự chọn 1 vị trí trống khi xác nhận.
-                        </div>
-                    {% endif %}
-                {% else %}
-                    <div class="field">
-                        <label for="slot-name">Vị trí đỗ:</label>
-                        {% if no_slots %}
-                            <div class="no-slots-message">⚠️ Bãi đỗ đã hết chỗ trống, không có vị trí nào để chọn.</div>
-                        {% endif %}
-                        <select name="slot_name" id="slot-name" required {% if no_slots %}disabled{% endif %}>
-                            <option value="">— Chọn vị trí trống —</option>
-                            {% for area, slots in slots_by_area.items() %}
-                                {% if slots %}
-                                <optgroup label="Khu {{ area }}">
-                                    {% for slot in slots %}
-                                    <option value="{{ slot['slot_name'] }}" data-vehicle-type="{{ slot['allowed_vehicle_type_id'] or '' }}" {{ 'selected' if form.get('slot_name') == slot['slot_name'] }}>{{ slot['slot_name'] }} · Trống</option>
-                                    {% endfor %}
-                                </optgroup>
-                                {% endif %}
-                            {% endfor %}
-                        </select>
-                        <p class="field-hint" id="slot-compatibility">Chọn một ô trống trong khu phù hợp với loại xe.</p>
-                    </div>
-                {% endif %}
-            </div>
-            {% endif %}
+  {% elif mode == 'exit' %}
+    <div class="badge badge-green"><span></span>XE RA BÃI</div>
+    <div class="exit-info">
+      <div>
+        <span>Biển số &amp; Vị trí ô</span>
+        <b><span class="plate">{{ record.plate_number }}</span> · Ô {{ record.slot_name }}</b>
+      </div>
+      <div>
+        <span>Loại phương tiện</span>
+        <b>{{ record.vehicle_type_name or '—' }}</b>
+      </div>
+      <div>
+        <span>Giờ vào</span>
+        <b>{{ record.entry_time }}</b>
+      </div>
+      <div>
+        <span>Thời lượng đỗ</span>
+        <b>{{ fee_preview.duration }}</b>
+      </div>
+    </div>
+
+    <div class="payment-strip">
+      <div>
+        <span>Số tiền cần thu</span>
+        <strong>{{ "{:,}".format(fee_preview.fee).replace(",", ".") }} VNĐ</strong>
+        <small>{{ fee_preview.note }}</small>
+      </div>
+      <span class="badge badge-green"><span></span>Sẵn sàng thu phí</span>
+    </div>
+
+  {% else %}
+    <div class="barrier-strip">
+      <div>
+        <span>Trạng thái đối chiếu</span>
+        <b>Hãy quét biển số từ Camera, tải ảnh lên hoặc nhập biển số để kiểm tra</b>
+      </div>
+      <span class="badge badge-amber"><span></span>Chờ nhận diện</span>
+    </div>
+  {% endif %}
+</div>

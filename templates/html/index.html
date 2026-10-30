@@ -1,115 +1,405 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Parking</title>
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='index.css') }}">
-</head>
-<body>
-    <div class="menu-page">
-        <header class="menu-header">
-            <div class="logo">
-                <div class="logo-icon">P</div>
-                <div class="logo-text">
-                    <h1>Smart Parking</h1>
-                    <p>Hệ thống quản lý bãi đỗ xe</p>
-                </div>
-            </div>
-            <div class="welcome">
-                <span>Xin chào</span>
-                <strong>{{ session.get('fullname') }}</strong>
-            </div>
-        </header>
+{% extends "_layout.html" %}
+{% set active_page = 'dashboard' %}
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <p style="text-align:center; color: {{ '#c0392b' if category == 'error' else '#1c8a4b' }}; margin: 10px 0;">
-                        {{ message }}
-                    </p>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+{% block title %}Tổng quan bãi xe — Smart Parking{% endblock %}
+{% block breadcrumb %}Tổng quan{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/index.css">
+{% endblock %}
 
-        <section class="menu-title">
-            <h2>Bạn muốn làm gì?</h2>
-            <p>Chọn một chức năng để tiếp tục</p>
-        </section>
+{% block content %}
+{% set occ_rate = ((counts.occupied * 100 / counts.total)|round|int) if counts.total else 0 %}
 
-        <main class="menu-grid">
-            <a href="{{ url_for('parking') }}" class="menu-card">
-                <div class="card-icon parking-icon">🅿️</div>
-                <div class="card-content">
-                    <h3>Bãi đỗ xe</h3>
-                    <p>Xem tình trạng các vị trí đỗ xe theo khu vực</p>
-                </div>
-                <span class="arrow">→</span>
-            </a>
-
-            <a href="{{ url_for('gate') }}" class="menu-card">
-                <div class="card-icon vehicle-icon">🚗</div>
-                <div class="card-content">
-                    <h3>Xe vào / ra</h3>
-                    <p>Chọn xe vào hoặc xe ra, nhận diện bằng ảnh hay camera</p>
-                </div>
-                <span class="arrow">→</span>
-            </a>
-
-            <a href="{{ url_for('history') }}" class="menu-card">
-                <div class="card-icon history-icon">📋</div>
-                <div class="card-content">
-                    <h3>Lịch sử</h3>
-                    <p>Tra cứu lịch sử xe ra vào</p>
-                </div>
-                <span class="arrow">→</span>
-            </a>
-
-            <a href="{{ url_for('statistics') }}" class="menu-card">
-                <div class="card-icon statistics-icon">📊</div>
-                <div class="card-content">
-                    <h3>Thống kê</h3>
-                    <p>Xem báo cáo và thống kê hoạt động bãi xe</p>
-                </div>
-                <span class="arrow">→</span>
-            </a>
-
-            <a href="{{ url_for('pricing') }}" class="menu-card">
-                <div class="card-icon statistics-icon">💰</div>
-                <div class="card-content">
-                    <h3>Giá xe</h3>
-                    <p>Khung thời gian, loại xe và bảng giá gửi xe</p>
-                </div>
-                <span class="arrow">→</span>
-            </a>
-
-            {% if session.get('role') in ('admin', 'manager') %}
-            <a href="{{ url_for('users') }}" class="menu-card">
-                <div class="card-icon users-icon">👥</div>
-                <div class="card-content">
-                    <h3>Người dùng</h3>
-                    <p>Quản lý tài khoản và người sử dụng</p>
-                </div>
-                <span class="arrow">→</span>
-            </a>
-            {% endif %}
-
-            <a href="{{ url_for('settings') }}" class="menu-card">
-                <div class="card-icon users-icon">⚙️</div>
-                <div class="card-content">
-                    <h3>Cài đặt</h3>
-                    <p>Chọn cách gửi xe của bạn: tự động hoặc tự chọn vị trí</p>
-                </div>
-                <span class="arrow">→</span>
-            </a>
-        </main>
-
-        <footer class="menu-footer">
-            <a href="{{ url_for('logout') }}" class="logout">
-                <span>🚪</span>
-                Đăng xuất
-            </a>
-        </footer>
+<div class="page-heading">
+  <div>
+    <h1>Tổng quan bãi xe</h1>
+    <p>Theo dõi công suất, lưu lượng xe và doanh thu thực tế ({{ range_label }})</p>
+  </div>
+  <div class="heading-actions">
+    <div class="segmented">
+      <a href="{{ url_for('index', range='today') }}" class="{% if range_key == 'today' %}selected{% endif %}">Hôm nay</a>
+      <a href="{{ url_for('index', range='7days') }}" class="{% if range_key == '7days' %}selected{% endif %}">7 ngày</a>
+      <a href="{{ url_for('index', range='30days') }}" class="{% if range_key == '30days' %}selected{% endif %}">30 ngày</a>
     </div>
-</body>
-</html>
+    <form method="get" action="{{ url_for('index') }}" class="dashboard-filter-form">
+      <input type="hidden" name="range" value="custom">
+      <label class="date-control">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
+        <input type="date" name="from" value="{{ date_from }}" max="{{ today_iso }}" onchange="this.form.to.value=this.value; this.form.submit();" aria-label="Chọn ngày xem báo cáo">
+        <input type="hidden" name="to" value="{{ date_to }}">
+      </label>
+    </form>
+  </div>
+</div>
+
+<section class="overview-banner">
+  <div>
+    <span class="banner-eyebrow">
+      <span class="live-dot"></span>
+      TRUNG TÂM ĐIỀU HÀNH
+    </span>
+    <h2>Mọi hoạt động, trong tầm kiểm soát.</h2>
+    <p>
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+      Bãi đỗ xe Trung tâm Smart Parking
+      <span>·</span>
+      <span>Hệ thống hoạt động ổn định</span>
+      <span>·</span>
+      <span>{{ counts.available }} chỗ trống sẵn sàng</span>
+    </p>
+  </div>
+  <div class="banner-right">
+    <div>
+      <span class="capacity-number">
+        {{ occ_rate }}<small>%</small>
+      </span>
+      <span>Công suất hiện tại</span>
+    </div>
+    <a href="{{ url_for('gate') }}" class="btn btn-primary">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
+      Giám sát trực tiếp
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+    </a>
+  </div>
+  <div class="banner-decoration" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" width="170" height="170" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+  </div>
+</section>
+
+<div class="stats-grid six">
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Tổng số chỗ đỗ</span>
+      <span class="stat-icon blue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+      </span>
+    </div>
+    <strong>{{ counts.total }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      {{ area_stats|length }} khu vực đang vận hành
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Xe đang trong bãi</span>
+      <span class="stat-icon purple">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+      </span>
+    </div>
+    <strong>{{ counts.occupied }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      {{ occ_rate }}% công suất hiện tại
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Chỗ trống</span>
+      <span class="stat-icon green">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+      </span>
+    </div>
+    <strong>{{ counts.available }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Sẵn sàng đón xe · Bảo trì {{ counts.maintenance }} ô
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Lượt xe vào</span>
+      <span class="stat-icon blue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      </span>
+    </div>
+    <strong>{{ stats.period_entries }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Lượt xe vào ({{ range_label }})
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Lượt xe ra</span>
+      <span class="stat-icon amber">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10"/><path d="M17 7v10H7"/></svg>
+      </span>
+    </div>
+    <strong>{{ stats.period_exits }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Tổng lượt: {{ stats.period_records }}
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Doanh thu</span>
+      <span class="stat-icon green">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
+      </span>
+    </div>
+    <strong>{{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Vé lượt: {{ "{:,}".format(stats.period_parking_revenue).replace(",", ".") }} ₫ · Vé tháng: {{ "{:,}".format(stats.period_month_revenue).replace(",", ".") }} ₫
+    </div>
+  </div>
+</div>
+
+<!-- BIỂU ĐỒ TRỰC QUAN -->
+<div class="dashboard-charts">
+  <section class="panel chart-card">
+    <div class="panel-heading">
+      <div>
+        <h2>Lưu lượng xe vào / ra</h2>
+        <p>Thống kê lượt xe theo kỳ đang chọn ({{ range_label }})</p>
+      </div>
+      <div class="chart-legend">
+        <span><i class="dot blue"></i>Xe vào ({{ stats.period_entries }})</span>
+        <span><i class="dot green"></i>Xe ra ({{ stats.period_exits }})</span>
+      </div>
+    </div>
+    {% set max_flow = [stats.period_entries, stats.period_exits, counts.occupied, 10]|max %}
+    {% set y_in = (190 - (stats.period_entries * 140 / max_flow))|round|int %}
+    {% set y_out = (190 - (stats.period_exits * 140 / max_flow))|round|int %}
+    {% set y_occ = (190 - (counts.occupied * 140 / max_flow))|round|int %}
+    <div style="width:100%;height:260px;padding:6px 4px 0;">
+      <svg viewBox="0 0 640 240" style="width:100%;height:100%;overflow:visible;">
+        <defs>
+          <linearGradient id="inFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stop-color="#0875f9" stop-opacity="0.24" />
+            <stop offset="95%" stop-color="#0875f9" stop-opacity="0.01" />
+          </linearGradient>
+          <linearGradient id="outFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stop-color="#1ca7ec" stop-opacity="0.2" />
+            <stop offset="95%" stop-color="#1ca7ec" stop-opacity="0.01" />
+          </linearGradient>
+        </defs>
+        <line x1="44" y1="40" x2="615" y2="40" stroke="#edf2f9" stroke-dasharray="3 3"/>
+        <line x1="44" y1="90" x2="615" y2="90" stroke="#edf2f9" stroke-dasharray="3 3"/>
+        <line x1="44" y1="140" x2="615" y2="140" stroke="#edf2f9" stroke-dasharray="3 3"/>
+        <line x1="44" y1="190" x2="615" y2="190" stroke="#edf2f9"/>
+        <text x="34" y="44" text-anchor="end" fill="#90a2ba" font-size="11">{{ max_flow }}</text>
+        <text x="34" y="94" text-anchor="end" fill="#90a2ba" font-size="11">{{ (max_flow * 0.66)|round|int }}</text>
+        <text x="34" y="144" text-anchor="end" fill="#90a2ba" font-size="11">{{ (max_flow * 0.33)|round|int }}</text>
+        <text x="34" y="194" text-anchor="end" fill="#90a2ba" font-size="11">0</text>
+
+        <path d="M 55 182 C 150 {{ (y_in + 185)//2 }}, 240 {{ y_occ }}, 335 {{ y_in }} C 430 {{ (y_in + y_occ)//2 }}, 520 {{ y_in }}, 605 {{ y_in }} L 605 190 L 55 190 Z" fill="url(#inFill)"/>
+        <path d="M 55 182 C 150 {{ (y_in + 185)//2 }}, 240 {{ y_occ }}, 335 {{ y_in }} C 430 {{ (y_in + y_occ)//2 }}, 520 {{ y_in }}, 605 {{ y_in }}" fill="none" stroke="#0875f9" stroke-width="2.5"/>
+
+        <path d="M 55 186 C 150 {{ (y_out + 188)//2 }}, 240 {{ (y_out + 180)//2 }}, 335 {{ y_out }} C 430 {{ (y_out + 175)//2 }}, 520 {{ y_out }}, 605 {{ y_out }} L 605 190 L 55 190 Z" fill="url(#outFill)"/>
+        <path d="M 55 186 C 150 {{ (y_out + 188)//2 }}, 240 {{ (y_out + 180)//2 }}, 335 {{ y_out }} C 430 {{ (y_out + 175)//2 }}, 520 {{ y_out }}, 605 {{ y_out }}" fill="none" stroke="#1ca7ec" stroke-width="2.5"/>
+
+        <circle cx="335" cy="{{ y_in }}" r="4.5" fill="#0875f9"/>
+        <circle cx="605" cy="{{ y_in }}" r="4.5" fill="#0875f9"/>
+        <circle cx="335" cy="{{ y_out }}" r="4.5" fill="#1ca7ec"/>
+        <circle cx="605" cy="{{ y_out }}" r="4.5" fill="#1ca7ec"/>
+
+        <text x="65" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">06:00</text>
+        <text x="195" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">09:00</text>
+        <text x="335" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">12:00</text>
+        <text x="470" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">17:00</text>
+        <text x="595" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">Hiện tại</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="panel chart-card">
+    <div class="panel-heading">
+      <div>
+        <h2>Doanh thu ({{ range_label }})</h2>
+        <p>Đơn vị: VNĐ · Tổng kỳ: {{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫</p>
+      </div>
+    </div>
+    {% set max_rev = [stats.period_parking_revenue, stats.period_month_revenue, stats.period_revenue, 10000]|max %}
+    {% set h_park = ((stats.period_parking_revenue * 135 / max_rev)|round|int) if stats.period_parking_revenue else 8 %}
+    {% set h_month = ((stats.period_month_revenue * 135 / max_rev)|round|int) if stats.period_month_revenue else 8 %}
+    {% set h_tot = ((stats.period_revenue * 135 / max_rev)|round|int) if stats.period_revenue else 8 %}
+    <div style="width:100%;height:260px;padding:6px 4px 0;">
+      <svg viewBox="0 0 420 240" style="width:100%;height:100%;overflow:visible;">
+        <line x1="40" y1="45" x2="395" y2="45" stroke="#edf2f9" stroke-dasharray="3 3"/>
+        <line x1="40" y1="95" x2="395" y2="95" stroke="#edf2f9" stroke-dasharray="3 3"/>
+        <line x1="40" y1="145" x2="395" y2="145" stroke="#edf2f9" stroke-dasharray="3 3"/>
+        <line x1="40" y1="190" x2="395" y2="190" stroke="#edf2f9"/>
+
+        <rect x="75" y="{{ 190 - h_park }}" width="52" height="{{ h_park }}" rx="7" fill="#0875f9"/>
+        <text x="101" y="{{ 182 - h_park }}" text-anchor="middle" fill="#10244b" font-size="11" font-weight="600">{{ "{:,}".format(stats.period_parking_revenue).replace(",", ".") }} ₫</text>
+        <text x="101" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">Vé lượt</text>
+
+        <rect x="190" y="{{ 190 - h_month }}" width="52" height="{{ h_month }}" rx="7" fill="#1ca7ec"/>
+        <text x="216" y="{{ 182 - h_month }}" text-anchor="middle" fill="#10244b" font-size="11" font-weight="600">{{ "{:,}".format(stats.period_month_revenue).replace(",", ".") }} ₫</text>
+        <text x="216" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">Vé tháng</text>
+
+        <rect x="305" y="{{ 190 - h_tot }}" width="52" height="{{ h_tot }}" rx="7" fill="#2cad78"/>
+        <text x="331" y="{{ 182 - h_tot }}" text-anchor="middle" fill="#10244b" font-size="11" font-weight="600">{{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫</text>
+        <text x="331" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">Tổng kỳ</text>
+      </svg>
+    </div>
+  </section>
+</div>
+
+<div class="dashboard-bottom">
+  <section class="panel chart-card">
+    <div class="panel-heading">
+      <div>
+        <h2>Tình trạng khu vực</h2>
+        <p>Cập nhật công suất theo từng phân khu</p>
+      </div>
+      <a href="{{ url_for('parking') }}" class="btn btn-outline">Sơ đồ bãi xe</a>
+    </div>
+
+    <div class="area-list">
+      {% if area_stats %}
+        {% for area_name, area in area_stats.items() %}
+          {% set pct = (area.percent|round|int) if area.percent is defined else 0 %}
+          <div class="area-row">
+            <span class="area-icon area-{{ loop.index0 % 3 }}">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+            </span>
+            <div>
+              <div>
+                <b>Khu {{ area_name }}</b>
+                <span><strong>{{ area.occupied }}</strong> / {{ area.total }} chỗ</span>
+              </div>
+              <div class="progress-track">
+                <div style="width: {{ pct }}%; background: {{ '#e89d29' if pct > 80 else '#0875f9' }};"></div>
+              </div>
+              <small>{{ area.available }} chỗ trống{% if area.maintenance %} · {{ area.maintenance }} bảo trì{% endif %}</small>
+            </div>
+            <b>{{ pct }}%</b>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-inline">Chưa có khu vực đỗ xe nào được cấu hình.</div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel chart-card">
+    <div class="panel-heading">
+      <div>
+        <h2>Cơ cấu công suất bãi xe</h2>
+        <p>Tỷ lệ lấp đầy vị trí đỗ hiện tại</p>
+      </div>
+    </div>
+    {% set total_slots = counts.total if counts.total > 0 else 1 %}
+    {% set p_occ = ((counts.occupied * 100 / total_slots)|round|int) %}
+    {% set p_avail = ((counts.available * 100 / total_slots)|round|int) %}
+    {% set p_maint = (100 - p_occ - p_avail) if (counts.maintenance > 0) else 0 %}
+    <div class="donut-wrap">
+      <div class="donut-chart" style="display:flex;align-items:center;justify-content:center;">
+        <svg viewBox="0 0 200 200" width="200" height="200">
+          <circle cx="100" cy="100" r="68" fill="none" stroke="#edf2f9" stroke-width="20"/>
+          <circle cx="100" cy="100" r="68" fill="none" stroke="#2cad78" stroke-width="20"
+                  stroke-dasharray="{{ (p_avail * 4.27)|round(1) }} 427.2"
+                  stroke-dashoffset="0"
+                  transform="rotate(-90 100 100)"/>
+          <circle cx="100" cy="100" r="68" fill="none" stroke="#0875f9" stroke-width="20"
+                  stroke-dasharray="{{ (p_occ * 4.27)|round(1) }} 427.2"
+                  stroke-dashoffset="-{{ (p_avail * 4.27)|round(1) }}"
+                  transform="rotate(-90 100 100)"/>
+          {% if counts.maintenance > 0 %}
+          <circle cx="100" cy="100" r="68" fill="none" stroke="#e89d29" stroke-width="20"
+                  stroke-dasharray="{{ (p_maint * 4.27)|round(1) }} 427.2"
+                  stroke-dashoffset="-{{ ((p_avail + p_occ) * 4.27)|round(1) }}"
+                  transform="rotate(-90 100 100)"/>
+          {% endif %}
+        </svg>
+        <div class="donut-center">
+          <strong>{{ counts.total }}</strong>
+          <span>Tổng chỗ</span>
+        </div>
+      </div>
+      <div class="donut-legend">
+        <div>
+          <span><i style="background: #0875f9;"></i>Đang có xe ({{ counts.occupied }})</span>
+          <b>{{ p_occ }}%</b>
+        </div>
+        <div>
+          <span><i style="background: #2cad78;"></i>Chỗ còn trống ({{ counts.available }})</span>
+          <b>{{ p_avail }}%</b>
+        </div>
+        <div>
+          <span><i style="background: #e89d29;"></i>Đang bảo trì ({{ counts.maintenance }})</span>
+          <b>{{ p_maint }}%</b>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<section class="panel data-panel">
+  <div class="panel-heading">
+    <h2>Hoạt động gần đây <span class="count-pill">{{ recent_records|length }}</span></h2>
+    <a href="{{ url_for('history') }}" class="btn btn-outline">Xem toàn bộ lịch sử</a>
+  </div>
+  <div class="table-toolbar">
+    <div class="search-input">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" placeholder="Tìm kiếm biển số, vị trí ô..." data-table-search>
+    </div>
+    <div class="table-filters">
+      <a href="{{ url_for('entry') }}" class="btn btn-primary">Xe vào bãi</a>
+      <a href="{{ url_for('exit_gate') }}" class="btn btn-outline">Xe ra bãi</a>
+    </div>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Biển số</th>
+          <th>Vị trí ô</th>
+          <th>Giờ vào</th>
+          <th>Giờ ra</th>
+          <th>Phí thu</th>
+          <th>Trạng thái</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if recent_records %}
+          {% for r in recent_records %}
+          <tr>
+            <td><span class="plate">{{ r.plate_number }}</span></td>
+            <td><b>{{ r.slot_name or '—' }}</b></td>
+            <td>{{ r.entry_time or '—' }}</td>
+            <td>{{ r.exit_time or '—' }}</td>
+            <td>
+              {% if r.fee is not none %}
+                <b>{{ "{:,}".format(r.fee).replace(",", ".") }} ₫</b>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>
+              {% if r.status == 'IN' %}
+                <span class="badge badge-blue"><span></span>Đang gửi</span>
+              {% elif r.status == 'OUT' %}
+                <span class="badge badge-green"><span></span>Đã ra bãi</span>
+              {% else %}
+                <span class="badge badge-red"><span></span>Đã xóa</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="6" class="empty-cell">Chưa có dữ liệu lượt xe vào / ra.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pagination">
+    <span>Hiển thị <b>{{ 1 if recent_records else 0 }}-{{ recent_records|length }}</b> trên <b>{{ recent_records|length }}</b> kết quả</span>
+    <div>
+      <span class="current-page">1 / 1</span>
+    </div>
+  </div>
+</section>
+{% endblock %}

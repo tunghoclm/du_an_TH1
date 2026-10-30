@@ -1,73 +1,35 @@
-/* parking.css — riêng cho trang Bãi đỗ xe (phần chung nằm trong theme.css) */
-
-.parking-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));   /* các cột luôn rộng bằng nhau */
-    gap: 12px;
+/* Trang Sơ đồ bãi đỗ xe */
+.area-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #edf2f9;
 }
 
-.slot-form { display: contents; }
-
-.parking-slot {
-    width: 100%;
-    min-width: 0;
-    min-height: 82px;
-    padding: 8px 6px;
-    font-family: inherit;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    gap: 6px;
-    border: 1.5px solid transparent;
-    transition: transform .15s, box-shadow .15s;
-    user-select: none;
+.area-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.parking-slot strong { font-size: 15px; }
-
-.parking-slot span {
-    font-size: 11.5px;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;      /* biển số dài -> cắt bằng dấu ... */
-    white-space: nowrap;
+.area-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.parking-slot.slot-clickable { cursor: pointer; }
-.parking-slot.slot-clickable:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 18px rgba(20, 48, 107, .12);
+.slot-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.parking-slot.available   { background: #e9f7ef; border-color: #bfe5cf; color: var(--green-d); }
-.parking-slot.occupied    { background: #fdeeee; border-color: #f2c4c4; color: var(--red-d); }
-.parking-slot.maintenance,
-.btn-maintenance { background: #fff4e0; border-color: #f0d6a2; color: #a86800; }
-.btn-maintenance { border: 1.5px solid #f0d6a2; }
-.btn-maintenance:not(:disabled):hover { filter: brightness(.97); }
-.btn-maintenance:disabled { cursor: not-allowed; }
-.slot-cell { display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
-.slot-cell .parking-slot { flex: 1; min-height: 100px; }
-.parking-slot .slot-reason { white-space: normal; overflow-wrap: anywhere; line-height: 1.4; font-size: 11px; }
-.slot-delete { align-self: center; border: 0; background: transparent; color: var(--red-d); font: inherit; font-size: 11px; padding: 3px 8px; cursor: pointer; }
-.area-actions, .parking-legend { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.parking-legend { padding: 0 18px 12px; }
-.area-heading { gap: 15px; flex-wrap: wrap; }
-.slot-operation + .slot-operation { margin-top: 22px; padding-top: 22px; border-top: 1px solid #e4eaf3; }
-.slot-operation h3 { margin-bottom: 14px; font-size: 16px; color: var(--navy); }
-.slot-operation .btn { margin-top: 12px; }
-.dialog-body .field + .field { margin-top: 15px; }
-.dialog-body textarea { resize: vertical; width: 100%; min-height: 85px; }
-.dialog-close { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 25px; }
-.required { color: var(--red-d); }
-.dialog-head { padding: 20px 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); }
-.dialog-head h2 { color: var(--navy); font-size: 20px; }
-.dialog-head p { margin-top: 6px; }
-.dialog-body { padding: 22px 24px; }
-.dialog-body > .field-hint, .dialog-body .field + .field-hint { margin-top: 10px; }
-.dialog-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; padding: 16px 24px; background: #f7f9fd; border-top: 1px solid var(--line); }
-.slot-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.slot-menu .field-hint { grid-column: 1 / -1; }
-@media (max-width: 600px) { .area-actions .btn { padding: 8px 11px; } }
+.slot-action-list .btn {
+  justify-content: flex-start;
+  width: 100%;
+}

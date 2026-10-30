@@ -1,30 +1,7 @@
-/* thongke.css — riêng cho trang Thống kê (phần chung nằm trong theme.css) */
-
-/* bộ lọc thời gian nằm ở đầu khung Doanh thu */
-.range-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.range-label { color: var(--muted); font-size: 13px; }
-.range-label strong { color: var(--navy); }
-.range-select { width: auto; min-width: 150px; }
-.custom-dates { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.custom-dates[hidden] { display: none; }
-.custom-dates .input { width: auto; }
-
-/* nút xuất báo cáo Excel / PDF (cạnh bộ lọc thời gian) */
-.export-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-
-/* các thẻ số liệu nằm trong khung (không đổ bóng thêm) */
-.stats.flat { margin-bottom: 0; }
-.stats.flat .stat { box-shadow: none; border: 1px solid var(--line); align-items: flex-start; }
-.stats.flat .stat b { white-space: nowrap; }
-
-/* khu vực */
-.area-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-.area-card { border: 1px solid var(--line); border-radius: 14px; padding: 18px; background: #fff; }
-.area-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
-.area-card-header h3 { font-size: 16px; color: var(--navy); margin-bottom: 3px; }
-.area-card-header span { color: var(--muted); font-size: 13px; }
-.area-card-header strong { font-size: 22px; color: var(--navy); }
-.progress-bar { height: 10px; background: #e6ebf6; border-radius: 999px; overflow: hidden; margin-bottom: 14px; }
-.progress-fill { height: 100%; background: linear-gradient(90deg, var(--blue), var(--navy-2)); border-radius: 999px; }
-.area-info { display: flex; justify-content: space-between; font-size: 13.5px; color: #55607a; }
-.area-info strong { color: var(--text); }
+/* Trang Doanh thu & Báo cáo thống kê */
+.stats-custom-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

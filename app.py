@@ -66,9 +66,16 @@ app.secret_key = 'demo-smart-parking-secret-key'
 
 
 @app.route('/css/<path:filename>')
+@app.route('/static/css/<path:filename>')
 def css_files(filename):
     """Phục vụ file CSS đặt trong templates/css/."""
     return send_from_directory(TEMPLATES_CSS_DIR, filename)
+
+
+@app.route('/images/<path:filename>')
+def image_files(filename):
+    """Phục vụ ảnh giao diện đặt trong static/images/."""
+    return send_from_directory(os.path.join(app.root_path, 'static', 'images'), filename)
 
 
 @app.route('/tmp-preview/<path:filename>')
@@ -230,9 +237,18 @@ def index():
     counts = database.slot_counts()
     if session.get('role') == 'user':      # người dùng: trang chủ riêng, chỉ có 4 chức năng
         return render_template('user_home.html', counts=counts, today=date.today().isoformat(),
-                               vehicles=database.get_user_vehicles(session['user_id']))
+                               vehicles=database.get_user_vehicles(session['user_id']),
+                               area_stats=database.area_stats())
     total_in = database.count_open()
-    return render_template('index.html', counts=counts, total_in=total_in)
+    start, end, range_key, label = parse_stats_range(request.args)
+    stats = database.get_statistics(start.isoformat(), end.isoformat())
+    area_stats = database.area_stats()
+    recent_records = database.get_all_records()[:8]
+    return render_template('index.html', counts=counts, total_in=total_in,
+                           stats=stats, area_stats=area_stats, recent_records=recent_records,
+                           range_key=range_key, range_label=label,
+                           date_from=start.isoformat(), date_to=end.isoformat(),
+                           today_iso=date.today().isoformat())
 
 
 # ============================================================
@@ -482,14 +498,20 @@ def gate_context(direction, token='', plate='', note='', form=None):
 
 
 def render_gate(direction, token='', plate='', note='', form=None):
-    return render_template('gate.html', **gate_context(direction, token, plate, note, form))
+    ctx = gate_context(direction, token, plate, note, form)
+    ctx['counts'] = database.slot_counts()
+    ctx['area_stats'] = database.area_stats()
+    return render_template('gate.html', **ctx)
 
 
 @app.route('/gate')
 @login_required
 @staff_required
 def gate():
-    return render_template('gate_menu.html')
+    return render_template('gate_menu.html',
+                           counts=database.slot_counts(),
+                           area_stats=database.area_stats(),
+                           open_records=database.get_open_records())
 
 
 @app.route('/gate/<direction>/camera', methods=['POST'])

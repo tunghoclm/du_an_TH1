@@ -1,146 +1,289 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ 'Xe vào' if direction == 'entry' else 'Xe ra' }} - Smart Parking</title>
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='entry_exit.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='gate.css', v='3') }}">
-</head>
-<body>
-<main class="wrap gate-workspace">
-    <header class="topbar">
-        <div class="topbar-left">
-            <a href="{{ url_for('gate') }}" class="back" aria-label="Quay lại chọn xe vào / ra">←</a>
-            <div>
-                <h1>{{ '📥 Xe vào' if direction == 'entry' else '📤 Xe ra' }}</h1>
-                <p>{{ 'Nhận diện biển số, chọn loại xe và vị trí đỗ rồi xác nhận xe vào.' if direction == 'entry' else 'Nhận diện biển số, kiểm tra thông tin và phí gửi rồi xác nhận xe ra.' }}</p>
-            </div>
-        </div>
-        <div class="user-chip">
-            <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
-            <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
-        </div>
-    </header>
+{% extends "_layout.html" %}
+{% set active_page = direction %}
+{% set is_entry = (direction == 'entry') %}
+{% set has_preview = (preview_url is not none and preview_url != '') %}
+{% set occ_rate = ((counts.occupied * 100 / counts.total)|round|int) if counts and counts.total else 0 %}
 
-    <div class="toasts" id="toasts">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-            <div class="toast toast-{{ category }}" role="status">
-                <span>{{ message }}</span>
-                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
-            </div>
-            {% endfor %}
-        {% endwith %}
+{% block title %}{{ 'Xe vào bãi' if is_entry else 'Xe ra bãi' }} — Smart Parking{% endblock %}
+{% block breadcrumb %}{{ 'Cổng xe vào bãi' if is_entry else 'Cổng xe ra bãi' }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/entry_exit.css">
+{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>
+      {{ 'XE VÀO BÃI' if is_entry else 'XE RA BÃI' }}
+      <span class="simulation-label">
+        <span class="live-dot"></span>
+        {{ 'LÀN VÀO · AI OCR' if is_entry else 'LÀN RA · AI OCR' }}
+      </span>
+    </h1>
+    <p>
+      {% if is_entry %}
+        Nhận diện biển số phương tiện vào bãi, phân loại xe và gán vị trí ô đỗ
+      {% else %}
+        Nhận diện biển số phương tiện rời bãi, đối chiếu lượt gửi và tính phí tự động theo khung giờ
+      {% endif %}
+    </p>
+  </div>
+  <div class="heading-actions">
+    <div class="segmented">
+      <a href="{{ url_for('entry') }}" class="{% if is_entry %}selected{% endif %}">Làn Xe Vào</a>
+      <a href="{{ url_for('exit_gate') }}" class="{% if not is_entry %}selected{% endif %}">Làn Xe Ra</a>
+    </div>
+    <a href="{{ url_for('gate') }}" class="btn btn-outline">Tổng quan 2 làn</a>
+  </div>
+</div>
+
+{% if counts is defined and counts %}
+<div class="monitor-summary">
+  <div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+    <div>
+      <span>Tổng sức chứa</span>
+      <strong>{{ counts.total }} chỗ</strong>
+      <small>Hệ thống bãi xe thông minh</small>
+    </div>
+  </div>
+  <div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+    <div>
+      <span>Đang trong bãi</span>
+      <strong>{{ counts.occupied }} xe</strong>
+      <small>Chiếm {{ occ_rate }}% công suất</small>
+    </div>
+  </div>
+  <div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+    <div>
+      <span>Sẵn sàng tiếp nhận</span>
+      <strong>{{ counts.available }} chỗ trống</strong>
+      <small>Bảo trì: {{ counts.maintenance }} vị trí</small>
+    </div>
+  </div>
+  <div class="monitor-area-summary">
+    {% if area_stats %}
+      {% for area_name, a in area_stats.items() %}
+        <span>Khu {{ area_name }}: <b>{{ a.available }} trống</b></span>
+      {% endfor %}
+    {% else %}
+      <span>Chế độ: <b>{{ 'Xe vào bãi' if is_entry else 'Xe ra bãi' }}</b></span>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<form method="POST"
+      action="{{ url_for('entry' if is_entry else 'exit_gate') }}"
+      enctype="multipart/form-data"
+      id="gate-form"
+      class="lanes-grid"
+      data-direction="{{ direction }}"
+      data-camera-url="{{ url_for('gate_camera', direction=direction) }}">
+
+  <input type="hidden" name="token" id="gate-token" value="{{ token }}">
+  <input type="hidden" name="checked_plate" id="checked-plate" value="{{ plate }}">
+  <input type="hidden" name="source" id="source-select" value="{{ source }}">
+
+  <!-- CỘT TRÁI: CAMERA TRỰC TIẾP / TẢI ẢNH -->
+  <section class="panel lane-panel gate-media">
+    <div class="lane-heading">
+      <div>
+        <span class="lane-icon {{ 'entry' if is_entry else 'exit' }}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+        </span>
+        <div>
+          <h2 id="media-source-label">{{ 'Camera trực tiếp' if source == 'camera' else 'Ảnh tải lên' }}</h2>
+          <p>{{ 'Camera AI nhận diện biển số làn vào' if is_entry else 'Camera AI nhận diện biển số làn ra' }}</p>
+        </div>
+      </div>
+
+      <div class="segmented" role="group" aria-label="Chọn nguồn hình ảnh">
+        <button type="button"
+                class="{% if source == 'camera' %}selected{% endif %}"
+                data-source="camera"
+                aria-pressed="{{ 'true' if source == 'camera' else 'false' }}">
+          Camera trực tiếp
+        </button>
+        <button type="button"
+                class="{% if source == 'upload' %}selected{% endif %}"
+                data-source="upload"
+                aria-pressed="{{ 'true' if source == 'upload' else 'false' }}">
+          Tải ảnh biển số
+        </button>
+      </div>
     </div>
 
-    <nav class="gate-nav" aria-label="Chiều xử lý">
-        <a href="{{ url_for('entry') }}" class="{{ 'active' if direction == 'entry' }}" {% if direction == 'entry' %}aria-current="page"{% endif %}>📥 Xe vào</a>
-        <a href="{{ url_for('exit_gate') }}" class="{{ 'active' if direction == 'exit' }}" {% if direction == 'exit' %}aria-current="page"{% endif %}>📤 Xe ra</a>
-    </nav>
+    <div class="camera-frame" style="height: 280px;">
+      <div class="camera-photo {{ 'entry-photo' if is_entry else 'exit-photo' }}"></div>
+      <div class="camera-top">
+        <span><i class="live-dot"></i>{{ 'CAM-IN-01 · 1080p · 30fps' if is_entry else 'CAM-OUT-01 · 1080p · 30fps' }}</span>
+        <span>AI LICENSE PLATE OCR</span>
+      </div>
 
-    <form method="POST" action="{{ url_for('entry' if direction == 'entry' else 'exit_gate') }}" enctype="multipart/form-data" id="gate-form" class="gate-layout"
-          data-direction="{{ direction }}" data-camera-url="{{ url_for('gate_camera', direction=direction) }}">
-        <input type="hidden" name="token" id="gate-token" value="{{ token }}">
-        <input type="hidden" name="checked_plate" id="checked-plate" value="{{ plate if mode else '' }}">
-        <input type="hidden" name="source" id="source-select" value="{{ source }}">
+      <div class="scan-corners">
+        <i></i><i></i><i></i><i></i>
+      </div>
 
-        <section class="panel gate-media" aria-labelledby="media-title">
-            <div class="panel-head gate-panel-head">
-                <div>
-                    <span class="gate-step">01 · HÌNH ẢNH</span>
-                    <h2 id="media-title">Hình ảnh phương tiện</h2>
-                </div>
-                <span class="media-source-label" id="media-source-label">{{ 'Camera' if source == 'camera' else 'Ảnh tải lên' }}</span>
-            </div>
-            <div class="gate-media-body">
-                <div id="camera-panel" aria-label="Hình ảnh nhận diện">
-                    <div class="camera-view">
-                        <video id="camera-video" autoplay muted playsinline aria-label="Hình ảnh camera trực tiếp" hidden></video>
-                        <canvas id="camera-overlay" aria-hidden="true" hidden></canvas>
-                        <img id="camera-snapshot" alt="Ảnh phương tiện để nhận diện biển số" {% if preview_url %}src="{{ preview_url }}"{% else %}hidden{% endif %}>
-                        <div id="camera-placeholder" {% if preview_url %}hidden{% endif %}>
-                            <span id="media-placeholder-icon" aria-hidden="true">{{ '📷' if source == 'camera' else '🖼️' }}</span>
-                            <strong id="media-placeholder-title">{{ 'Camera sẵn sàng' if source == 'camera' else 'Chưa có hình ảnh' }}</strong>
-                            <span id="media-placeholder-text">{{ 'Bấm Bắt đầu và đưa biển số vào khung hình.' if source == 'camera' else 'Chọn ảnh có biển số rõ nét để bắt đầu nhận diện.' }}</span>
-                        </div>
-                    </div>
-                </div>
-                <p class="media-caption" id="media-caption">{{ 'Ảnh đã nhận diện · ' ~ plate if token else 'Ảnh nhận diện sẽ xuất hiện tại đây.' }}</p>
+      <div class="camera-video-layer">
+        <video id="camera-video" playsinline muted hidden></video>
+        <canvas id="camera-overlay" hidden></canvas>
 
-                <div class="camera-controls" id="camera-controls" {% if source != 'camera' %}hidden{% endif %}>
-                    <div class="camera-toolbar">
-                        <div class="field">
-                            <label for="camera-select">Camera đang sử dụng</label>
-                            <select id="camera-select"><option value="">Camera mặc định</option></select>
-                        </div>
-                        <button type="button" class="btn btn-soft" id="camera-refresh">↻ Tìm camera</button>
-                    </div>
-                    <div class="camera-actions">
-                        <button type="button" class="btn btn-green" id="camera-start">▶ Bắt đầu</button>
-                        <button type="button" class="btn btn-red" id="camera-stop" disabled>■ Tắt camera</button>
-                    </div>
-                    <p id="camera-status" class="camera-status" role="status" aria-live="polite">Bấm Bắt đầu để tự động nhận diện biển số.</p>
-                    <p class="field-hint">Giữ biển số rõ trong khung hình. Kết quả ổn định sẽ được giữ để bạn kiểm tra và xác nhận ở bên phải.</p>
-                    <noscript><p class="camera-status error">Cần bật JavaScript để sử dụng camera. Bạn vẫn có thể tải ảnh lên.</p></noscript>
-                </div>
+        {% if has_preview %}
+          <img id="camera-snapshot"
+               class="preview-img"
+               src="{{ preview_url }}"
+               alt="Ảnh nhận diện biển số">
+        {% else %}
+          <img id="camera-snapshot" class="preview-img" alt="Ảnh nhận diện biển số" hidden>
+        {% endif %}
 
-                <div class="upload-panel" id="upload-panel" {% if source == 'camera' %}hidden{% endif %}>
-                    <div class="field">
-                        <label for="image">Tải ảnh phương tiện</label>
-                        <input type="file" id="image" name="image" accept="image/*">
-                        <p class="field-hint">Chọn ảnh đủ sáng, nhìn rõ toàn bộ biển số. Bạn có thể thay ảnh trước khi xác nhận.</p>
-                    </div>
-                    <button type="submit" name="action" value="recognize" class="btn btn-navy image-recognize-button" id="image-recognize-button" formnovalidate>🔍 Nhận diện ảnh</button>
-                </div>
-            </div>
-        </section>
+        <div id="camera-placeholder"
+             style="text-align:center;color:#e2ecff;padding:24px;z-index:2;"
+             {% if has_preview %}hidden{% endif %}>
+          <div id="media-placeholder-icon" style="font-size:32px;margin-bottom:6px;">📷</div>
+          <div id="media-placeholder-title" style="font-weight:700;font-size:15px;">Khung hình camera trực tiếp</div>
+          <p id="media-placeholder-text" style="font-size:12px;color:#b8cae8;margin-top:4px;">
+            Bấm "Bắt đầu" để mở camera và tự động quét biển số xe.
+          </p>
+        </div>
+      </div>
 
-        <section class="panel gate-details" aria-labelledby="details-title">
-            <div class="panel-head gate-panel-head">
-                <div>
-                    <span class="gate-step">02 · KIỂM TRA &amp; XÁC NHẬN</span>
-                    <h2 id="details-title">{{ 'Thông tin xe vào' if direction == 'entry' else 'Thông tin xe ra' }}</h2>
-                </div>
-            </div>
-            <div class="gate-details-body">
-                <fieldset class="source-picker">
-                    <legend>Chọn hình thức nhận diện</legend>
-                    <div class="source-tabs" role="group" aria-label="Hình thức nhận diện">
-                        <button type="button" class="source-choice {{ 'active' if source == 'camera' }}" data-source="camera" aria-pressed="{{ 'true' if source == 'camera' else 'false' }}" aria-controls="camera-controls">
-                            <span aria-hidden="true">📷</span> Camera
-                        </button>
-                        <button type="button" class="source-choice {{ 'active' if source == 'upload' }}" data-source="upload" aria-pressed="{{ 'true' if source == 'upload' else 'false' }}" aria-controls="upload-panel">
-                            <span aria-hidden="true">🖼️</span> Tải ảnh
-                        </button>
-                    </div>
-                </fieldset>
+      <div class="camera-bottom">
+        <div>
+          <small id="media-caption">
+            {% if has_preview %}
+              Ảnh đã nhận diện · {{ plate or 'Chưa đọc rõ biển số' }}
+            {% else %}
+              Tự động khóa biển số khi ổn định 2 khung hình liên tiếp
+            {% endif %}
+          </small>
+          <strong class="plate">{{ plate or 'CHƯA NHẬN DIỆN' }}</strong>
+        </div>
+        <span class="badge {{ 'badge-green' if plate else 'badge-blue' }}">
+          <span></span>{{ 'Đã nhận diện' if plate else 'Đang chờ' }}
+        </span>
+      </div>
+    </div>
 
-                <div class="field">
-                    <label for="note">Ghi chú</label>
-                    <input type="text" id="note" name="note" value="{{ note }}" maxlength="200" placeholder="Ghi chú về phương tiện (nếu có)">
-                </div>
+    <div class="lane-content">
+      <!-- Điều khiển Camera -->
+      <div id="camera-controls" class="camera-Controls-bar" style="margin-top:0;" {% if source == 'upload' %}hidden{% endif %}>
+        <select id="camera-select" aria-label="Chọn thiết bị camera">
+          <option value="">Mặc định (Camera chính)</option>
+        </select>
+        <button type="button" id="camera-refresh" class="btn btn-outline">Làm mới</button>
+        <button type="button" id="camera-start" class="btn btn-primary">Bắt đầu</button>
+        <button type="button" id="camera-stop" class="btn btn-outline" disabled>Dừng</button>
+      </div>
 
-                <div id="gate-result" aria-live="polite">
-                    {% include '_gate_result.html' %}
-                </div>
+      <div id="camera-status" class="camera-status-bar" style="margin-top:0;" {% if source == 'upload' %}hidden{% endif %}>
+        Camera đang tắt. Bấm "Bắt đầu" để quét biển số trực tiếp.
+      </div>
 
-                <div class="gate-submit-bar">
-                    <p class="field-hint">{{ 'Kiểm tra biển số, chọn loại xe và vị trí đỗ trước khi xác nhận.' if direction == 'entry' else 'Kiểm tra biển số, thông tin lượt gửi và phí trước khi xác nhận.' }}</p>
-                    <div class="button-row">
-                        <button type="submit" name="action" value="recognize" class="btn btn-soft" id="recognize-button" formnovalidate
-                                data-has-preview="{{ 'true' if token else 'false' }}" {% if not token %}hidden{% endif %}>Cập nhật biển số</button>
-                        <button type="submit" name="action" value="confirm" class="btn btn-green" id="confirm-button"
-                                {% if not mode or (mode == 'entry' and no_slots) %}disabled{% endif %}>
-                            {{ '✓ Xác nhận xe vào' if direction == 'entry' else '✓ Xác nhận xe ra' }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </form>
-</main>
-<script src="{{ url_for('static', filename='js/gate.js', v='5') }}" defer></script>
-</body>
-</html>
+      <!-- Điều khiển Tải ảnh -->
+      <div id="upload-panel" {% if source != 'upload' %}hidden{% endif %}>
+        <div class="form-field">
+          <label for="image">Chọn ảnh biển số xe (.jpg, .png, .webp)</label>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="file" id="image" name="image" accept=".jpg,.jpeg,.png,.webp,.bmp" style="flex:1;">
+            <button type="submit"
+                    id="image-recognize-button"
+                    name="action"
+                    value="recognize"
+                    formnovalidate
+                    class="btn btn-primary">
+              Nhận diện từ ảnh
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CỘT PHẢI: THÔNG TIN BIỂN SỐ & XÁC NHẬN VÀO / RA -->
+  <section class="panel lane-panel gate-details">
+    <div class="lane-heading">
+      <div>
+        <span class="lane-icon {{ 'entry' if is_entry else 'exit' }}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+        <div>
+          <h2>Kết quả nhận diện &amp; Xác nhận</h2>
+          <p>Kiểm tra thông tin biển số, phân khu đỗ xe và điều khiển barrier</p>
+        </div>
+      </div>
+      {% if plate %}
+        <span class="plate">{{ plate }}</span>
+      {% else %}
+        <span class="badge badge-amber"><span></span>Chờ biển số</span>
+      {% endif %}
+    </div>
+
+    <div class="lane-content">
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="plate">Biển số nhận diện / nhập tay</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text"
+                   id="plate"
+                   name="plate"
+                   value="{{ plate }}"
+                   placeholder="VD: 51H-123.45"
+                   autocomplete="off"
+                   style="font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">
+            <button type="submit"
+                    id="recognize-button"
+                    name="action"
+                    value="recognize"
+                    formnovalidate
+                    data-has-preview="{{ 'true' if has_preview else 'false' }}"
+                    class="btn btn-outline"
+                    style="white-space:nowrap;"
+                    {% if not has_preview %}hidden{% endif %}>
+              Đối chiếu
+            </button>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label for="note">Ghi chú lượt {{ 'vào' if is_entry else 'ra' }}</label>
+          <input type="text"
+                 id="note"
+                 name="note"
+                 value="{{ note }}"
+                 placeholder="Nhập ghi chú nếu cần...">
+        </div>
+      </div>
+
+      <div id="gate-result">
+        {% include '_gate_result.html' %}
+      </div>
+
+      {% set can_confirm = (mode == 'exit') or (mode == 'entry' and not no_slots) %}
+      <div class="lane-actions" style="grid-template-columns: 1fr;">
+        <button type="submit"
+                id="confirm-button"
+                name="action"
+                value="confirm"
+                class="btn btn-primary"
+                style="width:100%;justify-content:center;"
+                {% if not can_confirm %}disabled{% endif %}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          {% if direction == 'entry' %}
+            Xác nhận CHO XE VÀO BÃI
+          {% else %}
+            Xác nhận CHO XE RA BÃI
+          {% endif %}
+        </button>
+      </div>
+    </div>
+  </section>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/gate.js"></script>
+{% endblock %}

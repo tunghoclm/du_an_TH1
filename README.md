@@ -67,6 +67,22 @@ smart_parking/
 
 ## 2. Cài đặt (CHỈ LÀM 1 LẦN DUY NHẤT)
 
+### Tải mã nguồn từ nhánh `tung`
+
+Cài Python (trên Windows chọn **Add Python to PATH**) và Git, sau đó chạy:
+
+```bash
+git clone --branch tung --single-branch https://github.com/tunghoclm/du_an_TH1.git
+cd du_an_TH1
+```
+
+Nếu tải ZIP trên GitHub, chọn nhánh **tung**, bấm **Code → Download ZIP**, rồi giải nén
+và mở terminal trong thư mục chứa `app.py`. Các lệnh `cd smart_parking` bên dưới
+chỉ là ví dụ; dùng tên thư mục vừa tải về.
+
+Không cần sao chép database, môi trường ảo hay model từ máy người khác: chạy script
+cài đặt bên dưới để tạo chúng trên máy của bạn. Lần cài đầu cần Internet.
+
 Không cần cài thêm phần mềm OCR hệ thống nào — EasyOCR thuần Python. Có script
 tự động lo hết mọi bước (tạo venv, cài thư viện, tải sẵn model EasyOCR, khởi
 tạo database) — bạn chỉ cần chạy:

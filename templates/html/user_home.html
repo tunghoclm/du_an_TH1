@@ -1,101 +1,160 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Parking</title>
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='user.css') }}">
-</head>
-<body>
-<div class="wrap narrow">
+{% extends "_layout.html" %}
+{% set active_page = 'dashboard' %}
 
-    <!-- ============ TIÊU ĐỀ ============ -->
-    <header class="topbar">
-        <div class="topbar-left">
-            <span class="logo">P</span>
-            <div>
-                <h1>Smart Parking</h1>
-                <p>Xin chào, <strong>{{ session.get('fullname') }}</strong></p>
-            </div>
-        </div>
-        <div class="topbar-right">
-            <a href="{{ url_for('logout') }}" class="btn btn-soft btn-sm">🚪 Đăng xuất</a>
-        </div>
-    </header>
+{% block title %}Trang chủ khách hàng — Smart Parking{% endblock %}
+{% block breadcrumb %}Tổng quan{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/user.css">
+{% endblock %}
 
-    <!-- ============ THÔNG BÁO ============ -->
-    <div class="toasts" id="toasts">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-            <div class="toast toast-{{ category }}" role="status">
-                <span>{{ message }}</span>
-                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
-            </div>
-            {% endfor %}
-        {% endwith %}
-    </div>
+{% block content %}
+{% set occ_rate = ((counts.occupied * 100 / counts.total)|round|int) if counts.total else 0 %}
 
-    <!-- ============ XE CỦA TÔI ============ -->
-    <section class="panel">
-        <div class="panel-head">
-            <div>
-                <h2>Xe của tôi</h2>
-                <p>Các xe và vé bạn đã đăng ký</p>
-            </div>
-        </div>
-        <div class="panel-body">
-            {% if vehicles %}
-            <div class="vlist">
-                {% for v in vehicles %}
-                {% set is_month = v['ticket_type'] == 'month' %}
-                {% set active = is_month and v['expires_on'] and v['expires_on'] >= today %}
-                <div class="vcard">
-                    <div class="vplate">{{ v['plate_number'] }}</div>
-                    <div class="vmeta">{{ v['vehicle_type_name'] or 'Chưa chọn loại xe' }}</div>
-                    {% if active %}
-                        {% set left = v['expires_on']|days_left %}
-                        <span class="badge {{ 'badge-amber' if left <= 7 else 'badge-green' }}">
-                            Vé tháng · đến {{ v['expires_on']|vdate }} ({{ 'hôm nay là ngày cuối' if left == 0 else 'còn ' ~ left ~ ' ngày' }})
-                        </span>
-                    {% elif is_month %}
-                        <span class="badge badge-red">Vé tháng đã hết hạn {{ v['expires_on']|vdate }}</span>
-                    {% else %}
-                        <span class="badge badge-gray">Vé lượt</span>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="callout">Bạn chưa đăng ký xe nào. Vào <a href="{{ url_for('settings') }}#add">Cài đặt → Đăng ký thêm biển số</a> để đăng ký xe.</div>
-            {% endif %}
-        </div>
-    </section>
-
-    <!-- ============ CHỨC NĂNG ============ -->
-    <section class="home-grid">
-        <a href="{{ url_for('pricing') }}" class="tile">
-            <span class="tile-icon t-amber">💰</span>
-            <strong>Giá xe</strong>
-            <small>Bảng giá gửi xe</small>
-        </a>
-        <a href="{{ url_for('parking') }}" class="tile">
-            <span class="tile-icon t-blue">🅿️</span>
-            <strong>Bãi đỗ xe</strong>
-            <small>Còn {{ counts.available }} vị trí trống</small>
-        </a>
-        <a href="{{ url_for('history') }}" class="tile">
-            <span class="tile-icon t-green">📋</span>
-            <strong>Lịch sử</strong>
-            <small>Lượt ra vào của xe bạn</small>
-        </a>
-        <a href="{{ url_for('settings') }}" class="tile">
-            <span class="tile-icon t-purple">⚙️</span>
-            <strong>Cài đặt</strong>
-            <small>Mật khẩu, vé, biển số</small>
-        </a>
-    </section>
+<div class="page-heading">
+  <div>
+    <h1>Xin chào, {{ current_user_fullname }}</h1>
+    <p>Theo dõi chỗ trống bãi đỗ xe, danh sách phương tiện đăng ký và lịch sử gửi xe của bạn</p>
+  </div>
+  <div class="heading-actions">
+    <a href="{{ url_for('parking') }}" class="btn btn-outline">Xem sơ đồ bãi xe</a>
+    <a href="{{ url_for('history') }}" class="btn btn-primary">Tra cứu lịch sử gửi xe</a>
+  </div>
 </div>
-<script>setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);</script>
-</body>
-</html>
+
+<section class="overview-banner">
+  <div>
+    <span class="banner-eyebrow">
+      <span class="live-dot"></span>
+      CỔNG THÔNG TIN KHÁCH HÀNG
+    </span>
+    <h2>Tra cứu nhanh chóng, gửi xe thuận tiện.</h2>
+    <p>
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+      Bãi đỗ xe Trung tâm Smart Parking
+      <span>·</span>
+      <span>{{ counts.available }} chỗ trống sẵn sàng</span>
+      <span>·</span>
+      <span>Trên tổng số {{ counts.total }} vị trí</span>
+    </p>
+  </div>
+  <div class="banner-right">
+    <div>
+      <span class="capacity-number">
+        {{ counts.available }}
+      </span>
+      <span>Chỗ đỗ còn trống</span>
+    </div>
+    <a href="{{ url_for('pricing') }}" class="btn btn-primary">
+      Xem bảng giá niêm yết
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+    </a>
+  </div>
+  <div class="banner-decoration" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" width="170" height="170" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+  </div>
+</section>
+
+<div class="stats-grid four">
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Tổng số ô đỗ</span>
+      <span class="stat-icon blue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+      </span>
+    </div>
+    <strong>{{ counts.total }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Công suất hiện tại {{ occ_rate }}%
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Ô còn trống</span>
+      <span class="stat-icon green">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+      </span>
+    </div>
+    <strong>{{ counts.available }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Sẵn sàng đón xe trực tiếp
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Đang có xe</span>
+      <span class="stat-icon purple">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+      </span>
+    </div>
+    <strong>{{ counts.occupied }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Đang lưu bãi · Bảo trì: {{ counts.maintenance }} ô
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Xe đã đăng ký</span>
+      <span class="stat-icon amber">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>
+      </span>
+    </div>
+    <strong>{{ vehicles|length }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Tài khoản của bạn
+    </div>
+  </div>
+</div>
+
+<section class="panel data-panel">
+  <div class="panel-heading">
+    <h2>Phương tiện đã đăng ký của bạn <span class="count-pill">{{ vehicles|length }}</span></h2>
+    <a href="{{ url_for('settings') }}" class="btn btn-outline">Quản lý xe &amp; gia hạn vé</a>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Biển số xe</th>
+          <th>Loại phương tiện</th>
+          <th>Gói vé</th>
+          <th>Hiệu lực vé tháng</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if vehicles %}
+          {% for v in vehicles %}
+            {% set expired = v.ticket_type == 'month' and v.expires_on and v.expires_on < today %}
+            <tr>
+              <td><span class="plate">{{ v.plate_number }}</span></td>
+              <td><b>{{ v.vehicle_type_name or 'Chưa phân loại' }}</b></td>
+              <td>
+                {% if v.ticket_type == 'month' and not expired %}
+                  <span class="badge badge-green"><span></span>Vé tháng</span>
+                {% elif expired %}
+                  <span class="badge badge-red"><span></span>Hết hạn</span>
+                {% else %}
+                  <span class="badge badge-blue"><span></span>Vé lượt</span>
+                {% endif %}
+              </td>
+              <td>{{ v.expires_on|vdate if v.expires_on else 'Theo lượt vào / ra' }}</td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="4" class="empty-cell">
+              Tài khoản của bạn chưa có biển số xe được gắn. Bạn có thể đăng ký xe tại mục <a href="{{ url_for('settings') }}" style="color:var(--primary);font-weight:600;">Cài đặt tài khoản</a>.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

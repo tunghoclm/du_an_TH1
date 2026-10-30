@@ -1,160 +1,170 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sửa tài khoản - Smart Parking</title>
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='users.css') }}">
-</head>
-<body>
-<div class="wrap">
+{% extends "_layout.html" %}
+{% set active_page = 'users' %}
+{% set is_admin = (current_user_role == 'admin') %}
 
-    <!-- ============ TIÊU ĐỀ ============ -->
-    <header class="topbar">
-        <div class="topbar-left">
-            <a href="{{ url_for('users') }}" class="back" aria-label="Quay lại">←</a>
-            <div>
-                <h1>Sửa tài khoản</h1>
-                <p>{{ target['username'] }} · {{ {'admin': 'Quản trị viên', 'manager': 'Nhân viên', 'user': 'Người dùng'}.get(target['role']) }}</p>
-            </div>
-        </div>
-        <div class="topbar-right">
-            <div class="user-chip">
-                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
-                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
-            </div>
-        </div>
-    </header>
+{% block title %}Sửa tài khoản {{ target.username }} — Smart Parking{% endblock %}
+{% block breadcrumb %}Chỉnh sửa người dùng{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/users.css">
+{% endblock %}
 
-    <!-- ============ THÔNG BÁO ============ -->
-    <div class="toasts" id="toasts">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-            <div class="toast toast-{{ category }}" role="status">
-                <span>{{ message }}</span>
-                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
-            </div>
-            {% endfor %}
-        {% endwith %}
-    </div>
-
-        {# Thông tin tài khoản #}
-        <section class="panel">
-            <div class="panel-head"><div><h2>Thông tin tài khoản</h2><p>Tên đăng nhập không thể thay đổi</p></div></div>
-            <div class="panel-body">
-            <form method="POST" action="{{ url_for('edit_user', user_id=target['id']) }}" class="panel-form">
-                <div class="form-group">
-                    <label>Tên đăng nhập</label>
-                    <input type="text" value="{{ target['username'] }}" disabled>
-                </div>
-                <div class="form-group">
-                    <label for="fullname">Họ và tên</label>
-                    <input type="text" id="fullname" name="fullname" required value="{{ target['fullname'] }}">
-                </div>
-                {% if session.get('role') == 'admin' and target['role'] != 'admin' %}
-                <div class="form-group">
-                    <label for="role">Vai trò</label>
-                    <select id="role" name="role">
-                        <option value="user" {{ 'selected' if target['role'] == 'user' }}>Người dùng</option>
-                        <option value="manager" {{ 'selected' if target['role'] == 'manager' }}>Nhân viên</option>
-                    </select>
-                </div>
-                {% endif %}
-                <button type="submit" class="btn btn-green">Lưu thông tin</button>
-            </form>
-            </div>
-        </section>
-
-        {# Đổi mật khẩu: chỉ admin #}
-        {% if session.get('role') == 'admin' %}
-        <section class="panel">
-            <div class="panel-head"><div><h2>Đổi mật khẩu</h2><p>Đặt mật khẩu mới cho tài khoản này</p></div></div>
-            <div class="panel-body">
-            <form method="POST" action="{{ url_for('change_user_password', user_id=target['id']) }}" class="panel-form">
-                <div class="form-group">
-                    <label for="new_password">Mật khẩu mới</label>
-                    <input type="password" id="new_password" name="new_password" required minlength="4" placeholder="Tối thiểu 4 ký tự">
-                </div>
-                <div class="form-group">
-                    <label for="confirm_password">Nhập lại mật khẩu mới</label>
-                    <input type="password" id="confirm_password" name="confirm_password" required minlength="4">
-                </div>
-                <button type="submit" class="btn btn-green">Đổi mật khẩu</button>
-            </form>
-            </div>
-        </section>
-        {% endif %}
-
-        {# Xe & vé đăng ký: chỉ tài khoản người dùng #}
-        {% if target['role'] == 'user' %}
-        <section class="panel">
-            <div class="panel-head">
-                <div><h2>Xe &amp; vé đã đăng ký</h2><p>Biển số xe và loại vé của tài khoản này · {{ vehicles|length }} xe</p></div>
-            </div>
-            <div class="panel-body">
-
-            {% if vehicles %}
-            <div class="table-wrap">
-                <table class="data">
-                    <thead><tr><th>Biển số</th><th>Loại xe</th><th>Loại vé</th><th>Thời hạn &amp; tiền vé</th><th>Thao tác</th></tr></thead>
-                    <tbody>
-                        {% for v in vehicles %}
-                        {% set is_month = v['ticket_type'] == 'month' %}
-                        {% set expired = is_month and v['expires_on'] and v['expires_on'] < today %}
-                        {% set mprice = (price_info.get(v['vehicle_type_id']) or {}).get('month') %}
-                        <tr>
-                            <td><strong>{{ v['plate_number'] }}</strong></td>
-                            <td>{{ v['vehicle_type_name'] or '—' }}</td>
-                            <td><span class="plate-chip {{ 'chip-month' if is_month else '' }}">{{ ticket_labels.get(v['ticket_type'], v['ticket_type']) }}</span></td>
-                            <td>
-                                {% if is_month and v['expires_on'] %}
-                                    {{ (v['start_on'] or v['created_at'][:10])|vdate }} → <strong>{{ v['expires_on']|vdate }}</strong>
-                                    {% if expired %}<span class="badge badge-red">Đã hết hạn</span>{% endif %}
-                                    <div class="muted">
-                                        {% if v['months'] %}{{ v['months'] }} tháng{% endif %}
-                                        {% if v['paid_amount'] %} · tổng tiền vé {{ v['paid_amount']|vnd }}{% endif %}
-                                    </div>
-                                {% else %}
-                                    <span class="muted">Tính phí theo lượt khi xe vào/ra</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <form method="POST" action="{{ url_for('renew_user_vehicle', user_id=target['id'], vehicle_id=v['id']) }}"
-                                      class="renew-form">
-                                    <input type="number" name="months" min="1" max="{{ max_months }}" value="1" title="Số tháng thuê thêm">
-                                    <button type="submit" class="btn btn-edit"
-                                            {{ 'disabled title="Bảng giá chưa có giá vé tháng cho loại xe này"' if mprice is none }}>
-                                        {{ 'Thuê thêm tháng' if is_month and not expired else 'Đăng ký vé tháng' }}
-                                        {% if mprice is not none %}({{ mprice|vnd }}/tháng){% endif %}
-                                    </button>
-                                </form>
-                                <form method="POST" action="{{ url_for('remove_user_vehicle', user_id=target['id'], vehicle_id=v['id']) }}"
-                                      class="inline-form" onsubmit="return confirm('Hủy đăng ký xe {{ v['plate_number'] }}?');">
-                                    <button type="submit" class="btn btn-del">Hủy đăng ký</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <p class="muted" style="margin-bottom:10px;">Tài khoản này chưa đăng ký xe nào.</p>
-            {% endif %}
-
-            <h3 class="sub-title">Đăng ký thêm xe</h3>
-            <form method="POST" action="{{ url_for('add_user_vehicles', user_id=target['id']) }}" class="panel-form">
-                {% include '_vehicle_rows.html' %}
-                <button type="submit" class="btn btn-green">Đăng ký xe</button>
-            </form>
-            </div>
-        </section>
-        {% endif %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>Hồ sơ tài khoản: {{ target.fullname }}</h1>
+    <p>Cập nhật thông tin cá nhân, mật khẩu và quản lý phương tiện đăng ký của {{ target.username }}</p>
+  </div>
+  <div class="heading-actions">
+    <a href="{{ url_for('users') }}" class="btn btn-outline">← Quay lại danh sách</a>
+  </div>
 </div>
 
-<script>
-    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
-</script>
-</body>
-</html>
+<div class="dashboard-bottom">
+  <!-- THÔNG TIN TÀI KHOẢN -->
+  <form method="POST" action="{{ url_for('edit_user', user_id=target.id) }}" class="panel chart-card">
+    <div class="panel-heading">
+      <div>
+        <h2>Thông tin tài khoản</h2>
+        <p>Cập nhật họ tên và vai trò hệ thống</p>
+      </div>
+    </div>
+
+    <div class="form-grid" style="grid-template-columns: 1fr;">
+      <div class="form-field">
+        <label>Tên đăng nhập</label>
+        <input type="text" value="{{ target.username }}" disabled>
+      </div>
+
+      <div class="form-field">
+        <label for="fullname">Họ và tên *</label>
+        <input type="text" id="fullname" name="fullname" value="{{ target.fullname }}" required>
+      </div>
+
+      {% if is_admin and target.role != 'admin' %}
+        <div class="form-field">
+          <label for="role">Vai trò</label>
+          <select id="role" name="role">
+            <option value="user" {% if target.role == 'user' %}selected{% endif %}>Người dùng</option>
+            <option value="manager" {% if target.role == 'manager' %}selected{% endif %}>Nhân viên vận hành</option>
+          </select>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="settings-footer">
+      <button type="submit" class="btn btn-primary">Lưu thông tin</button>
+    </div>
+  </form>
+
+  <!-- ĐỔI MẬT KHẨU (ADMIN) -->
+  {% if is_admin %}
+    <form method="POST" action="{{ url_for('change_user_password', user_id=target.id) }}" class="panel chart-card">
+      <div class="panel-heading">
+        <div>
+          <h2>Đặt lại mật khẩu</h2>
+          <p>Dành cho quản trị viên cấp lại mật khẩu cho {{ target.username }}</p>
+        </div>
+      </div>
+
+      <div class="form-grid" style="grid-template-columns: 1fr;">
+        <div class="form-field">
+          <label for="new_password">Mật khẩu mới *</label>
+          <input type="password" id="new_password" name="new_password" required placeholder="Nhập mật khẩu mới">
+        </div>
+
+        <div class="form-field">
+          <label for="confirm_password">Nhập lại mật khẩu mới *</label>
+          <input type="password" id="confirm_password" name="confirm_password" required placeholder="Xác nhận mật khẩu mới">
+        </div>
+      </div>
+
+      <div class="settings-footer">
+        <button type="submit" class="btn btn-primary">Cập nhật mật khẩu</button>
+      </div>
+    </form>
+  {% endif %}
+</div>
+
+{% if target.role == 'user' %}
+  <!-- DANH SÁCH XE ĐÃ ĐĂNG KÝ -->
+  <section class="panel data-panel" style="margin-bottom: 18px;">
+    <div class="panel-heading">
+      <h2>Phương tiện đã đăng ký <span class="count-pill">{{ vehicles|length }}</span></h2>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Biển số</th>
+            <th>Loại xe</th>
+            <th>Loại vé</th>
+            <th>Thời hạn vé tháng</th>
+            <th>Gia hạn thêm tháng</th>
+            <th class="right">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if vehicles %}
+            {% for v in vehicles %}
+              {% set expired = v.ticket_type == 'month' and v.expires_on and v.expires_on < today %}
+              <tr>
+                <td><span class="plate">{{ v.plate_number }}</span></td>
+                <td><b>{{ v.vehicle_type_name or '—' }}</b></td>
+                <td>
+                  {% if v.ticket_type == 'month' and not expired %}
+                    <span class="badge badge-green"><span></span>Vé tháng</span>
+                  {% elif expired %}
+                    <span class="badge badge-red"><span></span>Vé tháng hết hạn</span>
+                  {% else %}
+                    <span class="badge badge-blue"><span></span>Vé lượt</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if v.expires_on %}
+                    {{ v.start_on|vdate }} → <b>{{ v.expires_on|vdate }}</b>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td>
+                  <form method="POST" action="{{ url_for('renew_user_vehicle', user_id=target.id, vehicle_id=v.id) }}" style="display:flex;gap:6px;align-items:center;">
+                    <input type="number" name="months" min="1" max="{{ max_months }}" value="1" style="width:72px;height:34px;padding:4px 8px;">
+                    <button type="submit" class="btn btn-outline">Gia hạn</button>
+                  </form>
+                </td>
+                <td class="right">
+                  <form method="POST" action="{{ url_for('remove_user_vehicle', user_id=target.id, vehicle_id=v.id) }}" onsubmit="return confirm('Hủy đăng ký xe {{ v.plate_number }}?');">
+                    <button type="submit" class="btn btn-danger">Hủy xe</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" class="empty-cell">Tài khoản này chưa đăng ký phương tiện nào.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ĐĂNG KÝ THÊM XE MỚI -->
+  <section class="panel chart-card">
+    <div class="panel-heading">
+      <div>
+        <h2>Đăng ký thêm phương tiện mới</h2>
+        <p>Thêm biển số xe và gói vé cho {{ target.fullname }}</p>
+      </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('add_user_vehicles', user_id=target.id) }}">
+      {% include '_vehicle_rows.html' %}
+      <div class="settings-footer">
+        <button type="submit" class="btn btn-primary">Lưu phương tiện đăng ký</button>
+      </div>
+    </form>
+  </section>
+{% endif %}
+{% endblock %}
