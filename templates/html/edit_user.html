@@ -1,9 +1,9 @@
 {% extends "_layout.html" %}
-{% set active_page = 'users' %}
+{% set active_page = 'customers' if target.role == 'user' else 'accounts' %}
 {% set is_admin = (current_user_role == 'admin') %}
 
 {% block title %}Sửa tài khoản {{ target.username }} — Smart Parking{% endblock %}
-{% block breadcrumb %}Chỉnh sửa người dùng{% endblock %}
+{% block breadcrumb %}{{ 'Khách hàng' if target.role == 'user' else 'Tài khoản nhân viên' }}{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="/css/users.css">
 {% endblock %}
@@ -11,11 +11,15 @@
 {% block content %}
 <div class="page-heading">
   <div>
-    <h1>Hồ sơ tài khoản: {{ target.fullname }}</h1>
+    <h1>{{ 'Hồ sơ khách hàng' if target.role == 'user' else 'Hồ sơ nhân viên' }}: {{ target.fullname }}</h1>
     <p>Cập nhật thông tin cá nhân, mật khẩu và quản lý phương tiện đăng ký của {{ target.username }}</p>
   </div>
   <div class="heading-actions">
-    <a href="{{ url_for('users') }}" class="btn btn-outline">← Quay lại danh sách</a>
+    {% if target.role == 'user' %}
+      <a href="{{ url_for('customers') }}" class="btn btn-outline">← Quay lại danh sách khách hàng</a>
+    {% else %}
+      <a href="{{ url_for('accounts') }}" class="btn btn-outline">← Quay lại danh sách tài khoản</a>
+    {% endif %}
   </div>
 </div>
 

@@ -12,7 +12,9 @@ Chức năng:
   /statistics        - Thống kê tổng quan
   /pricing           - Bảng giá xe: khung thời gian, loại xe, giá (ai cũng xem, admin/nhân viên chỉnh sửa)
   /settings          - Cài đặt cá nhân (mỗi người tự chọn, không cần admin/nhân viên)
-  /users             - Quản lý người dùng (chỉ admin)
+  /customers         - Quản lý khách hàng & phương tiện (admin và nhân viên)
+  /accounts          - Quản lý tài khoản nhân viên & quản trị (chỉ admin)
+  /users             - Điều hướng tương thích ngược
 """
 
 import os
@@ -1220,16 +1222,38 @@ def save_vehicles(user_id, vehicles):
                                   v['paid_amount'])
 
 
-def render_users(**extra):
-    all_users = database.get_all_users()
-    if session.get('role') != 'admin':
-        all_users = [u for u in all_users if u['role'] == 'user']
-    return render_template('users.html', users=all_users,
-                           vehicles_by_user=database.get_vehicles_grouped(),
+def render_customers(**extra):
+    customers = database.get_customer_users()
+    all_staff = database.get_staff_users() if session.get('role') == 'admin' else []
+    vehicles_grouped = database.get_vehicles_grouped()
+    total_vehicles = sum(len(vehicles_grouped.get(c['id'], [])) for c in customers)
+    return render_template('customers.html', customers=customers,
+                           staff_count=len(all_staff),
+                           customer_count=len(customers),
+                           total_vehicles=total_vehicles,
+                           vehicles_by_user=vehicles_grouped,
                            vehicle_types=database.get_vehicle_types(),
                            ticket_labels=TICKET_LABELS, today=date.today().isoformat(),
                            price_info=build_price_info(), max_months=MAX_MONTHS,
+                           active_tab='customers',
+                           form=None, form_vehicles=None,
                            **extra)
+
+
+def render_accounts(**extra):
+    staff_users = database.get_staff_users()
+    customers = database.get_customer_users()
+    return render_template('accounts.html', staff_users=staff_users,
+                           staff_count=len(staff_users),
+                           customer_count=len(customers),
+                           today=date.today().isoformat(),
+                           active_tab='accounts',
+                           form=None,
+                           **extra)
+
+
+def render_users(**extra):
+    return render_customers(**extra)
 
 
 def render_edit_user(target, **extra):
@@ -1241,13 +1265,30 @@ def render_edit_user(target, **extra):
                            **extra)
 
 
+@app.route('/customers')
+@login_required
+@staff_required
+def customers():
+    return render_customers()
+
+
+@app.route('/accounts')
+@login_required
+@admin_required
+def accounts():
+    return render_accounts()
+
+
 @app.route('/users')
 @login_required
 @staff_required
 def users():
-    return render_users()
+    if request.args.get('tab') == 'accounts' and session.get('role') == 'admin':
+        return redirect(url_for('accounts'))
+    return redirect(url_for('customers'))
 
 
+@app.route('/customers/recognize-plate', methods=['POST'])
 @app.route('/users/recognize-plate', methods=['POST'])
 @login_required
 @staff_required
@@ -1275,21 +1316,15 @@ def recognize_user_plate():
     return jsonify(plate=plate)
 
 
-@app.route('/users/add', methods=['POST'])
+@app.route('/customers/add', methods=['POST'])
 @login_required
 @staff_required
-def add_user():
+def add_customer():
     username = request.form.get('username', '').strip()
     fullname = request.form.get('fullname', '').strip()
     password = request.form.get('password', '')
-    role = request.form.get('role', 'user')
-    # Nhân viên chỉ được tạo tài khoản người dùng; admin tạo được người dùng hoặc nhân viên.
-    if session.get('role') != 'admin' or role not in ('user', 'manager'):
-        role = 'user'
 
-    vehicles, errors, prefill = ([], [], [])
-    if role == 'user':
-        vehicles, errors, prefill = parse_vehicle_forms(request.form)
+    vehicles, errors, prefill = parse_vehicle_forms(request.form)
 
     if not username or not fullname or not password:
         errors.insert(0, 'Vui lòng nhập đầy đủ thông tin.')
@@ -1301,18 +1336,59 @@ def add_user():
     if errors:
         for e in errors:
             flash(e, 'error')
-        return render_users(open_modal=True,
-                            form={'username': username, 'fullname': fullname, 'role': role},
-                            form_vehicles=prefill)
+        return render_customers(open_modal=True,
+                                form={'username': username, 'fullname': fullname},
+                                form_vehicles=prefill)
 
-    new_id = database.add_user(username, fullname, password, role)
+    new_id = database.add_user(username, fullname, password, 'user')
     save_vehicles(new_id, vehicles)
     extra = f' và đăng ký {len(vehicles)} xe' if vehicles else ''
     total = sum(v['paid_amount'] or 0 for v in vehicles)
     if total:
         extra += f' — tiền vé tháng cần thu: {vnd_filter(total)}'
-    flash(f'Đã thêm tài khoản "{username}"{extra}.', 'success')
-    return redirect(url_for('users'))
+    flash(f'Đã thêm khách hàng "{username}"{extra}.', 'success')
+    return redirect(url_for('customers'))
+
+
+@app.route('/accounts/add', methods=['POST'])
+@login_required
+@admin_required
+def add_account():
+    username = request.form.get('username', '').strip()
+    fullname = request.form.get('fullname', '').strip()
+    password = request.form.get('password', '')
+    role = request.form.get('role', 'manager')
+    if role not in ('manager', 'admin'):
+        role = 'manager'
+
+    errors = []
+    if not username or not fullname or not password:
+        errors.append('Vui lòng nhập đầy đủ thông tin.')
+    elif len(password) < MIN_PASSWORD_LEN:
+        errors.append(f'Mật khẩu tối thiểu {MIN_PASSWORD_LEN} ký tự.')
+    elif database.username_exists(username):
+        errors.append('Tên đăng nhập đã tồn tại.')
+
+    if errors:
+        for e in errors:
+            flash(e, 'error')
+        return render_accounts(open_modal=True,
+                               form={'username': username, 'fullname': fullname, 'role': role})
+
+    database.add_user(username, fullname, password, role)
+    role_name = 'Quản trị viên' if role == 'admin' else 'Nhân viên vận hành'
+    flash(f'Đã tạo tài khoản {role_name} "{username}".', 'success')
+    return redirect(url_for('accounts'))
+
+
+@app.route('/users/add', methods=['POST'])
+@login_required
+@staff_required
+def add_user():
+    role = request.form.get('role', 'user')
+    if role in ('manager', 'admin') and session.get('role') == 'admin':
+        return add_account()
+    return add_customer()
 
 
 @app.route('/users/<int:user_id>/edit', methods=['GET', 'POST'])
@@ -1463,10 +1539,12 @@ def toggle_user(user_id):
     target = database.get_user_by_id(user_id)
     if target and target['username'] == 'admin':
         flash('Không thể khóa tài khoản admin.', 'error')
-        return redirect(url_for('users'))
+        return redirect(request.referrer or url_for('accounts'))
     database.toggle_user_status(user_id)
     flash('Đã cập nhật trạng thái tài khoản.', 'success')
-    return redirect(url_for('users'))
+    if target and target['role'] == 'user':
+        return redirect(request.referrer or url_for('customers'))
+    return redirect(request.referrer or url_for('accounts'))
 
 
 @app.route('/users/<int:user_id>/delete', methods=['POST'])
@@ -1476,10 +1554,11 @@ def remove_user(user_id):
     target = database.get_user_by_id(user_id)
     if target and target['username'] == 'admin':
         flash('Không thể xóa tài khoản admin.', 'error')
-        return redirect(url_for('users'))
+        return redirect(request.referrer or url_for('accounts'))
+    is_cust = target and target['role'] == 'user'
     database.delete_user(user_id)
-    flash('Đã xóa người dùng.', 'success')
-    return redirect(url_for('users'))
+    flash('Đã xóa tài khoản thành công.', 'success')
+    return redirect(request.referrer or (url_for('customers') if is_cust else url_for('accounts')))
 
 
 # ============================================================

@@ -1,0 +1,251 @@
+{% extends "_layout.html" %}
+{% set active_page = 'customers' %}
+{% set is_admin = (current_user_role == 'admin') %}
+{% set active_customers = customers|selectattr('status', 'equalto', 'active')|list|length %}
+
+{% block title %}Quản lý Khách hàng & Phương tiện — Smart Parking{% endblock %}
+{% block breadcrumb %}Khách hàng{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/users.css">
+{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>Quản lý Khách hàng</h1>
+    <p>Quản lý tài khoản khách hàng gửi xe, thông tin phương tiện đăng ký và quản lý vé tháng</p>
+  </div>
+  <div class="heading-actions">
+    <button type="button" class="btn btn-primary" id="open-add-customer">+ Thêm khách hàng mới</button>
+  </div>
+</div>
+
+<div class="chip-list" style="margin-bottom: 20px;">
+  <a href="{{ url_for('customers') }}" class="chip active">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Khách hàng ({{ customer_count }})
+  </a>
+  {% if is_admin %}
+  <a href="{{ url_for('accounts') }}" class="chip">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+    Tài khoản nhân viên &amp; Quản trị ({{ staff_count }})
+  </a>
+  {% endif %}
+</div>
+
+<div class="stats-grid four">
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Tổng số khách hàng</span>
+      <span class="stat-icon blue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </span>
+    </div>
+    <strong>{{ customers|length }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Chủ xe trong hệ thống
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Đang hoạt động</span>
+      <span class="stat-icon green">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+      </span>
+    </div>
+    <strong>{{ active_customers }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Cho phép gửi xe &amp; đăng nhập
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Phương tiện đăng ký</span>
+      <span class="stat-icon purple">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+      </span>
+    </div>
+    <strong>{{ total_vehicles }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Biển số xe đã liên kết
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Loại phương tiện</span>
+      <span class="stat-icon amber">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      </span>
+    </div>
+    <strong>{{ vehicle_types|length }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Hỗ trợ vé lượt / vé tháng
+    </div>
+  </div>
+</div>
+
+<section class="panel data-panel">
+  <div class="panel-heading">
+    <h2>Danh sách khách hàng <span class="count-pill">{{ customers|length }}</span></h2>
+  </div>
+
+  <div class="table-toolbar">
+    <div class="search-input">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" placeholder="Tìm theo họ tên khách hàng, tài khoản, biển số xe..." data-table-search>
+    </div>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Khách hàng</th>
+          <th>Tài khoản</th>
+          <th>Phương tiện đăng ký</th>
+          <th>Trạng thái</th>
+          <th class="right">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if customers %}
+          {% for u in customers %}
+            <tr>
+              <td>
+                <div class="person-cell">
+                  <div class="mini-avatar">{{ (u.fullname or u.username)[:2]|upper }}</div>
+                  <div>
+                    <b>{{ u.fullname }}</b>
+                    <small>ID: #{{ u.id }}</small>
+                  </div>
+                </div>
+              </td>
+              <td><b>{{ u.username }}</b></td>
+              <td>
+                {% set u_vehicles = vehicles_by_user.get(u.id, []) %}
+                {% if u_vehicles %}
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    {% for v in u_vehicles %}
+                      {% set expired = v.ticket_type == 'month' and v.expires_on and v.expires_on < today %}
+                      <span class="plate" title="{{ v.vehicle_type_name or '' }} · {{ ticket_labels.get(v.ticket_type, '') }}{% if v.expires_on %} (đến {{ v.expires_on|vdate }}){% endif %}">
+                        {{ v.plate_number }}
+                        {% if v.ticket_type == 'month' and not expired %}★{% elif expired %}!{% endif %}
+                      </span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span style="color:#8596b2;font-size:12px;">Chưa đăng ký xe</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if u.status == 'active' %}
+                  <span class="badge badge-green"><span></span>Hoạt động</span>
+                {% else %}
+                  <span class="badge badge-red"><span></span>Đã khóa</span>
+                {% endif %}
+              </td>
+              <td class="right">
+                <div class="row-actions">
+                  <a href="{{ url_for('edit_user', user_id=u.id) }}" class="btn btn-outline">Chi tiết / Sửa</a>
+                  {% if is_admin %}
+                    <form method="POST" action="{{ url_for('toggle_user', user_id=u.id) }}">
+                      <button type="submit" class="btn btn-outline">
+                        {{ 'Khóa' if u.status == 'active' else 'Mở khóa' }}
+                      </button>
+                    </form>
+                    <form method="POST" action="{{ url_for('remove_user', user_id=u.id) }}" onsubmit="return confirm('Xóa tài khoản khách hàng {{ u.username }}?');">
+                      <button type="submit" class="btn btn-danger">Xóa</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="5" class="empty-cell">Chưa có tài khoản khách hàng nào.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination">
+    <span>Hiển thị <b>{{ 1 if customers else 0 }}-{{ customers|length }}</b> trên <b>{{ customers|length }}</b> khách hàng</span>
+    <div>
+      <span class="current-page">1 / 1</span>
+    </div>
+  </div>
+</section>
+
+<!-- DIALOG THÊM KHÁCH HÀNG MỚI -->
+<dialog id="add-customer-dialog" class="dialog-wide" {% if open_modal %}open{% endif %}>
+  <form method="POST" action="{{ url_for('add_customer') }}" class="dialog-content">
+    <div class="dialog-header">
+      <div>
+        <h3>Tạo tài khoản khách hàng mới</h3>
+        <p>Nhập thông tin khách hàng và đăng ký phương tiện (nếu có)</p>
+      </div>
+      <button type="button" class="dialog-close" id="close-add-customer">×</button>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-field">
+        <label for="new-fullname">Họ và tên khách hàng *</label>
+        <input type="text" id="new-fullname" name="fullname" value="{{ form.fullname if form else '' }}" required placeholder="VD: Nguyễn Văn A">
+      </div>
+      <div class="form-field">
+        <label for="new-username">Tên đăng nhập *</label>
+        <input type="text" id="new-username" name="username" value="{{ form.username if form else '' }}" required placeholder="VD: nguyenvana">
+      </div>
+      <div class="form-field" style="grid-column: 1 / -1;">
+        <label for="new-password">Mật khẩu khởi tạo *</label>
+        <input type="password" id="new-password" name="password" required placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)">
+      </div>
+    </div>
+
+    <div id="customer-vehicles-section" style="margin-top: 16px;">
+      <h4 style="margin:0 0 10px;font-size:13px;font-weight:650;color:#10244b;">Đăng ký phương tiện ban đầu (Tùy chọn)</h4>
+      {% include '_vehicle_rows.html' %}
+    </div>
+
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-outline" id="cancel-add-customer">Hủy</button>
+      <button type="submit" class="btn btn-primary">Thêm khách hàng</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    var dlg = document.getElementById('add-customer-dialog');
+    var openBtn = document.getElementById('open-add-customer');
+    var closeBtn = document.getElementById('close-add-customer');
+    var cancelBtn = document.getElementById('cancel-add-customer');
+
+    if (openBtn && dlg) {
+      openBtn.addEventListener('click', function () {
+        if (typeof dlg.showModal === 'function') dlg.showModal();
+        else dlg.setAttribute('open', '');
+      });
+    }
+    function close() {
+      if (!dlg) return;
+      if (typeof dlg.close === 'function') dlg.close();
+      else dlg.removeAttribute('open');
+    }
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    if (cancelBtn) cancelBtn.addEventListener('click', close);
+  })();
+</script>
+{% endblock %}
+

@@ -1,0 +1,244 @@
+{% extends "_layout.html" %}
+{% set active_page = 'accounts' %}
+{% set is_admin = (current_user_role == 'admin') %}
+{% set admin_count = staff_users|selectattr('role', 'equalto', 'admin')|list|length %}
+{% set manager_count = staff_users|selectattr('role', 'equalto', 'manager')|list|length %}
+{% set active_staff = staff_users|selectattr('status', 'equalto', 'active')|list|length %}
+
+{% block title %}Tài khoản Nhân viên & Quản trị — Smart Parking{% endblock %}
+{% block breadcrumb %}Tài khoản nhân viên{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/users.css">
+{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>Tài khoản Nhân viên &amp; Quản trị</h1>
+    <p>Quản lý danh sách tài khoản quản trị viên và nhân viên trực vận hành hệ thống bãi xe</p>
+  </div>
+  <div class="heading-actions">
+    <button type="button" class="btn btn-primary" id="open-add-account">+ Thêm tài khoản nhân viên</button>
+  </div>
+</div>
+
+<div class="chip-list" style="margin-bottom: 20px;">
+  <a href="{{ url_for('customers') }}" class="chip">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Khách hàng ({{ customer_count }})
+  </a>
+  <a href="{{ url_for('accounts') }}" class="chip active">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+    Tài khoản nhân viên &amp; Quản trị ({{ staff_count }})
+  </a>
+</div>
+
+<div class="stats-grid four">
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Tổng số nhân sự</span>
+      <span class="stat-icon blue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+      </span>
+    </div>
+    <strong>{{ staff_users|length }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Tài khoản nội bộ
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Quản trị viên</span>
+      <span class="stat-icon amber">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+      </span>
+    </div>
+    <strong>{{ admin_count }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Toàn quyền quản trị
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Nhân viên vận hành</span>
+      <span class="stat-icon blue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+      </span>
+    </div>
+    <strong>{{ manager_count }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Trực cổng &amp; điều phối
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-top">
+      <span>Đang hoạt động</span>
+      <span class="stat-icon green">
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+      </span>
+    </div>
+    <strong>{{ active_staff }}</strong>
+    <div class="stat-detail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+      Được phép đăng nhập
+    </div>
+  </div>
+</div>
+
+<section class="panel data-panel">
+  <div class="panel-heading">
+    <h2>Danh sách tài khoản nhân viên &amp; quản trị <span class="count-pill">{{ staff_users|length }}</span></h2>
+  </div>
+
+  <div class="table-toolbar">
+    <div class="search-input">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" placeholder="Tìm theo họ tên nhân viên, tên tài khoản, vai trò..." data-table-search>
+    </div>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Họ và tên</th>
+          <th>Tên đăng nhập</th>
+          <th>Vai trò hệ thống</th>
+          <th>Trạng thái</th>
+          <th class="right">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if staff_users %}
+          {% for u in staff_users %}
+            <tr>
+              <td>
+                <div class="person-cell">
+                  <div class="mini-avatar">{{ (u.fullname or u.username)[:2]|upper }}</div>
+                  <div>
+                    <b>{{ u.fullname }}</b>
+                    <small>ID: #{{ u.id }}</small>
+                  </div>
+                </div>
+              </td>
+              <td><b>{{ u.username }}</b></td>
+              <td>
+                {% if u.role == 'admin' %}
+                  <span class="badge badge-amber"><span></span>Quản trị viên (Admin)</span>
+                {% elif u.role == 'manager' %}
+                  <span class="badge badge-blue"><span></span>Nhân viên vận hành (Manager)</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if u.status == 'active' %}
+                  <span class="badge badge-green"><span></span>Hoạt động</span>
+                {% else %}
+                  <span class="badge badge-red"><span></span>Đã khóa</span>
+                {% endif %}
+              </td>
+              <td class="right">
+                <div class="row-actions">
+                  <a href="{{ url_for('edit_user', user_id=u.id) }}" class="btn btn-outline">Chi tiết / Sửa</a>
+                  {% if is_admin and u.username != 'admin' %}
+                    <form method="POST" action="{{ url_for('toggle_user', user_id=u.id) }}">
+                      <button type="submit" class="btn btn-outline">
+                        {{ 'Khóa' if u.status == 'active' else 'Mở khóa' }}
+                      </button>
+                    </form>
+                    <form method="POST" action="{{ url_for('remove_user', user_id=u.id) }}" onsubmit="return confirm('Xóa tài khoản nhân viên {{ u.username }}?');">
+                      <button type="submit" class="btn btn-danger">Xóa</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="5" class="empty-cell">Chưa có tài khoản nhân viên nào.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination">
+    <span>Hiển thị <b>{{ 1 if staff_users else 0 }}-{{ staff_users|length }}</b> trên <b>{{ staff_users|length }}</b> tài khoản</span>
+    <div>
+      <span class="current-page">1 / 1</span>
+    </div>
+  </div>
+</section>
+
+<!-- DIALOG THÊM TÀI KHOẢN NHÂN VIÊN MỚI -->
+<dialog id="add-account-dialog" {% if open_modal %}open{% endif %}>
+  <form method="POST" action="{{ url_for('add_account') }}" class="dialog-content">
+    <div class="dialog-header">
+      <div>
+        <h3>Thêm tài khoản nhân sự mới</h3>
+        <p>Cấp quyền nhân viên vận hành hoặc quản trị viên hệ thống</p>
+      </div>
+      <button type="button" class="dialog-close" id="close-add-account">×</button>
+    </div>
+
+    <div class="form-grid" style="grid-template-columns: 1fr;">
+      <div class="form-field">
+        <label for="acc-fullname">Họ và tên nhân sự *</label>
+        <input type="text" id="acc-fullname" name="fullname" value="{{ form.fullname if form else '' }}" required placeholder="VD: Trần Văn B">
+      </div>
+      <div class="form-field">
+        <label for="acc-username">Tên đăng nhập *</label>
+        <input type="text" id="acc-username" name="username" value="{{ form.username if form else '' }}" required placeholder="VD: nhanvien02">
+      </div>
+      <div class="form-field">
+        <label for="acc-password">Mật khẩu khởi tạo *</label>
+        <input type="password" id="acc-password" name="password" required placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)">
+      </div>
+      <div class="form-field">
+        <label for="acc-role">Vai trò phân quyền *</label>
+        <select id="acc-role" name="role" required>
+          <option value="manager" {% if not form or form.role == 'manager' %}selected{% endif %}>Nhân viên vận hành (Quản lý bãi, giám sát xe, khách hàng)</option>
+          <option value="admin" {% if form and form.role == 'admin' %}selected{% endif %}>Quản trị viên (Toàn quyền quản trị hệ thống)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-outline" id="cancel-add-account">Hủy</button>
+      <button type="submit" class="btn btn-primary">Tạo tài khoản</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    var dlg = document.getElementById('add-account-dialog');
+    var openBtn = document.getElementById('open-add-account');
+    var closeBtn = document.getElementById('close-add-account');
+    var cancelBtn = document.getElementById('cancel-add-account');
+
+    if (openBtn && dlg) {
+      openBtn.addEventListener('click', function () {
+        if (typeof dlg.showModal === 'function') dlg.showModal();
+        else dlg.setAttribute('open', '');
+      });
+    }
+    function close() {
+      if (!dlg) return;
+      if (typeof dlg.close === 'function') dlg.close();
+      else dlg.removeAttribute('open');
+    }
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    if (cancelBtn) cancelBtn.addEventListener('click', close);
+  })();
+</script>
+{% endblock %}
+

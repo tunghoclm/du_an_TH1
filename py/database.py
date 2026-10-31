@@ -544,6 +544,26 @@ def get_all_users():
     return rows
 
 
+def get_customer_users():
+    """Lấy danh sách tất cả tài khoản khách hàng (chủ phương tiện)."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE role = 'user' ORDER BY id")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
+def get_staff_users():
+    """Lấy danh sách tài khoản nhân viên vận hành và quản trị viên."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE role IN ('admin', 'manager') ORDER BY id")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
 def username_exists(username: str) -> bool:
     conn = get_connection()
     cur = conn.cursor()

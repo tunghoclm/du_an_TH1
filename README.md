@@ -148,7 +148,8 @@ Tài khoản demo mặc định (đăng nhập tại `/login`):
 | `/exit`        | **Xe ra** — tải ảnh hoặc chọn camera → nhận diện → kiểm tra lượt gửi / phí → xác nhận. Chỉ cho xe đang gửi ra bãi |
 | `/history`     | Lịch sử lượt gửi, di chuyển và xóa xe; lọc biển số, giao dịch, ngày, khung giờ theo giờ vào hoặc giờ ra/xóa |
 | `/statistics`  | Thống kê tổng lượt xe, doanh thu, tỉ lệ lấp đầy bãi đỗ; **xuất báo cáo Excel / PDF** |
-| `/users`       | Quản lý tài khoản (chỉ admin thấy) — thêm, khóa/mở khóa, xóa người dùng      |
+| `/customers`   | Quản lý khách hàng: đăng ký thông tin chủ xe, biển số phương tiện và vé tháng |
+| `/accounts`    | Quản lý tài khoản nhân viên & quản trị viên: cấp tài khoản, phân quyền, khóa/mở khóa |
 | `/pricing`     | Bảng giá xe — 3 bảng: **khung thời gian** (tự đặt giờ/ngày bắt đầu–kết thúc), **loại xe** (tự tạo tên), **giá theo loại xe + thời gian** (lượt/tháng). Ai cũng xem, admin/nhân viên thêm-sửa-xóa |
 | `/settings`    | Cài đặt cá nhân (ai đăng nhập cũng dùng được) — tự chọn chế độ gửi xe: **tự động** hoặc **tự chọn vị trí** |
 
