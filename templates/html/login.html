@@ -135,30 +135,12 @@
           </button>
         </form>
 
-        <div class="or-divider">
-          <span id="or-label">hoặc tiếp tục với</span>
-        </div>
-
-        <div class="social-buttons">
-          <button type="button" data-open-forgot>
-            <span class="google-g">G</span>
-            <span>Google</span>
-          </button>
-          <button type="button" data-open-forgot>
-            <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
-            <span id="phone-label">Số điện thoại</span>
-          </button>
-          <button type="button" data-open-forgot>
-            <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true">
-              <path d="M17.2 12.8c0-2 1.6-3.1 1.7-3.2-1-1.5-2.6-1.7-3.2-1.7-1.4-.2-2.7.8-3.4.8-.7 0-1.8-.8-3-.8C7.8 8 6.4 8.9 5.6 10.2c-1.6 2.8-.4 7 1.2 9.2.8 1.1 1.7 2.2 2.9 2.1 1.2 0 1.6-.7 3.1-.7s1.9.7 3.1.7c1.3 0 2.1-1.1 2.8-2.2.9-1.2 1.2-2.5 1.3-2.6-.1 0-2.8-1.1-2.8-3.9zM15 6.4c.6-.8 1.1-1.9 1-3-.9 0-2.1.6-2.8 1.4-.6.7-1.2 1.9-1 2.9 1 .1 2.1-.5 2.8-1.3z"/>
-            </svg>
-            <span>Apple</span>
-          </button>
-        </div>
-
         <div class="login-contact">
           <span id="need-account-label">Bạn chưa có tài khoản?</span>
-          <a href="#forgot" data-open-forgot id="contact-admin-link">Liên hệ quản trị viên để được cấp tài khoản.</a>
+          <a href="{{ url_for('register') }}" class="btn-register-link" id="register-link">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+            <span id="register-label">Đăng ký tài khoản</span>
+          </a>
         </div>
 
         <div class="demo-credentials">
@@ -235,14 +217,13 @@
           document.getElementById('remember-label').textContent = vi ? 'Ghi nhớ đăng nhập' : 'Remember me';
           document.getElementById('forgot-link').textContent = vi ? 'Quên mật khẩu?' : 'Forgot password?';
           document.getElementById('submit-label').textContent = vi ? 'Đăng nhập' : 'Sign in';
-          document.getElementById('or-label').textContent = vi ? 'hoặc tiếp tục với' : 'or continue with';
-          document.getElementById('phone-label').textContent = vi ? 'Số điện thoại' : 'Phone';
           document.getElementById('need-account-label').textContent = vi
             ? 'Bạn chưa có tài khoản?'
             : 'Need an account?';
-          document.getElementById('contact-admin-link').textContent = vi
-            ? 'Liên hệ quản trị viên để được cấp tài khoản.'
-            : 'Contact your administrator to get started.';
+          var regLabel = document.getElementById('register-label');
+          if (regLabel) {
+            regLabel.textContent = vi ? 'Đăng ký tài khoản' : 'Sign up';
+          }
           document.getElementById('copyright-label').textContent = vi
             ? '© 2026 Smart Parking · Giải pháp quản lý bãi xe thông minh'
             : '© 2026 Smart Parking · Intelligent parking management';

@@ -60,6 +60,7 @@ TMP_FOLDER = TMP_DIR   # ảnh tạm (cache/tmp) giữa bước "Nhận diện" 
 UPLOAD_DIRS = {'in': IN_DIR, 'out': OUT_DIR}   # static/in: xe vào, static/out: xe ra
 
 FEE_PER_HOUR = 5000  # đơn giá DỰ PHÒNG (5.000 VNĐ/giờ) — chỉ dùng cho xe cũ chưa có loại xe / không còn giá
+MIN_PASSWORD_LEN = 4
 
 app = Flask(__name__, template_folder=TEMPLATES_HTML_DIR)
 app.secret_key = 'demo-smart-parking-secret-key'
@@ -218,6 +219,40 @@ def login():
         return redirect(url_for('index'))
 
     return render_template('login.html')
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if 'user_id' in session:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        fullname = request.form.get('fullname', '').strip()
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        if not fullname or not username or not password:
+            flash('Vui lòng nhập đầy đủ thông tin.', 'error')
+            return render_template('register.html', fullname=fullname, username=username)
+
+        if len(password) < MIN_PASSWORD_LEN:
+            flash(f'Mật khẩu tối thiểu {MIN_PASSWORD_LEN} ký tự.', 'error')
+            return render_template('register.html', fullname=fullname, username=username)
+
+        if password != confirm_password:
+            flash('Mật khẩu nhập lại không khớp.', 'error')
+            return render_template('register.html', fullname=fullname, username=username)
+
+        if database.username_exists(username):
+            flash('Tên đăng nhập đã tồn tại. Vui lòng chọn tên khác.', 'error')
+            return render_template('register.html', fullname=fullname, username=username)
+
+        database.add_user(username, fullname, password, role='user')
+        flash('Đăng ký tài khoản thành công! Vui lòng đăng nhập.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('register.html')
 
 
 @app.route('/logout')

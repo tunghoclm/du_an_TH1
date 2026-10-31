@@ -117,14 +117,9 @@
     </div>
 
     <div class="camera-frame" style="height: 280px;">
-      <div class="camera-photo {{ 'entry-photo' if is_entry else 'exit-photo' }}"></div>
       <div class="camera-top">
         <span><i class="live-dot"></i>{{ 'CAM-IN-01 · 1080p · 30fps' if is_entry else 'CAM-OUT-01 · 1080p · 30fps' }}</span>
         <span>AI LICENSE PLATE OCR</span>
-      </div>
-
-      <div class="scan-corners">
-        <i></i><i></i><i></i><i></i>
       </div>
 
       <div class="camera-video-layer">
@@ -162,9 +157,6 @@
           </small>
           <strong class="plate">{{ plate or 'CHƯA NHẬN DIỆN' }}</strong>
         </div>
-        <span class="badge {{ 'badge-green' if plate else 'badge-blue' }}">
-          <span></span>{{ 'Đã nhận diện' if plate else 'Đang chờ' }}
-        </span>
       </div>
     </div>
 
