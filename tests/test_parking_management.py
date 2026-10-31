@@ -53,7 +53,7 @@ class ParkingManagementTests(unittest.TestCase):
                 with self.subTest(role=role, url=url):
                     self.assertEqual(self.client.post(url, data=data).status_code, 302)
                     self.assertEqual(len(database.get_areas()), 3)
-                    self.assertEqual(database.slot_counts()['total'], 60)
+                    self.assertEqual(database.slot_counts()['total'], len(database.DEFAULT_AREAS) * database.SLOTS_PER_AREA)
                     self.assertEqual(self.area('A')['name'], 'A')
 
     def test_admin_can_add_rename_restrict_area_and_manage_empty_slots(self):
@@ -76,7 +76,7 @@ class ParkingManagementTests(unittest.TestCase):
         self.assertEqual(len(database.get_areas()), 3)
         for name in ('A01', '../outside', '', 'A' * 33):
             self.client.post('/parking/slots/add', data={'area_id': self.area('A')['id'], 'slot_name': name})
-        self.assertEqual(database.slot_counts()['total'], 60)
+        self.assertEqual(database.slot_counts()['total'], len(database.DEFAULT_AREAS) * database.SLOTS_PER_AREA)
 
     def test_admin_can_explicitly_allow_all_types_when_editing_an_area(self):
         area_id = self.area('A')['id']
@@ -313,7 +313,7 @@ class ParkingManagementTests(unittest.TestCase):
         self.client.post('/parking/areas/save', data={'name': 'D', 'slot_count': '10', 'vehicle_type_id': self.type_id})
         slots = database.get_available_slots_by_area()['D']
         self.assertEqual([s['slot_name'] for s in slots], [f'D{i:02d}' for i in range(1, 11)])
-        self.assertEqual(database.slot_counts()['total'], 70)
+        self.assertEqual(database.slot_counts()['total'], len(database.DEFAULT_AREAS) * database.SLOTS_PER_AREA + 10)
         self.client.post('/parking/areas/save', data={'area_id': self.area('D')['id'], 'name': 'D renamed', 'vehicle_type_id': 'all'})
         self.assertEqual(len(database.get_available_slots_by_area()['D renamed']), 10)
 
@@ -325,7 +325,7 @@ class ParkingManagementTests(unittest.TestCase):
         self.client.post('/parking/areas/save', data={'name': 'D', 'slot_count': '10'})
         self.assertFalse(any(a['name'] == 'D' for a in database.get_areas()))
         self.assertFalse(any(s['slot_name'] == 'D01' for s in database.get_all_slots()))
-        self.assertEqual(database.slot_counts()['total'], 61)
+        self.assertEqual(database.slot_counts()['total'], len(database.DEFAULT_AREAS) * database.SLOTS_PER_AREA + 1)
 
     def test_admin_can_delete_unoccupied_area_and_its_slots_without_erasing_history(self):
         record_id = self.park()
@@ -334,7 +334,7 @@ class ParkingManagementTests(unittest.TestCase):
         response = self.client.post(f'/parking/areas/{area_id}/delete')
         self.assertEqual(response.status_code, 302)
         self.assertFalse(any(a['name'] == 'A' for a in database.get_areas()))
-        self.assertEqual(database.slot_counts()['total'], 40)
+        self.assertEqual(database.slot_counts()['total'], (len(database.DEFAULT_AREAS) - 1) * database.SLOTS_PER_AREA)
         record = next(r for r in database.get_all_records() if r['id'] == record_id)
         self.assertEqual((record['status'], record['fee'], record['slot_name']), ('OUT', 7000, 'A01'))
 

@@ -177,7 +177,7 @@ Trên máy chạy ứng dụng, mở **http://localhost:5000** để dùng camer
 - **Bảo trì:** bấm ô trống, nhập lý do; lý do hiện trên ô bảo trì. Có thể sửa lý do hoặc kết thúc bảo trì. Không bảo trì ô đang có xe.
 - **Người dùng:** chỉ xem sơ đồ và lịch sử xe đã đăng ký của mình. Quyền chỉnh sửa được kiểm tra ở máy chủ cho từng thao tác.
 
-Bãi mới khởi tạo 3 khu A/B/C và 60 ô. Các lần khởi động sau giữ cấu hình đã sửa, kể cả khi admin xóa hết các ô hoặc các khu.
+Bãi mới khởi tạo 3 khu A/B/C và 18 ô (6 ô mỗi khu). Các lần khởi động sau giữ cấu hình đã sửa, kể cả khi admin xóa hết các ô hoặc các khu.
 Quy định loại xe của khu áp dụng cả lúc chọn ô thủ công và lúc gán ô tự động.
 
 **Lọc khung giờ lịch sử:** chọn ngày, bấm **Chọn khung giờ** để hiện **Từ giờ / Đến giờ**, rồi chọn khung trong bảng giá hoặc nhập giờ tùy chọn. Chọn **Tất cả** để bỏ lọc giờ và thu gọn hai ô nhập. Màn hình mặc định lọc theo thời gian vào.

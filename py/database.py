@@ -20,7 +20,7 @@ from config import DB_PATH, SQL_DIR
 from plate_utils import plate_key
 
 DEFAULT_AREAS = ['A', 'B', 'C']
-SLOTS_PER_AREA = 20
+SLOTS_PER_AREA = 6
 
 
 def get_connection():
@@ -82,7 +82,7 @@ def init_db():
             "FROM user_vehicles WHERE ticket_type = 'month' AND paid_amount > 0")
         conn.commit()
 
-    # Seed 60 vị trí đỗ (A01..A20, B01..B20, C01..C20) nếu bảng đang trống
+    # Seed 18 vị trí đỗ (A01..A06, B01..B06, C01..C06) nếu bảng đang trống
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) AS c FROM parking_slots")
     initialized = conn.execute("SELECT 1 FROM settings WHERE key='parking_layout_initialized'").fetchone()

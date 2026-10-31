@@ -387,7 +387,7 @@ class GateTests(unittest.TestCase):
         self.assertEqual(by_id['confirm-button'][0]['name'], 'action')
         self.assertEqual(by_id['confirm-button'][0]['value'], 'confirm')
         self.assertIn('required', by_id['slot-name'][0])
-        self.assertEqual(len(controls.slot_values), 60)
+        self.assertEqual(len(controls.slot_values), len(database.DEFAULT_AREAS) * database.SLOTS_PER_AREA)
         source_buttons = [attrs for attrs, _, _ in controls.found if 'data-source' in attrs]
         self.assertEqual(len(source_buttons), 2)
         self.assertTrue(all(attrs['type'] == 'button' for attrs in source_buttons))
