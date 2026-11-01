@@ -56,6 +56,48 @@ class GateTests(unittest.TestCase):
         database.DB_PATH = config.DB_PATH
         cls.temp.cleanup()
 
+    def test_pricing_policy_save_render_and_validation(self):
+        vt = database.get_vehicle_types()[0]
+        response = self.client.post('/pricing/type/save', data=dict(
+            id=vt['id'], name=vt['name'], grace_minutes=15, daily_cap=50000), follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        saved = dict(database.get_vehicle_types()[0])
+        self.assertEqual((saved['grace_minutes'], saved['daily_cap']), (15, 50000))
+        self.assertIn(b'data-grace="15"', response.data)
+        for value in ('-1', '1.5', 'abc', '1441'):
+            self.client.post('/pricing/type/save', data=dict(
+                id=vt['id'], name=vt['name'], grace_minutes=value, daily_cap=1))
+            self.assertEqual(database.get_vehicle_types()[0]['daily_cap'], 50000)
+
+    def test_core_vehicle_pricing_and_monthly_lookup(self):
+        vt = database.get_vehicle_types()[0]
+        response = self.client.post('/pricing/type/save', data=dict(
+            id=vt['id'], name=vt['name'], free_minutes=10, first_block_hours=2,
+            first_block_amount=30000, next_hour_amount=10000, daily_cap=150000,
+            monthly_price=700000), follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(database.find_month_price(vt['id'], datetime.now().date())['amount'], 700000)
+        self.assertEqual(database.find_turn_price(vt['id'], datetime.now())['amount'], 30000)
+        entry = datetime(2026, 11, 1, 8)
+        record = dict(entry_time=entry.isoformat(), plate_number='99X-99999',
+                      vehicle_type_id=vt['id'], vehicle_type_name=vt['name'])
+        self.assertEqual(self.module.calc_fee(record, entry.replace(hour=10, minute=1))[0], 40000)
+        database.save_vehicle_type(vt['id'], vt['name'], monthly_price=0)
+        self.assertEqual(database.find_month_price(vt['id'], entry.date())['amount'], 0)
+
+    def test_existing_database_migrates_policy_columns(self):
+        conn = database.get_connection()
+        try:
+            conn.execute('ALTER TABLE vehicle_types DROP COLUMN grace_minutes')
+            conn.execute('ALTER TABLE vehicle_types DROP COLUMN daily_cap')
+            conn.commit()
+        finally:
+            conn.close()
+        database.init_db()
+        database.init_db()
+        vt = database.get_vehicle_types()[0]
+        self.assertEqual((vt['grace_minutes'], vt['daily_cap']), (0, 0))
+
     def setUp(self):
         database.DB_PATH = str(self.root / (self._testMethodName + '.db'))
         database.init_db()

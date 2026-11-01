@@ -42,10 +42,10 @@
 {% for p in prices %}
   {% set _ = pm.update({ (p.vehicle_type_id|string ~ '-' ~ p.period_id|string): p }) %}
 {% endfor %}
-{% set ns = namespace(missing=0) %}
+{% set ns = {'missing': 0} %}
 {% for vt in vehicle_types %}
   {% for tp in time_periods %}
-    {% if pm.get(vt.id|string ~ '-' ~ tp.id|string) is none %}{% set ns.missing = ns.missing + 1 %}{% endif %}
+    {% if pm.get(vt.id|string ~ '-' ~ tp.id|string) is none %}{% set _ = ns.update({'missing': ns.missing + 1}) %}{% endif %}
   {% endfor %}
 {% endfor %}
 {% set ready = vehicle_types|length > 0 and periods|length > 0 %}
@@ -136,13 +136,18 @@
 
   {# ================= TAB 1: BẢNG GIÁ ================= #}
   <section class="panel tab-panel" role="tabpanel" id="panel-prices" aria-labelledby="tab-prices">
-    {% if vehicle_types and periods %}
+    {% if vehicle_types %}
       <div class="matrix-wrap">
         <table class="price-matrix">
           <caption class="sr-only">Bảng giá gửi xe: mỗi hàng là một loại phương tiện, mỗi cột là một khung thời gian</caption>
           <thead>
             <tr>
               <th scope="col" rowspan="2" class="corner">Loại phương tiện</th>
+              <th scope="col" rowspan="2">Miễn phí ban đầu</th>
+              <th scope="col" rowspan="2">Block đầu tiên</th>
+              <th scope="col" rowspan="2">Giờ tiếp theo</th>
+              <th scope="col" rowspan="2">Giá trần 24h</th>
+              <th scope="col" rowspan="2">Giá vé tháng cố định</th>
               {% if time_periods %}<th scope="colgroup" colspan="{{ time_periods|length }}" class="group">Vé lượt <small>cộng theo từng khung giờ xe đi qua</small></th>{% endif %}
               {% if day_periods %}<th scope="colgroup" colspan="{{ day_periods|length }}" class="group month">Vé tháng <small>giá cho 1 tháng</small></th>{% endif %}
             </tr>
@@ -160,8 +165,15 @@
               <tr>
                 <th scope="row" class="vehicle">
                   {{ vt.name }}
+                  <small>{{ vt.grace_minutes }} phút ân hạn · Trần {{ '{:,}'.format(vt.daily_cap).replace(',', '.') if vt.daily_cap else 'Không giới hạn' }}{{ ' ₫/24h' if vt.daily_cap else '' }}</small>
+                  {% if can_edit %}<button type="button" class="btn btn-outline" data-edit-vtype data-id="{{ vt.id }}" data-name="{{ vt.name }}" data-grace="{{ vt.grace_minutes }}" data-cap="{{ vt.daily_cap }}" data-free="{{ vt.free_minutes }}" data-first-hours="{{ vt.first_block_hours }}" data-first-amount="{{ vt.first_block_amount }}" data-next="{{ vt.next_hour_amount }}" data-monthly="{{ vt.monthly_price if vt.monthly_price is not none else '' }}">Thiết lập</button>{% endif %}
                   <small>{{ prices|selectattr('vehicle_type_id', 'equalto', vt.id)|list|length }} mức giá</small>
                 </th>
+                <td>{{ vt.free_minutes }} phút</td>
+                <td>{% if vt.first_block_hours %}{{ '{:,}'.format(vt.first_block_amount).replace(',', '.') }} ₫ / {{ vt.first_block_hours }} giờ{% else %}Theo khung giờ{% endif %}</td>
+                <td>{% if vt.first_block_hours %}{{ '{:,}'.format(vt.next_hour_amount).replace(',', '.') }} ₫/giờ{% else %}—{% endif %}</td>
+                <td>{{ '{:,}'.format(vt.daily_cap).replace(',', '.') ~ ' ₫' if vt.daily_cap else 'Không giới hạn' }}</td>
+                <td>{{ '{:,}'.format(vt.monthly_price).replace(',', '.') ~ ' ₫/tháng' if vt.monthly_price is not none else 'Theo khung ngày' }}</td>
                 {% for tp in time_periods %}
                   {% set p = pm.get(vt.id|string ~ '-' ~ tp.id|string) %}
                   <td>{{ price_cell(vt, tp, p, can_edit, url_for('pricing_price_delete', price_id=p.id) if p else '') }}</td>
@@ -179,11 +191,16 @@
       <details class="how-it-works">
         <summary>Hệ thống tính phí như thế nào?</summary>
         <ul>
+          <li>Nếu đặt block đầu, vé lượt tính theo thời gian gửi: phí block đầu + số giờ bắt đầu sau block × phí giờ tiếp theo. Phí block đầu chỉ tính một lần cho lượt gửi.</li>
+          <li>Ra trong thời gian miễn phí ban đầu được miễn phí toàn bộ lượt. Quá mốc miễn phí, thời gian tính từ lúc vào.</li>
+          <li>Giá vé tháng cố định được ưu tiên khi đăng ký; để trống để dùng giá tháng theo khung ngày.</li>
           <li>Khi xe ra, hệ thống <b>cộng giá vé lượt của mọi khung giờ xe đã đi qua</b>. Ví dụ ô tô vào 11:37, ra 16:13: Sáng + Chiều.</li>
           <li>Mỗi khung chỉ tính một lần cho mỗi lần xuất hiện trong ngày. Khung qua nửa đêm (22:00–04:59) tính một lần.</li>
           <li>Nếu hai khung chồng nhau, khung <b>tạo trước</b> được ưu tiên.</li>
           <li>Xe có vé tháng còn hạn được miễn phí lượt ra. Giá vé tháng là giá cho 1 tháng, nhân với số tháng khi đăng ký.</li>
           <li>Khoảng giờ chưa có giá dùng đơn giá dự phòng theo giờ.</li>
+          <li>Ân hạn chỉ miễn khung mới khi xe ra trước khi hết số phút đã đặt. Đúng mốc ân hạn sẽ tính khung mới.</li>
+          <li>Giá trần áp dụng cho tổng phí vé lượt trong mỗi chu kỳ 24 giờ từ lúc vào. Giá trị 0 tắt quy tắc tương ứng.</li>
         </ul>
       </details>
     {% else %}
@@ -293,7 +310,7 @@
                 <td class="right">
                   <div class="row-actions">
                     <button type="button" class="btn btn-outline" data-edit-vtype
-                            data-id="{{ vt.id }}" data-name="{{ vt.name }}"
+                            data-id="{{ vt.id }}" data-name="{{ vt.name }}" data-grace="{{ vt.grace_minutes }}" data-cap="{{ vt.daily_cap }}" data-free="{{ vt.free_minutes }}" data-first-hours="{{ vt.first_block_hours }}" data-first-amount="{{ vt.first_block_amount }}" data-next="{{ vt.next_hour_amount }}" data-monthly="{{ vt.monthly_price if vt.monthly_price is not none else '' }}"
                             aria-label="Đổi tên loại xe {{ vt.name }}">Sửa</button>
                     <form method="POST" action="{{ url_for('pricing_type_delete', type_id=vt.id) }}"
                           data-confirm="Xóa loại xe “{{ vt.name }}”{% if cnt %} và {{ cnt }} mức giá của loại xe này{% endif %}? Thao tác không thể hoàn tác.">
@@ -419,6 +436,43 @@
         <div class="form-field">
           <label for="vtype-name">Tên loại phương tiện</label>
           <input type="text" id="vtype-name" name="name" required maxlength="40" placeholder="Ví dụ: Xe máy, Ô tô, Xe đạp điện">
+        </div>
+
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="vtype-free">Thời gian miễn phí ban đầu (phút)</label>
+            <input type="number" id="vtype-free" name="free_minutes" min="0" max="1440" step="1" value="0" required>
+            <small class="hint">Ra trong thời gian này được miễn phí. Quá mốc này tính phí từ lúc vào. 0 = tắt.</small>
+          </div>
+          <div class="form-field">
+            <label for="vtype-first-amount">Mức phí block đầu tiên (₫)</label>
+            <input type="number" id="vtype-first-amount" name="first_block_amount" min="0" max="2147483647" step="1" value="0" required>
+          </div>
+          <div class="form-field">
+            <label for="vtype-first-hours">Số giờ của block đầu tiên</label>
+            <input type="number" id="vtype-first-hours" name="first_block_hours" min="0" max="24" step="1" value="0" required>
+            <small class="hint">1–24 giờ: dùng giá block thay giá khung giờ. 0: dùng giá khung giờ, phí block và giờ tiếp theo phải bằng 0.</small>
+          </div>
+          <div class="form-field">
+            <label for="vtype-next">Mức phí các giờ tiếp theo (₫/giờ)</label>
+            <input type="number" id="vtype-next" name="next_hour_amount" min="0" max="2147483647" step="1" value="0" required>
+            <small class="hint">Mỗi giờ bắt đầu được tính tròn một giờ, sau block đầu.</small>
+          </div>
+          <div class="form-field">
+            <label for="vtype-monthly">Giá vé tháng (₫/tháng)</label>
+            <input type="number" id="vtype-monthly" name="monthly_price" min="0" max="2147483647" step="1" placeholder="Chưa đặt giá cố định">
+            <small class="hint">Để trống để dùng bảng giá tháng theo khung ngày hiện có. 0 = vé tháng miễn phí.</small>
+          </div>
+          <div class="form-field">
+            <label for="vtype-grace">Ân hạn giao thời (phút)</label>
+            <input type="number" id="vtype-grace" name="grace_minutes" min="0" max="1440" step="1" value="0" required>
+            <small class="hint">Chỉ dùng khi tính theo khung giờ. Khung mới dưới X phút không tính phí; khung lúc vào vẫn tính. 0 = tắt.</small>
+          </div>
+          <div class="form-field">
+            <label for="vtype-cap">Giá trần 24h (₫)</label>
+            <input type="number" id="vtype-cap" name="daily_cap" min="0" max="2147483647" step="1" value="0" required>
+            <small class="hint">Tối đa mỗi 24 giờ từ lúc vào, kể cả phí dự phòng. 0 = không giới hạn. Chỉ áp dụng vé lượt.</small>
+          </div>
         </div>
 
         <div class="dialog-actions">
@@ -568,6 +622,13 @@
         $('vtype-dialog-title').textContent = d.id ? 'Đổi tên loại phương tiện' : 'Thêm loại phương tiện';
         $('vtype-id').value = d.id || '';
         $('vtype-name').value = d.name || '';
+        $('vtype-grace').value = d.grace || '0';
+        $('vtype-cap').value = d.cap || '0';
+        $('vtype-free').value = d.free || '0';
+        $('vtype-first-hours').value = d.firstHours || '0';
+        $('vtype-first-amount').value = d.firstAmount || '0';
+        $('vtype-next').value = d.next || '0';
+        $('vtype-monthly').value = d.monthly === undefined ? '' : d.monthly;
         openDlg(vd);
         $('vtype-name').focus();
       }

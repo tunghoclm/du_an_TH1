@@ -71,7 +71,14 @@ CREATE TABLE IF NOT EXISTS price_periods (
 -- Loại xe (người dùng tự tạo: Xe máy, Ô tô, Xe đạp điện, ...)
 CREATE TABLE IF NOT EXISTS vehicle_types (
     id    INTEGER PRIMARY KEY AUTOINCREMENT,
-    name  TEXT UNIQUE NOT NULL
+    name  TEXT UNIQUE NOT NULL,
+    free_minutes INTEGER NOT NULL DEFAULT 0,
+    first_block_hours INTEGER NOT NULL DEFAULT 0,
+    first_block_amount INTEGER NOT NULL DEFAULT 0,
+    next_hour_amount INTEGER NOT NULL DEFAULT 0,
+    monthly_price INTEGER,
+    grace_minutes INTEGER NOT NULL DEFAULT 0 CHECK(grace_minutes >= 0),
+    daily_cap INTEGER NOT NULL DEFAULT 0 CHECK(daily_cap >= 0)
 );
 
 -- Giá theo (loại xe + khung thời gian)

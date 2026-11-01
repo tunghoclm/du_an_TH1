@@ -13,6 +13,22 @@ def rate(identifier, name, start, end, amount):
 
 
 class ParkingFeeTests(unittest.TestCase):
+    def test_block_free_boundary_hour_rounding_and_cap(self):
+        entry = datetime(2026, 11, 1, 8)
+        from datetime import timedelta
+        for minutes, expected in [(0, 0), (10, 0), (11, 30000), (120, 30000),
+                                  (121, 40000), (180, 40000), (181, 50000),
+                                  (1440, 150000), (1441, 160000), (2880, 300000)]:
+            fee, _ = calculate_turn_fee([], entry, entry + timedelta(minutes=minutes), 5000,
+                daily_cap=150000, free_minutes=10, first_block_hours=2,
+                first_block_amount=30000, next_hour_amount=10000)
+            self.assertEqual(fee, expected, minutes)
+
+    def test_initial_free_applies_to_window_prices(self):
+        entry = datetime(2026, 11, 1, 8)
+        self.assertEqual(calculate_turn_fee([rate(1, 'Day', '00:00', '23:59', 30000)],
+            entry, entry.replace(minute=10), 5000, free_minutes=10)[0], 0)
+
     def setUp(self):
         self.prices = [rate(1, 'Đêm', '00:00', '04:59', 300000),
                        rate(2, 'Sáng', '05:00', '12:59', 150000),
@@ -22,6 +38,20 @@ class ParkingFeeTests(unittest.TestCase):
     def fee(self, entry, exit, prices=None):
         return calculate_turn_fee(self.prices if prices is None else prices,
                                   datetime.fromisoformat(entry), datetime.fromisoformat(exit), 5000)
+
+    def test_grace_boundary_and_entry_window(self):
+        entry = datetime(2026, 10, 19, 12)
+        for minute, expected in [(0, 150000), (14, 150000), (15, 300000)]:
+            self.assertEqual(calculate_turn_fee(self.prices, entry,
+                datetime(2026, 10, 19, 13, minute), 5000, 15)[0], expected)
+        self.assertEqual(calculate_turn_fee(self.prices, datetime(2026, 10, 19, 13),
+            datetime(2026, 10, 19, 13, 1), 5000, 15)[0], 150000)
+
+    def test_cap_uses_24_hours_from_entry(self):
+        self.assertEqual(calculate_turn_fee(self.prices, datetime(2026, 10, 19, 23),
+            datetime(2026, 10, 20, 22), 5000, 0, 400000)[0], 400000)
+        self.assertEqual(calculate_turn_fee([], datetime(2026, 10, 19, 12),
+            datetime(2026, 10, 21, 13), 5000, 0, 20000)[0], 45000)
 
     def test_reported_morning_to_afternoon_case_adds_both_rates(self):
         fee, note = self.fee('2026-10-19 11:37:47', '2026-10-19 16:13:49')

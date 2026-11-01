@@ -53,7 +53,14 @@ def init_db():
             "Hãy kiểm tra nội dung các file trong thư mục SQL/ (phải chứa lệnh CREATE TABLE cho các bảng trên).")
 
     # Migration nhẹ: nếu bảng parking_records cũ (từ bản trước) chưa có cột slot_name
-    for col_sql in ("ALTER TABLE parking_records ADD COLUMN slot_name TEXT",
+    for col_sql in ("ALTER TABLE vehicle_types ADD COLUMN free_minutes INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE vehicle_types ADD COLUMN first_block_hours INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE vehicle_types ADD COLUMN first_block_amount INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE vehicle_types ADD COLUMN next_hour_amount INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE vehicle_types ADD COLUMN monthly_price INTEGER",
+                    "ALTER TABLE vehicle_types ADD COLUMN grace_minutes INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE vehicle_types ADD COLUMN daily_cap INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE parking_records ADD COLUMN slot_name TEXT",
                     "ALTER TABLE parking_slots ADD COLUMN maintenance_reason TEXT",
                     "ALTER TABLE parking_records ADD COLUMN vehicle_type_id INTEGER",
                     "ALTER TABLE parking_records ADD COLUMN vehicle_type_name TEXT",
@@ -886,15 +893,43 @@ def seed_pricing():
         periods = [('Đêm', 'time', '00:00', '04:59'), ('Tháng', 'day', '01', '30'),
                    ('Tối', 'time', '17:00', '23:59'), ('Chiều', 'time', '13:00', '16:59'),
                    ('Sáng', 'time', '05:00', '12:59')]
-        types = ['Xe máy điện', 'Xe đạp điện', 'Xe máy', 'Ô tô']
+        types = [
+            ('Xe máy điện', 15, 15, 20000, 100000),
+            ('Xe đạp điện', 15, 15, 10000, 50000),
+            ('Xe máy', 15, 15, 20000, 100000),
+            ('Ô tô', 15, 15, 120000, 1200000),
+        ]
         conn.executemany("INSERT INTO price_periods (name, kind, start_value, end_value) VALUES (?,?,?,?)", periods)
-        conn.executemany("INSERT INTO vehicle_types (name) VALUES (?)", [(t,) for t in types])
-        prices = [('Xe máy điện', 'Sáng', 5000, 'turn'), ('Xe máy điện', 'Tối', 5000, 'turn'),
-                  ('Xe máy điện', 'Chiều', 5000, 'turn'), ('Xe máy', 'Sáng', 5000, 'turn'),
-                  ('Xe máy', 'Đêm', 10000, 'turn'), ('Xe máy', 'Tháng', 100000, 'month'),
-                  ('Xe máy', 'Chiều', 5000, 'turn'), ('Ô tô', 'Chiều', 150000, 'turn'),
-                  ('Ô tô', 'Sáng', 150000, 'turn'), ('Ô tô', 'Đêm', 300000, 'turn'),
-                  ('Ô tô', 'Tối', 250000, 'turn')]
+        conn.executemany(
+            "INSERT INTO vehicle_types (name, free_minutes, grace_minutes, daily_cap, monthly_price) VALUES (?,?,?,?,?)",
+            types
+        )
+        prices = [
+            # Xe máy điện
+            ('Xe máy điện', 'Sáng', 5000, 'turn'),
+            ('Xe máy điện', 'Chiều', 5000, 'turn'),
+            ('Xe máy điện', 'Tối', 5000, 'turn'),
+            ('Xe máy điện', 'Đêm', 10000, 'turn'),
+            ('Xe máy điện', 'Tháng', 100000, 'month'),
+            # Xe đạp điện
+            ('Xe đạp điện', 'Sáng', 2000, 'turn'),
+            ('Xe đạp điện', 'Chiều', 2000, 'turn'),
+            ('Xe đạp điện', 'Tối', 3000, 'turn'),
+            ('Xe đạp điện', 'Đêm', 5000, 'turn'),
+            ('Xe đạp điện', 'Tháng', 50000, 'month'),
+            # Xe máy
+            ('Xe máy', 'Sáng', 5000, 'turn'),
+            ('Xe máy', 'Chiều', 5000, 'turn'),
+            ('Xe máy', 'Tối', 5000, 'turn'),
+            ('Xe máy', 'Đêm', 10000, 'turn'),
+            ('Xe máy', 'Tháng', 100000, 'month'),
+            # Ô tô
+            ('Ô tô', 'Sáng', 25000, 'turn'),
+            ('Ô tô', 'Chiều', 25000, 'turn'),
+            ('Ô tô', 'Tối', 30000, 'turn'),
+            ('Ô tô', 'Đêm', 50000, 'turn'),
+            ('Ô tô', 'Tháng', 1200000, 'month'),
+        ]
         for t, p, amt, tk in prices:
             conn.execute(
                 "INSERT INTO prices (vehicle_type_id, period_id, amount, ticket_type) VALUES "
@@ -958,11 +993,19 @@ def vehicle_type_name_taken(name: str, exclude_id: int = None) -> bool:
     return len(rows) > 0
 
 
-def save_vehicle_type(type_id, name):
+def save_vehicle_type(type_id, name, grace_minutes=0, daily_cap=0,
+                      free_minutes=0, first_block_hours=0, first_block_amount=0,
+                      next_hour_amount=0, monthly_price=None):
+    values = (name, grace_minutes, daily_cap, free_minutes, first_block_hours,
+              first_block_amount, next_hour_amount, monthly_price)
     if type_id:
-        _exec("UPDATE vehicle_types SET name=? WHERE id=?", (name, type_id))
+        _exec("UPDATE vehicle_types SET name=?, grace_minutes=?, daily_cap=?, free_minutes=?, "
+              "first_block_hours=?, first_block_amount=?, next_hour_amount=?, monthly_price=? WHERE id=?",
+              values + (type_id,))
     else:
-        _exec("INSERT INTO vehicle_types (name) VALUES (?)", (name,))
+        _exec("INSERT INTO vehicle_types (name, grace_minutes, daily_cap, free_minutes, "
+              "first_block_hours, first_block_amount, next_hour_amount, monthly_price) "
+              "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", values)
 
 
 def delete_vehicle_type(type_id: int):
@@ -1008,6 +1051,9 @@ def find_month_price(vehicle_type_id, on_date):
     Trả về dict {amount, period_name} hoặc None nếu bảng giá chưa có giá tháng cho loại xe."""
     if not vehicle_type_id:
         return None
+    policy = _fetch('SELECT monthly_price FROM vehicle_types WHERE id=?', (vehicle_type_id,))
+    if policy and policy[0]['monthly_price'] is not None:
+        return {'amount': policy[0]['monthly_price'], 'period_name': 'Monthly'}
     rows = _fetch(
         "SELECT p.amount, t.name AS period_name, t.start_value, t.end_value "
         "FROM prices p JOIN price_periods t ON t.id = p.period_id "
@@ -1055,6 +1101,10 @@ def find_turn_price(vehicle_type_id: int, when: datetime):
     Nếu nhiều khung chồng lên nhau thì lấy khung được tạo trước."""
     if not vehicle_type_id:
         return None
+    policy = _fetch('SELECT first_block_hours, first_block_amount FROM vehicle_types WHERE id=?', (vehicle_type_id,))
+    if policy and policy[0]['first_block_hours'] > 0:
+        return {'amount': policy[0]['first_block_amount'], 'period_name': 'Block',
+                'start': '00:00', 'end': '23:59'}
     minute = when.hour * 60 + when.minute
     rows = get_turn_prices(vehicle_type_id)
     for r in rows:

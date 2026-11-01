@@ -137,7 +137,13 @@ def calc_fee(record, exit_time: datetime):
                              f"(còn hạn đến {reg['expires_on']}) · miễn phí")
 
     prices = database.get_turn_prices(record['vehicle_type_id'])
-    fee, note = calculate_turn_fee(prices, entry_time, exit_time, FEE_PER_HOUR)
+    policy = next((dict(v) for v in database.get_vehicle_types() if v['id'] == record['vehicle_type_id']), {})
+    fee, note = calculate_turn_fee(prices, entry_time, exit_time, FEE_PER_HOUR,
+                                   policy.get('grace_minutes', 0), policy.get('daily_cap', 0),
+                                   free_minutes=policy.get('free_minutes', 0),
+                                   first_block_hours=policy.get('first_block_hours', 0),
+                                   first_block_amount=policy.get('first_block_amount', 0),
+                                   next_hour_amount=policy.get('next_hour_amount', 0))
     if prices:
         note = f"{record['vehicle_type_name'] or 'Loại xe'} · {note}"
     return fee, duration, note
@@ -1022,12 +1028,25 @@ def pricing_period_delete(period_id):
 def pricing_type_save():
     type_id = _to_int(request.form.get('id'))
     name = request.form.get('name', '').strip()
-    if not name:
+    grace = _to_int(request.form.get('grace_minutes', '0'))
+    cap = _to_int(request.form.get('daily_cap', '0'))
+    fields = ('free_minutes', 'first_block_hours', 'first_block_amount', 'next_hour_amount')
+    policy = {key: _to_int(request.form.get(key, '0')) for key in fields}
+    raw_monthly = request.form.get('monthly_price', '').strip()
+    monthly = _to_int(raw_monthly) if raw_monthly else None
+    invalid = any(value is None or not 0 <= value <= 2147483647 for value in policy.values())
+    invalid = invalid or (raw_monthly != '' and (monthly is None or not 0 <= monthly <= 2147483647))
+    invalid = invalid or (policy['free_minutes'] is not None and policy['free_minutes'] > 1440)
+    invalid = invalid or (policy['first_block_hours'] is not None and policy['first_block_hours'] > 24)
+    invalid = invalid or (policy['first_block_hours'] == 0 and (policy['first_block_amount'] or policy['next_hour_amount']))
+    if invalid or grace is None or cap is None or not 0 <= grace <= 1440 or not 0 <= cap <= 2147483647:
+        flash('Cấu hình không hợp lệ: số phút từ 0–1440, block từ 0–24 giờ, tiền là số nguyên không âm tối đa 2.147.483.647 đồng. Khi tắt block, phí block và giờ tiếp theo phải bằng 0.', 'error')
+    elif not name:
         flash('Vui lòng nhập tên loại xe.', 'error')
     elif database.vehicle_type_name_taken(name, type_id):
         flash(f'Loại xe "{name}" đã tồn tại.', 'error')
     else:
-        database.save_vehicle_type(type_id, name)
+        database.save_vehicle_type(type_id, name, grace, cap, **policy, monthly_price=monthly)
         flash(f'Đã lưu loại xe "{name}".', 'success')
     return redirect(url_for('pricing'))
 
@@ -1113,8 +1132,13 @@ def build_price_info():
     for t in database.get_vehicle_types():
         mp = database.find_month_price(t['id'], today)
         info[t['id']] = {'month': mp['amount'] if mp else None, 'turn': []}
+        if t['first_block_hours'] > 0:
+            info[t['id']]['turn'].append({
+                'name': f"Block đầu {t['first_block_hours']} giờ; sau đó {t['next_hour_amount']:,} ₫/giờ",
+                'amount': t['first_block_amount'], 'start': '00:00', 'end': '23:59'})
+    block_types = {t['id'] for t in database.get_vehicle_types() if t['first_block_hours'] > 0}
     for r in database.get_prices():
-        if r['ticket_type'] == 'turn' and r['vehicle_type_id'] in info:
+        if r['ticket_type'] == 'turn' and r['vehicle_type_id'] in info and r['vehicle_type_id'] not in block_types:
             info[r['vehicle_type_id']]['turn'].append(
                 {'name': r['period_name'], 'amount': r['amount'],
                  'start': r['start_value'], 'end': r['end_value']})
