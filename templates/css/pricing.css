@@ -1,4 +1,336 @@
-/* Trang Bảng giá vé & Cấu hình biểu phí */
-.pricing-tab-section[hidden] {
-  display: none !important;
+/* Trang Quản lý vé & Bảng giá
+   Mọi quy tắc nằm trong .pricing-page để không ảnh hưởng trang khác.
+   Màu chữ đã được đậm lên để đạt tương phản WCAG AA (>= 4,5:1). */
+
+.pricing-page {
+  --pp-text: #1f3250;
+  --pp-sub: #4a5f7f;
+  --pp-muted: #5b6f8d;
+  --pp-accent: #0562d6;
+  --pp-accent-soft: #eef5ff;
+  --pp-accent-line: #c5dcf9;
+  --pp-warn-text: #7a4e00;
+  --pp-warn-bg: #fff8e8;
+  --pp-warn-line: #e3b45a;
+  --pp-ok: #1b6e49;
+}
+
+.pricing-page .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.pricing-page .right { text-align: right; }
+.pricing-page .page-heading p,
+.pricing-page .muted { color: var(--pp-muted); font-size: 14px; }
+.pricing-page .hint { color: var(--pp-muted); font-size: 12px; line-height: 1.5; }
+
+/* ---- Nút và ô nhập: vùng bấm 44px, khung focus rõ ---- */
+.pricing-page .btn { min-height: 44px; font-size: 14px; }
+.pricing-page .btn-primary { background: var(--pp-accent); }
+.pricing-page .btn-primary:hover:not(:disabled) { background: #044fae; }
+.pricing-page .btn-outline { color: var(--pp-sub); }
+.pricing-page :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 3px solid var(--pp-accent);
+  outline-offset: 2px;
+}
+.pricing-page :is(input, select, textarea):focus {
+  border-color: var(--pp-accent);
+}
+.pricing-page .form-field input,
+.pricing-page .form-field select { min-height: 44px; font-size: 14px; }
+.pricing-page .form-field > label { color: var(--pp-sub); font-size: 13px; }
+.pricing-page input::placeholder { color: #6b7d97; }
+.pricing-page .dialog-close { width: 44px; height: 44px; font-size: 22px; color: var(--pp-sub); }
+.pricing-page .dialog-actions .push-left { margin-right: auto; }
+
+/* ---- Tóm tắt ---- */
+.pricing-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.pricing-kpis > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.pricing-kpis span { font-size: 13px; color: var(--pp-sub); }
+.pricing-kpis b { font-size: 26px; font-weight: 650; letter-spacing: -0.5px; color: var(--pp-text); }
+.pricing-kpis .warn { border-color: var(--pp-warn-line); background: var(--pp-warn-bg); }
+.pricing-kpis .warn b { color: var(--pp-warn-text); }
+.pricing-kpis .ok b { color: var(--pp-ok); }
+
+.pricing-page .notice {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  border: 1px solid var(--pp-accent-line);
+  background: var(--pp-accent-soft);
+  color: var(--pp-text);
+}
+.pricing-page .notice.warn {
+  border-color: var(--pp-warn-line);
+  background: var(--pp-warn-bg);
+  color: var(--pp-warn-text);
+}
+
+/* ---- Hướng dẫn thiết lập ---- */
+.setup-card { padding: 22px 24px; margin-bottom: 16px; }
+.setup-card h2 { font-size: 17px; margin-bottom: 14px; }
+.setup-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.setup-steps li {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.setup-steps li.done { background: #f3faf6; border-color: #cbe8d8; }
+.setup-steps .step-state {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--pp-accent-soft);
+  color: var(--pp-accent);
+  font-weight: 700;
+}
+.setup-steps li.done .step-state { background: #dff3e8; color: var(--pp-ok); }
+.setup-steps p { color: var(--pp-sub); font-size: 13px; margin-top: 2px; }
+
+/* ---- Tab ---- */
+.pricing-page .tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #d5dfec;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+.pricing-page .tabs [role="tab"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--pp-sub);
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.pricing-page .tabs [role="tab"]:hover { color: var(--pp-accent); }
+.pricing-page .tabs [role="tab"][aria-selected="true"] {
+  color: var(--pp-accent);
+  border-bottom-color: var(--pp-accent);
+}
+.pricing-page .count-pill { color: #46618a; font-size: 12px; }
+.pricing-page .tab-panel { overflow: hidden; }
+.pricing-tab-section[hidden],
+.pricing-page .tab-panel[hidden] { display: none !important; }
+
+/* ---- Bảng giá dạng ma trận ---- */
+.matrix-wrap { overflow-x: auto; }
+.price-matrix {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  white-space: normal;
+}
+.price-matrix th,
+.price-matrix td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e6edf6;
+  border-right: 1px solid #eef2f8;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 14px;
+  color: var(--pp-text);
+}
+.price-matrix thead th {
+  background: #f4f8fd;
+  color: var(--pp-text);
+  font-size: 14px;
+  font-weight: 600;
+  border-top: 0;
+}
+.price-matrix thead th small,
+.price-matrix tbody th small {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--pp-muted);
+}
+.price-matrix .corner,
+.price-matrix tbody th.vehicle {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 160px;
+  text-align: left;
+  background: #fff;
+  font-weight: 600;
+  box-shadow: 1px 0 0 #dfe7f2;
+}
+.price-matrix .corner { background: #f4f8fd; }
+.price-matrix .group { background: #e9f1fc; border-bottom-color: #d3e1f4; }
+.price-matrix .group.month,
+.price-matrix .period.month { border-left: 2px solid #c5dcf9; }
+.price-matrix .period { min-width: 132px; }
+.price-matrix tbody tr:last-child th,
+.price-matrix tbody tr:last-child td { border-bottom: 0; }
+.price-matrix tbody tr:hover td,
+.price-matrix tbody tr:hover th.vehicle { background: #f8fbff; }
+
+.price-cell {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 15px;
+  color: var(--pp-text);
+}
+.price-cell b { font-weight: 650; font-variant-numeric: tabular-nums; }
+.price-cell small { font-size: 12px; color: var(--pp-sub); }
+.price-cell.filled {
+  align-items: center;
+  background: var(--pp-accent-soft);
+  border-color: var(--pp-accent-line);
+  color: #0b3d84;
+}
+.price-cell.filled:hover { border-color: var(--pp-accent); background: #e2efff; }
+.price-cell.empty {
+  align-items: center;
+  background: var(--pp-warn-bg);
+  border: 1.5px dashed var(--pp-warn-line);
+  color: var(--pp-warn-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.price-cell.empty:hover { background: #fff1cc; border-style: solid; }
+.price-cell.static,
+.price-cell.none { align-items: center; cursor: default; }
+.price-cell.none { color: var(--pp-muted); }
+
+/* ---- Cách tính phí ---- */
+.how-it-works {
+  margin: 0;
+  padding: 14px 20px;
+  border-top: 1px solid #e6edf6;
+  background: #fafcff;
+  font-size: 14px;
+  color: var(--pp-sub);
+}
+.how-it-works summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--pp-accent);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+.how-it-works ul { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 6px; line-height: 1.6; }
+
+/* ---- Thanh công cụ trong tab ---- */
+.panel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e6edf6;
+}
+.panel-bar p { max-width: 70ch; font-size: 14px; color: var(--pp-sub); line-height: 1.6; }
+
+/* ---- Bảng danh sách ---- */
+.pricing-page .list-table th,
+.pricing-page .list-table td {
+  font-size: 14px;
+  padding: 12px 18px;
+  color: var(--pp-text);
+}
+.pricing-page .list-table thead th {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pp-sub);
+  background: #f4f8fd;
+}
+.pricing-page .list-table tbody th { font-weight: 600; text-align: left; }
+.pricing-page .list-table .empty-cell { text-align: center; padding: 36px 16px; color: var(--pp-muted); }
+.pricing-page .row-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.pricing-page .row-actions form { margin: 0; }
+
+.bar-col { min-width: 220px; }
+.axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--pp-muted);
+}
+.mini-bar {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: #e6edf7;
+  overflow: hidden;
+}
+.mini-bar i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--pp-accent);
+  border-radius: 6px;
+}
+
+/* ---- Trạng thái trống ---- */
+.empty-block { padding: 48px 20px; text-align: center; }
+.empty-block p:first-child { font-size: 16px; font-weight: 600; color: var(--pp-text); margin-bottom: 6px; }
+
+/* ---- Badge: màu chữ đậm hơn để đủ tương phản ---- */
+.pricing-page .badge-green { color: var(--pp-ok); }
+.pricing-page .badge-blue { color: #2a5aa3; }
+.pricing-page .badge-amber { color: #8a5a00; }
+.pricing-page .badge-red { color: #b0343f; }
+
+/* ---- Hộp thoại ---- */
+.pricing-page dialog { width: min(520px, calc(100vw - 32px)); }
+.pricing-page .form-grid.single { grid-template-columns: 1fr; }
+.pricing-page .form-grid .full { grid-column: 1 / -1; }
+.pricing-page .form-grid .full-row { grid-column: 1 / -1; margin-top: -6px; }
+
+/* ---- Màn hình nhỏ ---- */
+@media (max-width: 900px) {
+  .pricing-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .setup-steps li { grid-template-columns: 36px 1fr; }
+  .setup-steps li .btn { grid-column: 2; justify-self: start; }
+}
+@media (max-width: 520px) {
+  .pricing-page .form-grid { grid-template-columns: 1fr; }
 }
