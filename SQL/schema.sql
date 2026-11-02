@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS parking_records (
     entry_image   TEXT,                       -- Tên file ảnh chụp lúc vào
     exit_image    TEXT,                       -- Tên file ảnh chụp lúc ra
     fee           INTEGER,                    -- Phí gửi xe (VNĐ)
+    payment_method TEXT CHECK(payment_method IN ('cash','card','transfer')), -- NULL = chưa ghi nhận / không thu phí
     status        TEXT NOT NULL DEFAULT 'IN'  -- IN = đang gửi, OUT = đã lấy xe, DELETED = đã xóa khỏi ô
 );
 
@@ -47,6 +48,11 @@ CREATE TABLE IF NOT EXISTS users (
     password  TEXT NOT NULL,                  -- demo: lưu dạng plain text, thực tế nên hash
     role      TEXT NOT NULL DEFAULT 'user',   -- admin | manager | user
     status    TEXT NOT NULL DEFAULT 'active', -- active | locked
+    phone     TEXT,
+    email     TEXT,
+    address   TEXT,
+    customer_note TEXT,
+    created_at TEXT,
     password_changes INTEGER NOT NULL DEFAULT 0, -- số lần người dùng tự đổi mật khẩu (tối đa 3)
     plate_changes    INTEGER NOT NULL DEFAULT 0  -- số lần người dùng tự đổi biển số (tối đa 3)
 );

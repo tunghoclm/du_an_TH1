@@ -1,0 +1,104 @@
+{% set _invoices_active = active_page == 'invoices' %}
+{% set _gate_active = active_page in ('gate', 'entry', 'exit') %}
+{% set _more_active = active_page in ('parking_monitor', 'settings') or _gate_active %}
+{% macro nav_link(endpoint, label, selected, title=none) -%}
+<a href="{{ url_for(endpoint) }}" class="topbar-link{% if selected %} active{% endif %}"{% if selected %} aria-current="page"{% endif %}{% if title %} title="{{ title }}"{% endif %}>{{ label }}</a>
+{%- endmacro %}
+
+<header class="app-header topbar">
+  <a href="{{ url_for('index') }}" class="topbar-brand" aria-label="Smart Parking — Tổng quan">
+    <span class="topbar-brand-mark">
+      <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+    </span>
+    <span class="topbar-brand-name">Smart<span>Parking</span><small>QUẢN LÝ BÃI XE THÔNG MINH</small></span>
+  </a>
+
+  <button type="button" class="header-icon mobile-menu-toggle" id="header-menu-toggle" aria-label="Mở menu điều hướng" aria-controls="primary-navigation" aria-expanded="false">
+    <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+
+  <nav class="primary-nav" id="primary-navigation" aria-label="Điều hướng chính">
+    {{ nav_link('index', 'Tổng quan', active_page == 'dashboard') }}
+    {{ nav_link('parking', 'Bãi đỗ', active_page == 'parking', 'Sơ đồ & Quản lý xe') }}
+    {{ nav_link('pricing', 'Bảng giá', active_page == 'pricing') }}
+    {{ nav_link('history', 'Lịch sử', active_page == 'history') }}
+    {{ nav_link('invoices', 'Hóa đơn', _invoices_active, 'Hóa đơn thu phí gửi xe') }}
+    {% if _is_staff %}
+      {{ nav_link('customers', 'Khách hàng', active_page == 'customers') }}
+    {% endif %}
+    {% if _is_admin %}
+      {{ nav_link('accounts', 'Nhân viên', active_page == 'accounts') }}
+    {% endif %}
+    {% if _is_staff %}
+      <a href="{{ url_for('statistics') }}" class="topbar-link topbar-report{% if active_page == 'statistics' %} active{% endif %}"{% if active_page == 'statistics' %} aria-current="page"{% endif %}>Báo cáo</a>
+    {% endif %}
+    <div class="dropdown-wrap topbar-more" data-header-dropdown>
+      <button type="button" class="topbar-link{% if _more_active %} active{% endif %}" id="more-menu-btn" aria-controls="more-menu-popover" aria-expanded="false">
+        Khác
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="popover topbar-popover more-menu" id="more-menu-popover" hidden>
+        {% if _is_staff %}
+        <p class="topbar-menu-heading">Giám sát bãi xe</p>
+        <a href="{{ url_for('gate') }}"{% if _gate_active %} class="active" aria-current="page"{% endif %}>Xe ra/vào</a>
+        <a href="{{ url_for('parking_monitor') }}"{% if active_page == 'parking_monitor' %} class="active" aria-current="page"{% endif %}>Bãi xe</a>
+        <hr>
+        {% endif %}
+        <a href="{{ url_for('settings') }}"{% if active_page == 'settings' %} class="active" aria-current="page"{% endif %}>Cài đặt {{ 'hệ thống' if _is_staff else 'cá nhân' }}</a>
+        <a href="{{ url_for('logout') }}">Đăng xuất</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="topbar-tools">
+    <form action="{{ url_for('history') }}" method="get" class="header-search" role="search">
+      <input type="search" name="plate" value="{{ request.args.get('plate', '') if active_page == 'history' else '' }}" aria-label="Tìm kiếm biển số xe" placeholder="Tìm biển số xe…">
+      <button type="submit" aria-label="Tìm kiếm">
+        <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="7"/><path d="m16 16 4.5 4.5"/></svg>
+      </button>
+    </form>
+
+    {% if _is_staff %}
+    <a href="{{ url_for('gate') }}" class="cabin-button{% if _gate_active %} active{% endif %}" title="Mở cabin giám sát xe ra/vào">cabin</a>
+    {% endif %}
+
+    <div class="dropdown-wrap" data-header-dropdown>
+      <button type="button" class="header-icon" id="notif-btn" aria-label="Thông báo" aria-controls="notif-popover" aria-expanded="false">
+        <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg>
+      </button>
+      <div class="popover topbar-popover notifications" id="notif-popover" hidden>
+        <h3>Thông báo <span class="count-pill">2</span></h3>
+        <a href="{{ url_for('parking') }}"><span class="notice-dot"></span><div><b>Sơ đồ bãi đỗ xe trực tuyến</b><small>Trạng thái các phân khu được đồng bộ thời gian thực</small></div></a>
+        <a href="{{ url_for('history') }}"><span class="notice-dot"></span><div><b>Nhật ký vào / ra</b><small>Tra cứu lịch sử phương tiện và chi tiết thu phí</small></div></a>
+      </div>
+    </div>
+
+    <div class="dropdown-wrap" data-header-dropdown>
+      <button type="button" class="header-icon" id="help-btn" aria-label="Trợ giúp" aria-controls="help-popover" aria-expanded="false">
+        <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+      </button>
+      <div class="popover topbar-popover help-menu" id="help-popover" hidden>
+        <h3>Trợ giúp nhanh</h3>
+        <p>Tìm biển số xe để tra cứu lịch sử vào / ra và chi tiết thu phí.</p>
+        {% if _is_staff %}<a href="{{ url_for('gate') }}">Mở cabin xe ra/vào <span aria-hidden="true">↗</span></a>{% endif %}
+        <a href="{{ url_for('pricing') }}">Xem bảng giá gửi xe <span aria-hidden="true">↗</span></a>
+        <a href="{{ url_for('settings') }}">Cài đặt tài khoản <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+
+    <a href="{{ url_for('settings') }}" class="header-icon{% if active_page == 'settings' %} active{% endif %}" aria-label="Cài đặt" title="Cài đặt">
+      <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 3 .7 2.3a7 7 0 0 1 4.6 0L15 3l3 1.7-.7 2.4a7 7 0 0 1 2.3 4L22 12v3l-2.4.6a7 7 0 0 1-2.3 4l.7 2.4-3 1.7-.7-2.3a7 7 0 0 1-4.6 0L9 23.7 6 22l.7-2.4a7 7 0 0 1-2.3-4L2 15v-3l2.4-.9a7 7 0 0 1 2.3-4L6 4.7Z" transform="translate(2 0) scale(.83)"/><circle cx="12" cy="12" r="3"/></svg>
+    </a>
+
+    <div class="dropdown-wrap" data-header-dropdown>
+      <button type="button" class="header-icon" id="user-menu-btn" aria-label="Tài khoản: {{ _fullname }}" title="{{ _fullname }} — {{ role_label }}" aria-controls="user-menu-popover" aria-expanded="false">
+        <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2Z"/></svg>
+      </button>
+      <div class="popover topbar-popover user-menu" id="user-menu-popover" hidden>
+        <div class="topbar-user-info"><span class="avatar">{{ _initials }}</span><span><b>{{ _fullname }}</b><small>{{ role_label }}</small></span></div>
+        <a href="{{ url_for('settings') }}">Cài đặt tài khoản</a>
+        <a href="{{ url_for('logout') }}" class="danger-text">Đăng xuất</a>
+      </div>
+    </div>
+  </div>
+</header>

@@ -11,6 +11,7 @@ cache/yolo/
 
 # ---- Dữ liệu sinh ra khi chạy ----
 cache/parking.db
+cache/parking.db-*
 cache/tmp/
 
 # ---- Ảnh nhận diện sinh ra khi chạy (giữ thư mục rỗng bằng .gitkeep) ----

@@ -1,0 +1,172 @@
+{% extends '_layout.html' %}
+{% set active_page = 'invoices' %}
+{% block title %}Hóa đơn gửi xe — Smart Parking{% endblock %}
+{% block breadcrumb %}Hóa đơn{% endblock %}
+{% block body_class %}invoice-screen{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('css_files', filename='invoices.css') }}">{% endblock %}
+
+{% macro icon(name, size=18) -%}
+<svg aria-hidden="true" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+{% if name == 'search' %}<circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5"/>
+{% elif name == 'filter' %}<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="white"/><circle cx="15" cy="17" r="2" fill="white"/>
+{% elif name == 'export' %}<path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9M13 7l5 5-5 5m-6-5h14"/>
+{% elif name == 'columns' %}<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m6-16v16"/>
+{% elif name == 'gate' %}<path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/>
+{% elif name == 'receipt' %}<path d="M6 3h12v18l-3-2-3 2-3-2-3 2Zm3 5h6m-6 4h6"/>
+{% elif name == 'print' %}<path d="M6 9V3h12v6M6 18H3v-8h18v8h-3M6 15h12v6H6z"/><path d="M17 12h1"/>
+{% elif name == 'close' %}<path d="m6 6 12 12M6 18 18 6"/>
+{% elif name == 'left' %}<path d="m14 6-6 6 6 6"/>
+{% elif name == 'right' %}<path d="m10 6 6 6-6 6"/>
+{% elif name == 'sort' %}<path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/>
+{% elif name == 'calendar' %}<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18m-11 4h3"/>
+{% endif %}</svg>
+{%- endmacro %}
+
+{% macro sort_link(field, label) -%}
+<a href="{{ url_for('invoices') }}?{{ query_string(sort=field, direction='asc' if filters.sort == field and filters.direction == 'desc' else 'desc', page=1) }}" class="invoice-sort" title="Sắp xếp theo {{ label|lower }}">{{ label }} {{ icon('sort', 13) }}</a>
+{%- endmacro %}
+
+{% block content %}
+<section class="invoice-page" aria-label="Quản lý hóa đơn gửi xe">
+  <div class="invoice-toolbar">
+    <h1>Hóa đơn <span>{{ total_count }}</span></h1>
+    <div class="invoice-search">
+      {{ icon('search') }}
+      <input type="search" name="q" form="invoice-filters" value="{{ filters.q }}" placeholder="Theo mã hóa đơn, biển số, khách hàng" aria-label="Tìm hóa đơn">
+      <button type="submit" form="invoice-filters" aria-label="Tìm kiếm hóa đơn" title="Tìm kiếm">{{ icon('filter') }}</button>
+    </div>
+    <div class="invoice-actions">
+      <button type="button" class="invoice-action invoice-mobile-filter" id="invoice-filter-toggle" aria-expanded="false" aria-controls="invoice-filter-sidebar">{{ icon('filter') }} Bộ lọc</button>
+      {% if current_user_role in ('admin', 'manager') %}<a href="{{ url_for('gate') }}" class="invoice-action invoice-action-primary" aria-label="Mở màn hình xe ra/vào">{{ icon('gate') }} <span>Xe ra/vào</span></a>{% endif %}
+      <a href="{{ url_for('invoices_export') }}?{{ query_string() }}" class="invoice-action" id="invoice-export" aria-label="Xuất file hóa đơn">{{ icon('export') }} <span>Xuất file</span></a>
+      <details class="invoice-column-picker">
+        <summary class="invoice-action invoice-action-square" aria-label="Cài đặt cột" title="Cài đặt cột">{{ icon('columns') }}</summary>
+        <div><b>Cột hiển thị</b><label><input type="checkbox" data-invoice-column="customer" checked> Khách hàng</label><label><input type="checkbox" data-invoice-column="type" checked> Loại xe</label><label><input type="checkbox" data-invoice-column="slot" checked> Vị trí đỗ</label></div>
+      </details>
+    </div>
+  </div>
+
+  {% for error in errors %}<div class="error-banner" role="alert">{{ error }}</div>{% endfor %}
+  <div class="invoice-workspace">
+    <aside class="invoice-filters" id="invoice-filter-sidebar" aria-label="Bộ lọc hóa đơn">
+      <form id="invoice-filters" action="{{ url_for('invoices') }}" method="get">
+        <input type="hidden" name="sort" value="{{ filters.sort }}">
+        <input type="hidden" name="direction" value="{{ filters.direction }}">
+        <div class="invoice-filter-group">
+          <label for="invoice-area">Khu vực đỗ xe</label>
+          <select id="invoice-area" name="area" data-invoice-auto-submit><option value="">Tất cả khu vực</option>{% for area in areas %}<option value="{{ area }}"{% if filters.area == area %} selected{% endif %}>Khu {{ area }}</option>{% endfor %}</select>
+        </div>
+        <fieldset class="invoice-time-filter" aria-label="Thời gian ra bãi">
+          <legend>Thời gian</legend>
+          <input type="hidden" id="invoice-range" name="range" value="{{ filters.range }}">
+          <div class="invoice-time-choice">
+            <input type="radio" id="invoice-time-quick" name="time_mode" value="quick" aria-label="Chọn thời gian nhanh"{% if filters.range != 'custom' %} checked{% endif %}>
+            <button type="button" class="invoice-time-trigger{% if filters.range != 'custom' %} is-selected{% endif %}" id="invoice-period-toggle" popovertarget="invoice-period-popover" aria-haspopup="dialog" aria-expanded="false" aria-controls="invoice-period-popover"><span>{{ period_label }}</span>{{ icon('right',16) }}</button>
+          </div>
+          <section class="invoice-period-popover" id="invoice-period-popover" popover="auto" role="dialog" aria-label="Chọn khoảng thời gian">
+            <div class="invoice-period-grid">
+              {% for heading, options in period_groups %}
+              <div class="invoice-period-column"><h2>{{ heading }}</h2>{% for value, label in options %}<button type="submit" name="range_choice" value="{{ value }}" data-invoice-period="{{ value }}" class="invoice-period-pill{% if filters.range == value %} is-selected{% endif %}" aria-pressed="{{ 'true' if filters.range == value else 'false' }}">{{ label }}</button>{% endfor %}</div>
+              {% endfor %}
+            </div>
+            <div class="invoice-period-footer"><button type="submit" name="range_choice" value="today" data-invoice-period="today">Đặt về mặc định</button></div>
+          </section>
+          <div class="invoice-time-choice">
+            <input type="radio" id="invoice-time-custom" name="time_mode" value="custom" aria-label="Chọn khoảng thời gian riêng"{% if filters.range == 'custom' %} checked{% endif %}>
+            <button type="button" class="invoice-time-trigger invoice-time-custom-trigger{% if filters.range == 'custom' %} is-selected{% endif %}" id="invoice-custom-toggle" aria-expanded="{{ 'true' if filters.range == 'custom' else 'false' }}" aria-controls="invoice-custom-dates"><span>Lựa chọn khác</span>{{ icon('calendar',17) }}</button>
+          </div>
+          <div class="invoice-custom-dates" id="invoice-custom-dates"{% if filters.range != 'custom' %} hidden{% endif %}>
+            <label for="invoice-from">Từ ngày giờ</label><input type="datetime-local" id="invoice-from" name="from" value="{{ custom_from }}"{% if filters.range == 'custom' %} required{% endif %}>
+            <label for="invoice-to">Đến ngày giờ</label><input type="datetime-local" id="invoice-to" name="to" value="{{ custom_to }}"{% if filters.range == 'custom' %} required{% endif %}>
+          </div>
+        </fieldset>
+        <div class="invoice-filter-group">
+          <label for="invoice-vehicle-type">Loại xe</label>
+          <select id="invoice-vehicle-type" name="vehicle_type" data-invoice-auto-submit><option value="">Tất cả loại xe</option>{% for type in vehicle_types %}<option value="{{ type }}"{% if filters.vehicle_type == type %} selected{% endif %}>{{ type }}</option>{% endfor %}</select>
+        </div>
+        <div class="invoice-filter-group">
+          <label for="invoice-fee">Thu phí lượt gửi</label>
+          <select id="invoice-fee" name="fee" data-invoice-auto-submit><option value="">Tất cả</option><option value="paid"{% if filters.fee == 'paid' %} selected{% endif %}>Có thu phí</option><option value="free"{% if filters.fee == 'free' %} selected{% endif %}>Không thu phí</option></select>
+        </div>
+        <div class="invoice-filter-group invoice-payment-filter">
+          <label id="invoice-payment-label">Phương thức</label>
+          <input type="hidden" id="invoice-payment-method" name="payment_method" value="{{ filters.payment_method }}">
+          <details class="invoice-method-picker" id="invoice-method-picker">
+            <summary class="invoice-method-trigger{% if filters.payment_method %} is-selected{% endif %}" aria-label="Phương thức thanh toán"><span>{{ payment_methods.get(filters.payment_method, 'Chọn phương thức') }}</span><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary>
+            <div class="invoice-method-options" aria-labelledby="invoice-payment-label">
+              {% for value, label in payment_methods.items() %}<button type="submit" name="payment_choice" value="{{ value }}" data-invoice-payment="{{ value }}" aria-pressed="{{ 'true' if filters.payment_method == value else 'false' }}">{{ label }}{% if filters.payment_method == value %}<span aria-hidden="true">✓</span>{% endif %}</button>{% endfor %}
+            </div>
+          </details>
+        </div>
+        <button type="submit" class="invoice-action invoice-action-primary invoice-apply">Áp dụng bộ lọc</button>
+        <a href="{{ url_for('invoices') }}" class="invoice-reset">Đặt lại bộ lọc</a>
+      </form>
+      <p class="invoice-filter-note">Hóa đơn được lấy từ các lượt xe đã ra bãi và đã ghi nhận phí gửi xe.</p>
+    </aside>
+
+    <div class="invoice-results">
+      <div class="invoice-selection" id="invoice-selection" hidden><span>Đã chọn <b id="invoice-selected-count">0</b> hóa đơn</span><a href="#" id="invoice-export-selected">{{ icon('export', 16) }} Xuất file đã chọn</a></div>
+      <div class="invoice-table-scroll">
+        <table class="invoice-table" aria-label="Danh sách hóa đơn gửi xe">
+          <thead><tr>
+            <th class="invoice-check"><input type="checkbox" id="invoice-select-all" aria-label="Chọn tất cả hóa đơn trên trang"></th>
+            <th>{{ sort_link('code', 'Mã hóa đơn') }}</th>
+            <th>{{ sort_link('time', 'Thời gian ra') }}</th>
+            <th>Biển số xe</th>
+            <th data-column="customer">Khách hàng</th>
+            <th data-column="type">Loại xe</th>
+            <th data-column="slot">Vị trí đỗ</th>
+            <th class="invoice-money">{{ sort_link('fee', 'Phí thu') }} <small>(VNĐ)</small></th>
+            <th>Trạng thái</th>
+          </tr></thead>
+          <tbody>
+            <tr class="invoice-summary"><td colspan="7" data-invoice-summary-colspan>Tổng cộng <span>({{ total_count }} hóa đơn)</span></td><td class="invoice-money" id="invoice-total">{{ total_fee|vnd }}</td><td></td></tr>
+            {% for invoice in items %}
+            <tr class="invoice-row" data-invoice-row="{{ invoice.id }}">
+              <td class="invoice-check"><input type="checkbox" data-select-invoice="{{ invoice.id }}" aria-label="Chọn hóa đơn {{ invoice.code }}"></td>
+              <td><button type="button" class="invoice-code" data-toggle-invoice="{{ invoice.id }}" aria-expanded="false" aria-controls="invoice-detail-{{ invoice.id }}">{{ invoice.code }}</button></td>
+              <td class="invoice-date">{{ invoice.exit_time_label }}</td>
+              <td><b class="invoice-plate">{{ invoice.plate_number }}</b></td>
+              <td data-column="customer">{{ invoice.customer_name }}</td>
+              <td data-column="type">{{ invoice.vehicle_type_name }}</td>
+              <td data-column="slot">{{ invoice.slot_name or '—' }}</td>
+              <td class="invoice-money">{{ invoice.fee|vnd }}</td>
+              <td><span class="invoice-status{% if invoice.fee == 0 %} invoice-status-free{% endif %}"><i></i>{{ 'Đã thu phí' if invoice.fee > 0 else 'Không thu phí' }}</span></td>
+            </tr>
+            <tr class="invoice-detail-row" id="invoice-detail-{{ invoice.id }}" hidden><td colspan="9" data-invoice-detail-colspan>
+              <section class="invoice-detail" aria-label="Chi tiết hóa đơn {{ invoice.code }}">
+                <div class="invoice-detail-tab"><span>Thông tin hóa đơn</span><button type="button" data-close-invoice="{{ invoice.id }}" aria-label="Đóng chi tiết hóa đơn {{ invoice.code }}">{{ icon('close') }}</button></div>
+                <div class="invoice-detail-content">
+                  <div class="invoice-detail-heading"><div><h2>{{ invoice.customer_name }}</h2><span>{{ invoice.code }}</span><span class="invoice-status"><i></i> Hoàn thành</span></div><span>{{ ('Khu ' ~ invoice.area_name ~ ' · ') if invoice.area_name else '' }}Ô {{ invoice.slot_name or 'chưa xác định' }}</span></div>
+                  <dl class="invoice-metadata">
+                    <div><dt>Biển số xe</dt><dd>{{ invoice.plate_number }}</dd></div>
+                    <div><dt>Loại xe</dt><dd>{{ invoice.vehicle_type_name }}</dd></div>
+                    <div><dt>Mã lượt gửi</dt><dd>#{{ invoice.id }}</dd></div>
+                    <div><dt>Thời gian vào</dt><dd>{{ invoice.entry_time_label }}</dd></div>
+                    <div><dt>Thời gian ra</dt><dd>{{ invoice.exit_time_label }}</dd></div>
+                    <div><dt>Thời gian gửi</dt><dd>{{ invoice.duration }}</dd></div>
+                  </dl>
+                  <div class="invoice-service"><span><b>Phí gửi xe</b><small>{{ invoice.vehicle_type_name }} · {{ invoice.plate_number }}</small></span><span>{{ invoice.duration }}</span><strong>{{ invoice.fee|vnd }}</strong></div>
+                  <div class="invoice-detail-bottom"><p><span>Ghi chú</span>{{ invoice.note or 'Chưa có ghi chú' }}</p><div><span>Phương thức <b>{{ invoice.payment_method_label }}</b></span><span>Tổng phí gửi xe <b>{{ invoice.fee|vnd }}</b></span><span class="invoice-final-total">Phí đã ghi nhận <b>{{ invoice.fee|vnd }}</b></span></div></div>
+                  {% if invoice.entry_image or invoice.exit_image %}
+                  <details class="invoice-evidence"><summary>Ảnh đối chiếu xe vào / ra</summary><div>{% for direction, label in [('entry', 'Ảnh xe vào'), ('exit', 'Ảnh xe ra')] %}<figure><figcaption>{{ label }}</figcaption>{% if invoice[direction ~ '_image'] %}<img loading="lazy" src="{{ url_for('static', filename=('in/' if direction == 'entry' else 'out/') ~ invoice[direction ~ '_image']) }}" alt="{{ label }} {{ invoice.plate_number }}">{% else %}<p>Không có ảnh</p>{% endif %}</figure>{% endfor %}</div></details>
+                  {% endif %}
+                  <div class="invoice-detail-actions"><a href="{{ url_for('invoice_print', record_id=invoice.id) }}" class="invoice-action invoice-action-primary" target="_blank" rel="noopener">{{ icon('print') }} In phiếu thu</a></div>
+                </div>
+              </section>
+            </td></tr>
+            {% else %}
+            <tr><td colspan="9" class="invoice-empty" data-invoice-detail-colspan>{{ icon('receipt', 42) }}<h2>Chưa có hóa đơn phù hợp</h2><p>Hóa đơn xuất hiện sau khi xe ra bãi và được ghi nhận phí.<br>Thử thay đổi thời gian hoặc đặt lại bộ lọc để xem thêm.</p><a href="{{ url_for('invoices') }}">Đặt lại bộ lọc</a></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="invoice-pagination">
+        <div><span>Hiển thị {{ first_item }}–{{ last_item }} / {{ total_count }} hóa đơn</span><label>Số dòng <select name="per_page" form="invoice-filters" data-invoice-auto-submit aria-label="Số hóa đơn mỗi trang">{% for size in [20,50,100] %}<option value="{{ size }}"{% if per_page == size %} selected{% endif %}>{{ size }}</option>{% endfor %}</select></label></div>
+        <nav aria-label="Phân trang hóa đơn">{% if page > 1 %}<a href="{{ url_for('invoices') }}?{{ query_string(page=page-1) }}" aria-label="Trang trước">{{ icon('left',16) }}</a>{% else %}<span aria-disabled="true">{{ icon('left',16) }}</span>{% endif %}<span class="invoice-page-number">{{ page }} / {{ pages }}</span>{% if page < pages %}<a href="{{ url_for('invoices') }}?{{ query_string(page=page+1) }}" aria-label="Trang sau">{{ icon('right',16) }}</a>{% else %}<span aria-disabled="true">{{ icon('right',16) }}</span>{% endif %}</nav>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block extra_js %}<script src="{{ url_for('static', filename='js/invoices.js') }}" defer></script>{% endblock %}

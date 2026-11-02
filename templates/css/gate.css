@@ -1,12 +1,212 @@
-/* Trang Giám sát vào / ra (Menu cổng) */
-.gate-lane-grid {
+/* Camera và bảng đối chiếu xe của hai làn vào / ra. */
+.gate-page-heading { margin-bottom: 16px; }
+.gate-page-heading h1 { font-size: 23px; }
+.gate-page-heading p { margin-top: 4px; font-size: 12px; }
+.gate-console {
+  background: #fff;
+  border: 1px solid #d3dce8;
+  border-radius: 9px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px #102c5908;
+}
+.gate-console-toolbar {
+  display: flex;
+  align-items: stretch;
+  background: #f7f9fc;
+  border-bottom: 1px solid #d3dce8;
+}
+.gate-notice { display: flex; align-items: center; gap: 9px; padding: 10px 12px; flex: 1; min-width: 170px; }
+.gate-notice-icon {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  border: 1px solid #c9d9ed;
+  color: #4b709b;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.gate-notice b, .gate-notice div > span { display: block; }
+.gate-notice b { font-size: 9px; letter-spacing: .7px; color: #526d8d; margin-bottom: 4px; }
+.gate-notice div > span { font-size: 11px; color: #76869c; line-height: 1.5; }
+.gate-counters { display: flex; margin: 0; }
+.gate-counters > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-left: 1px solid #dce4ee;
+  min-width: 92px;
+}
+.gate-counters dt { color: #59738f; font-size: 10px; white-space: nowrap; }
+.gate-counters dd { margin: 0; font-size: 22px; font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; }
+.gate-counters small { margin-left: 5px; color: #8b9ab0; font-size: 11px; font-weight: 500; }
+.gate-counters .gate-revenue dd, .gate-counters .gate-revenue small { color: #dc393e; }
+.gate-dual-lanes {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: 3px;
+  background: #d3dce8;
 }
-
-@media (max-width: 980px) {
-  .gate-lane-grid {
-    grid-template-columns: 1fr;
-  }
+.gate-console-lane { min-width: 0; background: #fff; }
+.gate-lane-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #fff;
+}
+.gate-lane-caption h2 { display: flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: .6px; }
+.gate-lane-caption > span { color: #8a99ac; font-size: 10px; }
+.gate-lane-dot { width: 6px; height: 6px; border-radius: 50%; background: #168a61; }
+.gate-lane-dot.exit { background: #0875f9; }
+.gate-camera-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 0 3px;
+  background: #e2e7ee;
+}
+.gate-view {
+  position: relative;
+  min-width: 0;
+  height: clamp(118px, calc((100dvh - 470px) / 2), 260px);
+  background: #17232f;
+  color: #c4cdd7;
+  overflow: hidden;
+}
+.gate-view-label {
+  position: absolute;
+  z-index: 1;
+  inset: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #0c1525b8;
+  font-size: 9px;
+}
+.gate-camera-off { color: #b2a492; font-size: 7px; white-space: nowrap; }
+.gate-view-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  padding: 34px 12px 16px;
+  text-align: center;
+}
+.gate-view-empty svg { color: #657d93; }
+.gate-view-empty > span { font-size: 11px; color: #b4c2cf; }
+.gate-view-empty small { font-size: 9px; line-height: 1.5; color: #95a8ba; }
+.gate-live-view:hover { background: #1c2e40; }
+.gate-live-view:hover .gate-view-empty small { color: #a6c9f0; }
+.gate-live-view:focus-visible { outline-offset: -4px; }
+.gate-view-corner { position: absolute; bottom: 8px; right: 8px; color: #8296a9; font-family: Consolas, monospace; font-size: 9px; }
+.gate-evidence { background: #1c2936; }
+.gate-view-tag { color: #8a9fb2; font-size: 7px; letter-spacing: .5px; }
+.gate-evidence-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+.gate-image-plate {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  border-radius: 3px;
+  background: #0c1525cc;
+  color: #f3f6fa;
+  padding: 4px 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.gate-record { display: grid; grid-template-columns: minmax(0, 1fr) 150px; min-height: 90px; }
+.gate-record-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
+.gate-record-fields > div { padding: 7px 10px; border-right: 1px solid #e5e9ef; border-bottom: 1px solid #e5e9ef; }
+.gate-record-fields dt { color: #697d94; font-size: 9px; margin-bottom: 4px; }
+.gate-record-fields dd { font-size: 11px; line-height: 1.5; font-weight: 650; margin: 0; overflow-wrap: anywhere; }
+.gate-record-fee dd { color: #db383d; }
+.gate-record-plate {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: #f7f9fb;
+  text-align: center;
+}
+.gate-record-plate > span { color: #6c7e94; font-size: 8px; letter-spacing: 1px; }
+.gate-record-plate strong { font-size: 19px; letter-spacing: .5px; color: #263b53; overflow-wrap: anywhere; }
+.gate-record-plate small { font-size: 9px; color: #6a7f95; }
+.gate-lane-strip { display: flex; align-items: center; gap: 10px; min-height: 26px; padding: 0 10px; color: #fff; background: #d88216; font-size: 10px; }
+.gate-lane-strip b { white-space: nowrap; font-size: 10px; }
+.gate-lane-strip > span:not(.gate-strip-id) { flex: 1; font-size: 9px; }
+.gate-strip-id { font-size: 8px; letter-spacing: .7px; opacity: .9; }
+.gate-lane-operation { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 10px; background: #fff; }
+.gate-lane-operation > span { font-size: 10px; line-height: 1.5; color: #6e8097; }
+.gate-operation-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-radius: 5px;
+  min-height: 33px;
+  padding: 8px 12px;
+  background: #16845f;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.gate-operation-button.exit { background: #0875f9; }
+.gate-operation-button:hover { filter: brightness(1.08); }
+.gate-console-footer, .gate-console-footer > div, .gate-footer-tools { display: flex; align-items: center; gap: 8px; }
+.gate-console-footer { justify-content: space-between; gap: 12px; padding: 9px 12px; background: #f7f9fc; border-top: 1px solid #d3dce8; color: #6e8097; font-size: 9px; }
+.gate-footer-dot { width: 5px; height: 5px; border-radius: 50%; background: #8190a4; flex-shrink: 0; }
+.gate-footer-tools a { color: #4379b0; }
+.gate-footer-divider { width: 1px; height: 12px; background: #d3dce8; }
+.gate-console-expanded { overflow: hidden; }
+.gate-console.is-expanded { position: fixed; inset: 10px; z-index: 100; overflow: auto; }
+.gate-console.is-expanded .gate-view { height: clamp(150px, calc((100dvh - 320px) / 2), 420px); }
+.gate-restore { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; color: #526d8d; font-size: 11px; white-space: nowrap; border-left: 1px solid #dce4ee; }
+.gate-restore > span { font-size: 22px; }
+@media (max-width: 1270px) {
+  .gate-console-toolbar { flex-direction: column; }
+  .gate-notice { padding: 8px 12px; }
+  .gate-notice div { display: flex; align-items: center; gap: 10px; }
+  .gate-notice b { margin: 0; }
+  .gate-counters { border-top: 1px solid #dce4ee; }
+  .gate-counters > div { flex: 1; min-width: 0; padding: 10px 12px; }
+  .gate-counters > div:first-child { border-left: 0; }
+  .gate-record { grid-template-columns: minmax(0, 1fr) 120px; }
+  .gate-record-plate strong { font-size: 16px; }
+  .gate-camera-off { display: none; }
+}
+@media (max-width: 1050px) {
+  .gate-dual-lanes { grid-template-columns: 1fr; gap: 16px; }
+  .gate-view { height: auto; aspect-ratio: 16 / 10; }
+  .gate-console-footer { flex-wrap: wrap; }
+}
+@media (max-width: 600px) {
+  .gate-counters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .gate-counters > div { padding: 10px 6px; }
+  .gate-counters dt { white-space: normal; font-size: 9px; line-height: 1.4; }
+  .gate-counters dd { font-size: 18px; }
+  .gate-counters .gate-revenue { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; border-top: 1px solid #dce4ee; border-left: 0; padding: 10px; }
+  .gate-notice-icon, .gate-view-tag, .gate-strip-id, .gate-lane-operation > span { display: none; }
+  .gate-notice div { flex-wrap: wrap; gap: 4px; }
+  .gate-view { aspect-ratio: 1; }
+  .gate-view-label { font-size: 8px; padding: 6px; }
+  .gate-view-empty { padding: 30px 8px 15px; gap: 7px; }
+  .gate-view-empty > span { font-size: 9px; }
+  .gate-view-empty small { font-size: 8px; }
+  .gate-record { grid-template-columns: 1fr; }
+  .gate-record-plate { padding: 12px; }
+  .gate-record-plate strong { font-size: 23px; }
+  .gate-operation-button { width: 100%; min-height: 40px; }
+  .gate-console-footer, .gate-footer-tools { font-size: 8px; }
 }

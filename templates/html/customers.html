@@ -1,251 +1,102 @@
-{% extends "_layout.html" %}
+{% extends '_layout.html' %}
+{% from '_management_icons.html' import icon %}
+{% from '_customer_period_filter.html' import period_filter %}
 {% set active_page = 'customers' %}
-{% set is_admin = (current_user_role == 'admin') %}
-{% set active_customers = customers|selectattr('status', 'equalto', 'active')|list|length %}
-
+{% set is_admin = current_user_role == 'admin' %}
 {% block title %}Quản lý Khách hàng & Phương tiện — Smart Parking{% endblock %}
 {% block breadcrumb %}Khách hàng{% endblock %}
-{% block extra_css %}
-<link rel="stylesheet" href="/css/users.css">
-{% endblock %}
+{% block body_class %}invoice-screen customer-screen{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/css/invoices.css"><link rel="stylesheet" href="/css/users.css"><link rel="stylesheet" href="/css/customers.css">{% endblock %}
+
+{% macro sort_link(field, label) -%}<a href="{{ url_for('customers') }}?{{ query_string(sort=field, direction='asc' if filters.sort == field and filters.direction == 'desc' else 'desc', page=1) }}" class="invoice-sort" title="Sắp xếp theo {{ label|lower }}">{{ label }} {{ icon('sort',13) }}</a>{%- endmacro %}
+
+{% macro profile_fields(prefix, values, creating=false) -%}
+<div class="customer-form-top"><div class="customer-form-grid">
+  <div class="form-field"><label for="{{ prefix }}-fullname">Tên khách hàng <span class="required">*</span></label><input id="{{ prefix }}-fullname" name="fullname" value="{{ values.fullname or '' }}" placeholder="Bắt buộc" maxlength="160" autocomplete="name" required data-customer-name autofocus></div>
+  <div class="form-field"><label for="{{ prefix }}-code">Mã khách hàng</label><input id="{{ prefix }}-code" value="{{ values.code or '' }}" placeholder="Tự động" readonly data-profile-code></div>
+  <div class="form-field"><label for="{{ prefix }}-phone">Điện thoại</label><input id="{{ prefix }}-phone" type="tel" name="phone" value="{{ values.phone or '' }}" placeholder="Nhập số điện thoại" maxlength="32"></div>
+  <div class="form-field"><label for="{{ prefix }}-username">Tên đăng nhập{% if creating %} <span class="required">*</span>{% endif %}</label><input id="{{ prefix }}-username"{% if creating %} name="username" required{% else %} readonly{% endif %} value="{{ values.username or '' }}" placeholder="Tên tài khoản khách hàng" data-profile-username></div>
+  <div class="form-field"><label for="{{ prefix }}-email">Email</label><input id="{{ prefix }}-email" type="email" name="email" value="{{ values.email or '' }}" placeholder="Nhập email" maxlength="254"></div>
+  {% if creating %}<div class="form-field"><label for="{{ prefix }}-password">Mật khẩu khởi tạo <span class="required">*</span></label><input id="{{ prefix }}-password" type="password" name="password" autocomplete="new-password" minlength="{{ min_password_len }}" placeholder="Tối thiểu {{ min_password_len }} ký tự" required></div>{% endif %}
+</div><div class="customer-form-avatar" aria-hidden="true"><span data-customer-avatar>KH</span><small>Khách hàng</small></div></div>
+{%- endmacro %}
+
+{% macro address_fields(prefix, values) -%}
+<details class="customer-form-section" open><summary>Địa chỉ</summary><div class="customer-form-section-body"><div class="form-field"><label for="{{ prefix }}-address">Địa chỉ liên hệ</label><input id="{{ prefix }}-address" name="address" value="{{ values.address or '' }}" placeholder="Nhập địa chỉ" maxlength="500" autocomplete="street-address"></div></div></details>
+{%- endmacro %}
+
+{% macro note_fields(prefix, values) -%}
+<details class="customer-form-section" open><summary>Ghi chú</summary><div class="customer-form-section-body"><div class="form-field"><label class="visually-hidden" for="{{ prefix }}-note">Ghi chú khách hàng</label><textarea id="{{ prefix }}-note" name="customer_note" rows="3" maxlength="2000" placeholder="Nhập ghi chú về khách hàng gửi xe">{{ values.customer_note or '' }}</textarea></div></div></details>
+{%- endmacro %}
 
 {% block content %}
-<div class="page-heading">
-  <div>
-    <h1>Quản lý Khách hàng</h1>
-    <p>Quản lý tài khoản khách hàng gửi xe, thông tin phương tiện đăng ký và quản lý vé tháng</p>
+<section class="invoice-page customer-page" aria-label="Quản lý khách hàng gửi xe" data-open-customer="{{ open_customer_id }}">
+  <div class="invoice-toolbar">
+    <h1>Khách hàng <span>{{ customer_count }}</span></h1>
+    <div class="invoice-search">{{ icon('search') }}<input type="search" name="q" form="customer-filters" value="{{ filters.q }}" placeholder="Theo mã, tên, điện thoại, biển số" aria-label="Tìm khách hàng"><button type="submit" form="customer-filters" aria-label="Tìm kiếm khách hàng">{{ icon('filter') }}</button></div>
+    <div class="invoice-actions"><button type="button" class="invoice-action invoice-mobile-filter" id="customer-filter-toggle" aria-controls="customer-filter-sidebar" aria-expanded="false">{{ icon('filter') }} Bộ lọc</button><button type="button" class="invoice-action invoice-action-primary" id="open-add-customer" aria-label="Thêm khách hàng">{{ icon('plus') }} <span>Khách hàng</span></button><a class="invoice-action" id="customer-export" href="{{ url_for('customers_export') }}?{{ query_string() }}" aria-label="Xuất file khách hàng">{{ icon('export') }} <span>Xuất file</span></a><details class="invoice-column-picker customer-column-picker"><summary class="invoice-action invoice-action-square" aria-label="Cài đặt cột khách hàng" title="Cài đặt cột">{{ icon('columns') }}</summary><div><b>Cột hiển thị</b>{% for code,label in [('phone','Điện thoại'),('vehicles','Phương tiện'),('monthly','Vé tháng'),('fee','Tổng phí'),('status','Trạng thái')] %}<label><input type="checkbox" data-customer-column="{{ code }}" checked> {{ label }}</label>{% endfor %}</div></details></div>
   </div>
-  <div class="heading-actions">
-    <button type="button" class="btn btn-primary" id="open-add-customer">+ Thêm khách hàng mới</button>
-  </div>
-</div>
-
-<div class="chip-list" style="margin-bottom: 20px;">
-  <a href="{{ url_for('customers') }}" class="chip active">
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-    Khách hàng ({{ customer_count }})
-  </a>
-  {% if is_admin %}
-  <a href="{{ url_for('accounts') }}" class="chip">
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
-    Tài khoản nhân viên &amp; Quản trị ({{ staff_count }})
-  </a>
-  {% endif %}
-</div>
-
-<div class="stats-grid four">
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Tổng số khách hàng</span>
-      <span class="stat-icon blue">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      </span>
-    </div>
-    <strong>{{ customers|length }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Chủ xe trong hệ thống
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Đang hoạt động</span>
-      <span class="stat-icon green">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
-      </span>
-    </div>
-    <strong>{{ active_customers }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Cho phép gửi xe &amp; đăng nhập
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Phương tiện đăng ký</span>
-      <span class="stat-icon purple">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
-      </span>
-    </div>
-    <strong>{{ total_vehicles }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Biển số xe đã liên kết
+  {% for error in filter_errors %}<div class="error-banner" role="alert">{{ error }}</div>{% endfor %}
+  <div class="invoice-workspace">
+    <aside class="invoice-filters" id="customer-filter-sidebar" aria-label="Bộ lọc khách hàng"><form id="customer-filters" method="get" action="{{ url_for('customers') }}">
+      <input type="hidden" name="sort" value="{{ filters.sort }}"><input type="hidden" name="direction" value="{{ filters.direction }}">
+      <div class="invoice-filter-group"><label for="customer-group">Nhóm khách hàng</label><select id="customer-group" name="group" data-customer-auto-submit>{% for code,label in groups %}<option value="{{ code }}"{% if filters.group == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      {% for control in customer_time_controls %}{{ period_filter(control, period_groups) }}{% endfor %}
+      <div class="invoice-filter-group"><label>Tổng phí đã ghi nhận</label><div class="customer-amount-range"><label>Từ<input name="min_fee" type="number" min="0" step="1" value="{{ filters.min_fee }}" placeholder="Giá trị" aria-label="Tổng phí tối thiểu"></label><label>Đến<input name="max_fee" type="number" min="0" step="1" value="{{ filters.max_fee }}" placeholder="Giá trị" aria-label="Tổng phí tối đa"></label></div></div>
+      <div class="invoice-filter-group"><label for="customer-vehicle-type">Loại phương tiện</label><select id="customer-vehicle-type" name="vehicle_type" data-customer-auto-submit><option value="">Tất cả loại xe</option>{% for type in vehicle_types %}<option value="{{ type.id }}"{% if filters.vehicle_type == type.id|string %} selected{% endif %}>{{ type.name }}</option>{% endfor %}</select></div>
+      <fieldset class="customer-status-filter"><legend>Trạng thái</legend>{% for value,label in [('', 'Tất cả'),('active','Đang hoạt động'),('locked','Đã khóa')] %}<label><input type="radio" name="status" value="{{ value }}"{% if filters.status == value %} checked{% endif %} data-customer-auto-submit> {{ label }}</label>{% endfor %}</fieldset>
+      <button type="submit" class="invoice-action invoice-action-primary invoice-apply">Áp dụng bộ lọc</button><a class="invoice-reset" href="{{ url_for('customers') }}">Đặt lại bộ lọc</a>
+    </form></aside>
+    <div class="invoice-results customer-results">
+      <div class="invoice-selection" id="customer-selection" hidden><span>Đã chọn <b id="customer-selected-count">0</b> khách hàng</span><a id="customer-export-selected" href="#">{{ icon('export',16) }} Xuất file đã chọn</a></div>
+      <div class="invoice-table-scroll"><table class="invoice-table customer-table" aria-label="Danh sách khách hàng">
+        <thead><tr><th class="invoice-check"><input id="customer-select-all" type="checkbox" aria-label="Chọn tất cả khách hàng trên trang"></th><th>{{ sort_link('code','Mã khách hàng') }}</th><th>{{ sort_link('name','Tên khách hàng') }}</th><th data-customer-cell="phone">Điện thoại</th><th data-customer-cell="vehicles">{{ sort_link('vehicles','Phương tiện') }}</th><th data-customer-cell="monthly">{{ sort_link('monthly','Vé tháng còn hạn') }}</th><th class="invoice-money" data-customer-cell="fee">{{ sort_link('fee','Tổng phí') }}</th><th data-customer-cell="status">Trạng thái</th></tr></thead>
+        <tbody>
+          <tr class="invoice-summary"><td colspan="4" data-customer-summary-leading>Tổng cộng <span>({{ customer_count }} khách hàng)</span></td><td data-customer-cell="vehicles">{{ total_vehicle_count }}</td><td data-customer-cell="monthly">{{ total_monthly_count }}</td><td class="invoice-money" data-customer-cell="fee">{{ total_customer_fee|vnd }}</td><td data-customer-cell="status"></td></tr>
+          {% for customer in customers %}
+          <tr class="customer-row" data-customer-row="{{ customer.id }}"><td class="invoice-check"><input type="checkbox" data-select-customer="{{ customer.id }}" aria-label="Chọn khách hàng {{ customer.code }}"></td><td><button type="button" class="invoice-code" data-toggle-customer="{{ customer.id }}" aria-expanded="false" aria-controls="customer-detail-{{ customer.id }}">{{ customer.code }}</button></td><td class="customer-name-cell">{{ customer.fullname }}</td><td data-customer-cell="phone">{{ customer.phone or '—' }}</td><td data-customer-cell="vehicles">{{ customer.vehicle_count }}</td><td data-customer-cell="monthly">{{ customer.monthly_count }}</td><td class="invoice-money" data-customer-cell="fee">{{ customer.total_fee|vnd }}</td><td data-customer-cell="status"><span class="customer-state {{ 'active' if customer.status == 'active' else 'locked' }}">{{ 'Hoạt động' if customer.status == 'active' else 'Đã khóa' }}</span></td></tr>
+          <tr class="customer-detail-row" id="customer-detail-{{ customer.id }}" hidden><td colspan="8" data-customer-colspan>
+            <section class="customer-detail" aria-label="Hồ sơ {{ customer.fullname }}">
+              <div class="customer-tabs" role="tablist" aria-label="Chi tiết {{ customer.code }}">{% for key,label in [('info','Thông tin'),('vehicles','Phương tiện & vé'),('history','Lịch sử gửi xe')] %}<button type="button" role="tab" id="customer-tab-{{ customer.id }}-{{ key }}" aria-controls="customer-panel-{{ customer.id }}-{{ key }}" aria-selected="{{ 'true' if key == 'info' else 'false' }}" tabindex="{{ '0' if key == 'info' else '-1' }}" data-customer-tab="{{ key }}">{{ label }}</button>{% endfor %}<button type="button" class="customer-detail-close" data-close-customer="{{ customer.id }}" aria-label="Đóng hồ sơ {{ customer.code }}">{{ icon('close') }}</button></div>
+              <div class="customer-tab-panel" role="tabpanel" id="customer-panel-{{ customer.id }}-info" aria-labelledby="customer-tab-{{ customer.id }}-info" data-customer-panel="info">
+                <div class="customer-profile-heading"><div class="customer-profile-avatar">{{ customer.initials }}</div><div><h2>{{ customer.fullname }} <small>{{ customer.code }}</small></h2><p>Tài khoản: <b>{{ customer.username }}</b><span>Ngày tạo: {{ customer.created_label }}</span><span>Nhóm: {{ customer.group_label }}</span></p></div></div>
+                <dl class="customer-profile-grid"><div><dt>Điện thoại</dt><dd>{{ customer.phone or 'Chưa cập nhật' }}</dd></div><div><dt>Email</dt><dd>{{ customer.email or 'Chưa cập nhật' }}</dd></div><div><dt>Trạng thái tài khoản</dt><dd>{{ 'Đang hoạt động' if customer.status == 'active' else 'Đã khóa' }}</dd></div><div><dt>Phương tiện đăng ký</dt><dd>{{ customer.vehicle_count }} xe · {{ customer.parking_count }} xe đang trong bãi</dd></div><div><dt>Vé tháng còn hạn</dt><dd>{{ customer.monthly_count }} vé</dd></div><div><dt>Lần vào bãi cuối</dt><dd>{{ customer.last_visit_label }}</dd></div><div class="customer-address"><dt>Địa chỉ</dt><dd>{{ customer.address or 'Chưa cập nhật' }}</dd></div></dl>
+                <p class="customer-profile-note">{{ customer.customer_note or 'Chưa có ghi chú' }}</p>
+                <div class="customer-detail-actions"><a class="invoice-action" href="{{ url_for('edit_user', user_id=customer.id) }}">Quản lý xe & vé</a>{% if is_admin %}<form method="post" action="{{ url_for('remove_user',user_id=customer.id) }}" data-confirm-action="Xóa tài khoản {{ customer.username }} và các phương tiện đã đăng ký?"><button type="submit" class="invoice-action customer-danger">Xóa</button></form>{% endif %}<button type="button" class="invoice-action invoice-action-primary" data-edit-customer data-id="{{ customer.id }}" data-action="{{ url_for('customer_profile_save',user_id=customer.id) }}" data-code="{{ customer.code }}" data-username="{{ customer.username }}" data-fullname="{{ customer.fullname }}" data-phone="{{ customer.phone or '' }}" data-email="{{ customer.email or '' }}" data-address="{{ customer.address or '' }}" data-customer-note="{{ customer.customer_note or '' }}">{{ icon('edit') }} Chỉnh sửa</button>{% if is_admin %}<form method="post" action="{{ url_for('toggle_user',user_id=customer.id) }}" data-confirm-action="{{ 'Khóa' if customer.status == 'active' else 'Mở khóa' }} tài khoản {{ customer.username }}?"><button type="submit" class="invoice-action">{{ 'Ngừng hoạt động' if customer.status == 'active' else 'Mở hoạt động' }}</button></form>{% endif %}</div>
+              </div>
+              <div class="customer-tab-panel" role="tabpanel" id="customer-panel-{{ customer.id }}-vehicles" aria-labelledby="customer-tab-{{ customer.id }}-vehicles" data-customer-panel="vehicles" hidden>
+                <div class="customer-panel-heading"><h2>Phương tiện đăng ký <span>{{ customer.vehicle_count }}</span></h2><a class="invoice-action invoice-action-primary" href="{{ url_for('edit_user',user_id=customer.id) }}">{{ icon('plus') }} Đăng ký xe / Gia hạn vé</a></div>
+                {% if customer.vehicles %}<table class="customer-subtable"><thead><tr><th>Biển số</th><th>Loại xe</th><th>Loại vé</th><th>Thời hạn vé tháng</th><th>Trạng thái gửi xe</th><th></th></tr></thead><tbody>{% for v in customer.vehicles %}<tr><td><b>{{ v.plate_number }}</b></td><td>{{ v.vehicle_type_name or 'Chưa phân loại' }}</td><td>{{ v.ticket_label }}</td><td>{{ v.expires_on|vdate if v.expires_on else '—' }}</td><td><span class="customer-state {{ 'active' if v.in_parking else '' }}">{{ 'Đang trong bãi' if v.in_parking else 'Ngoài bãi' }}</span></td><td><a href="{{ url_for('history',plate=v.plate_number) }}">Tra cứu lượt gửi</a></td></tr>{% endfor %}</tbody></table>{% else %}<p class="customer-panel-empty">Khách hàng chưa đăng ký phương tiện.</p>{% endif %}
+              </div>
+              <div class="customer-tab-panel" role="tabpanel" id="customer-panel-{{ customer.id }}-history" aria-labelledby="customer-tab-{{ customer.id }}-history" data-customer-panel="history" hidden>
+                <div class="customer-panel-heading"><h2>Lịch sử gửi xe</h2><span>{{ customer.visit_count }} lượt · Phí gửi xe {{ customer.parking_fee|vnd }} · Vé tháng {{ customer.monthly_fee|vnd }}</span></div>
+                {% if customer.history %}<table class="customer-subtable"><thead><tr><th>Mã lượt</th><th>Biển số</th><th>Thời gian vào</th><th>Thời gian ra</th><th>Vị trí</th><th class="right">Phí thu</th></tr></thead><tbody>{% for r in customer.history[:20] %}<tr><td>#{{ r.id }}</td><td><a href="{{ url_for('history',plate=r.plate_number) }}">{{ r.plate_number }}</a></td><td>{{ r.entry_label }}</td><td>{{ r.exit_label }}</td><td>{{ r.slot_name or '—' }}</td><td class="right">{{ r.fee|vnd if r.fee is not none else '—' }}</td></tr>{% endfor %}</tbody></table>{% if customer.history|length > 20 %}<p class="customer-history-note">Hiển thị 20 lượt gần nhất. Chọn biển số để tra cứu toàn bộ lịch sử.</p>{% endif %}{% else %}<p class="customer-panel-empty">Chưa có lượt gửi xe của các phương tiện đang liên kết.</p>{% endif %}
+              </div>
+            </section>
+          </td></tr>
+          {% else %}<tr><td colspan="8" class="invoice-empty" data-customer-colspan>{{ icon('users',42) }}<h2>Không tìm thấy khách hàng</h2><p>Thay đổi bộ lọc hoặc thêm khách hàng để đăng ký phương tiện.</p><a href="{{ url_for('customers') }}">Đặt lại bộ lọc</a></td></tr>{% endfor %}
+        </tbody>
+      </table></div>
+      <div class="invoice-pagination"><div><span>Hiển thị {{ first_item }}–{{ last_item }} / {{ customer_count }} khách hàng</span><label>Số dòng <select name="per_page" form="customer-filters" data-customer-auto-submit aria-label="Số khách hàng mỗi trang">{% for size in [20,50,100] %}<option value="{{ size }}"{% if per_page == size %} selected{% endif %}>{{ size }}</option>{% endfor %}</select></label></div><nav aria-label="Phân trang khách hàng">{% if page > 1 %}<a aria-label="Trang trước" href="{{ url_for('customers') }}?{{ query_string(page=page-1) }}">{{ icon('left',16) }}</a>{% else %}<span aria-disabled="true">{{ icon('left',16) }}</span>{% endif %}<span class="invoice-page-number">{{ page }} / {{ pages }}</span>{% if page < pages %}<a aria-label="Trang sau" href="{{ url_for('customers') }}?{{ query_string(page=page+1) }}">{{ icon('right',16) }}</a>{% else %}<span aria-disabled="true">{{ icon('right',16) }}</span>{% endif %}</nav></div>
     </div>
   </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Loại phương tiện</span>
-      <span class="stat-icon amber">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-      </span>
-    </div>
-    <strong>{{ vehicle_types|length }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Hỗ trợ vé lượt / vé tháng
-    </div>
-  </div>
-</div>
-
-<section class="panel data-panel">
-  <div class="panel-heading">
-    <h2>Danh sách khách hàng <span class="count-pill">{{ customers|length }}</span></h2>
-  </div>
-
-  <div class="table-toolbar">
-    <div class="search-input">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <input type="text" placeholder="Tìm theo họ tên khách hàng, tài khoản, biển số xe..." data-table-search>
-    </div>
-  </div>
-
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Khách hàng</th>
-          <th>Tài khoản</th>
-          <th>Phương tiện đăng ký</th>
-          <th>Trạng thái</th>
-          <th class="right">Thao tác</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if customers %}
-          {% for u in customers %}
-            <tr>
-              <td>
-                <div class="person-cell">
-                  <div class="mini-avatar">{{ (u.fullname or u.username)[:2]|upper }}</div>
-                  <div>
-                    <b>{{ u.fullname }}</b>
-                    <small>ID: #{{ u.id }}</small>
-                  </div>
-                </div>
-              </td>
-              <td><b>{{ u.username }}</b></td>
-              <td>
-                {% set u_vehicles = vehicles_by_user.get(u.id, []) %}
-                {% if u_vehicles %}
-                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                    {% for v in u_vehicles %}
-                      {% set expired = v.ticket_type == 'month' and v.expires_on and v.expires_on < today %}
-                      <span class="plate" title="{{ v.vehicle_type_name or '' }} · {{ ticket_labels.get(v.ticket_type, '') }}{% if v.expires_on %} (đến {{ v.expires_on|vdate }}){% endif %}">
-                        {{ v.plate_number }}
-                        {% if v.ticket_type == 'month' and not expired %}★{% elif expired %}!{% endif %}
-                      </span>
-                    {% endfor %}
-                  </div>
-                {% else %}
-                  <span style="color:#8596b2;font-size:12px;">Chưa đăng ký xe</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if u.status == 'active' %}
-                  <span class="badge badge-green"><span></span>Hoạt động</span>
-                {% else %}
-                  <span class="badge badge-red"><span></span>Đã khóa</span>
-                {% endif %}
-              </td>
-              <td class="right">
-                <div class="row-actions">
-                  <a href="{{ url_for('edit_user', user_id=u.id) }}" class="btn btn-outline">Chi tiết / Sửa</a>
-                  {% if is_admin %}
-                    <form method="POST" action="{{ url_for('toggle_user', user_id=u.id) }}">
-                      <button type="submit" class="btn btn-outline">
-                        {{ 'Khóa' if u.status == 'active' else 'Mở khóa' }}
-                      </button>
-                    </form>
-                    <form method="POST" action="{{ url_for('remove_user', user_id=u.id) }}" onsubmit="return confirm('Xóa tài khoản khách hàng {{ u.username }}?');">
-                      <button type="submit" class="btn btn-danger">Xóa</button>
-                    </form>
-                  {% endif %}
-                </div>
-              </td>
-            </tr>
-          {% endfor %}
-        {% else %}
-          <tr>
-            <td colspan="5" class="empty-cell">Chưa có tài khoản khách hàng nào.</td>
-          </tr>
-        {% endif %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="pagination">
-    <span>Hiển thị <b>{{ 1 if customers else 0 }}-{{ customers|length }}</b> trên <b>{{ customers|length }}</b> khách hàng</span>
-    <div>
-      <span class="current-page">1 / 1</span>
-    </div>
-  </div>
+  <p class="customer-stat-note">Số liệu lượt gửi và tổng phí được tính theo các phương tiện đang liên kết với khách hàng.</p>
 </section>
 
-<!-- DIALOG THÊM KHÁCH HÀNG MỚI -->
-<dialog id="add-customer-dialog" class="dialog-wide" {% if open_modal %}open{% endif %}>
-  <form method="POST" action="{{ url_for('add_customer') }}" class="dialog-content">
-    <div class="dialog-header">
-      <div>
-        <h3>Tạo tài khoản khách hàng mới</h3>
-        <p>Nhập thông tin khách hàng và đăng ký phương tiện (nếu có)</p>
-      </div>
-      <button type="button" class="dialog-close" id="close-add-customer">×</button>
+<dialog id="add-customer-dialog" class="customer-dialog"{% if open_modal %} data-open-on-load{% endif %} aria-labelledby="add-customer-title">
+  <form method="post" action="{{ url_for('add_customer') }}">
+    <div class="customer-dialog-heading"><h2 id="add-customer-title">Thêm khách hàng</h2><button type="button" data-close-dialog aria-label="Đóng form thêm khách hàng">{{ icon('close',20) }}</button></div>
+    <div class="customer-dialog-body">
+      {% if form_errors %}<div class="error-banner" role="alert">{% for error in form_errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+      {{ profile_fields('new',form or {},true) }}
+      {{ address_fields('new',form or {}) }}
+      <details class="customer-form-section" open><summary>Phương tiện & vé gửi xe <small>Không bắt buộc</small></summary><div class="customer-form-section-body">{% include '_customer_vehicle_rows.html' %}</div></details>
+      {{ note_fields('new',form or {}) }}
     </div>
-
-    <div class="form-grid">
-      <div class="form-field">
-        <label for="new-fullname">Họ và tên khách hàng *</label>
-        <input type="text" id="new-fullname" name="fullname" value="{{ form.fullname if form else '' }}" required placeholder="VD: Nguyễn Văn A">
-      </div>
-      <div class="form-field">
-        <label for="new-username">Tên đăng nhập *</label>
-        <input type="text" id="new-username" name="username" value="{{ form.username if form else '' }}" required placeholder="VD: nguyenvana">
-      </div>
-      <div class="form-field" style="grid-column: 1 / -1;">
-        <label for="new-password">Mật khẩu khởi tạo *</label>
-        <input type="password" id="new-password" name="password" required placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)">
-      </div>
-    </div>
-
-    <div id="customer-vehicles-section" style="margin-top: 16px;">
-      <h4 style="margin:0 0 10px;font-size:13px;font-weight:650;color:#10244b;">Đăng ký phương tiện ban đầu (Tùy chọn)</h4>
-      {% include '_vehicle_rows.html' %}
-    </div>
-
-    <div class="dialog-actions">
-      <button type="button" class="btn btn-outline" id="cancel-add-customer">Hủy</button>
-      <button type="submit" class="btn btn-primary">Thêm khách hàng</button>
-    </div>
+    <div class="customer-dialog-footer"><button type="button" class="invoice-action" data-close-dialog>Bỏ qua</button><button type="submit" class="invoice-action invoice-action-primary">Lưu</button></div>
   </form>
 </dialog>
+
+<dialog id="edit-customer-dialog" class="customer-dialog"{% if open_edit_modal %} data-open-on-load{% endif %} aria-labelledby="edit-customer-title"><form method="post"{% if edit_form %} action="{{ url_for('customer_profile_save',user_id=edit_form.id) }}"{% endif %}><div class="customer-dialog-heading"><h2 id="edit-customer-title">Chỉnh sửa khách hàng</h2><button type="button" data-close-dialog aria-label="Đóng form chỉnh sửa khách hàng">{{ icon('close',20) }}</button></div><div class="customer-dialog-body">{% if edit_errors %}<div class="error-banner" role="alert">{% for error in edit_errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}{{ profile_fields('edit',edit_form or {}) }}{{ address_fields('edit',edit_form or {}) }}{{ note_fields('edit',edit_form or {}) }}</div><div class="customer-dialog-footer"><button type="button" class="invoice-action" data-close-dialog>Bỏ qua</button><button type="submit" class="invoice-action invoice-action-primary">Lưu thay đổi</button></div></form></dialog>
 {% endblock %}
-
-{% block extra_js %}
-<script>
-  (function () {
-    var dlg = document.getElementById('add-customer-dialog');
-    var openBtn = document.getElementById('open-add-customer');
-    var closeBtn = document.getElementById('close-add-customer');
-    var cancelBtn = document.getElementById('cancel-add-customer');
-
-    if (openBtn && dlg) {
-      openBtn.addEventListener('click', function () {
-        if (typeof dlg.showModal === 'function') dlg.showModal();
-        else dlg.setAttribute('open', '');
-      });
-    }
-    function close() {
-      if (!dlg) return;
-      if (typeof dlg.close === 'function') dlg.close();
-      else dlg.removeAttribute('open');
-    }
-    if (closeBtn) closeBtn.addEventListener('click', close);
-    if (cancelBtn) cancelBtn.addEventListener('click', close);
-  })();
-</script>
-{% endblock %}
-
+{% block extra_js %}<script src="/static/js/customers.js" defer></script>{% endblock %}

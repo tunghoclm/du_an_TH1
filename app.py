@@ -6,9 +6,11 @@ Chức năng:
   /login, /logout   - Đăng nhập / đăng xuất
   /                  - Menu chính (trang chủ)
   /parking           - Sơ đồ bãi đỗ theo khu A/B/C (dữ liệu thật từ DB)
-  /gate              - Chọn chức năng Xe vào hoặc Xe ra
+  /gate              - Giám sát hai làn với khung camera, ảnh đối chiếu và lượt xe gần nhất
+  /monitoring/parking - Giám sát ô đỗ, chờ tích hợp camera nhận diện tình trạng bãi
   /entry, /exit      - Nhận diện từ ảnh / camera -> kiểm tra -> xác nhận đúng chiều vào / ra
   /history           - Lịch sử toàn bộ lượt gửi xe (có bộ lọc)
+  /invoices          - Hóa đơn thu phí của các lượt xe đã ra, xuất CSV và in phiếu thu
   /statistics        - Thống kê tổng quan
   /pricing           - Bảng giá xe: khung thời gian, loại xe, giá (ai cũng xem, admin/nhân viên chỉnh sửa)
   /settings          - Cài đặt cá nhân (mỗi người tự chọn, không cần admin/nhân viên)
@@ -57,6 +59,8 @@ import export_stats
 from parking_fees import calculate_turn_fee
 from plate_recognition import recognize_plate_annotated, recognize_plate, recognize_plate_live
 from plate_utils import normalize_plate, plate_key, is_valid_plate_format
+import parking_invoices
+import parking_customers
 
 TMP_FOLDER = TMP_DIR   # ảnh tạm (cache/tmp) giữa bước "Nhận diện" và bước "Xác nhận"
 UPLOAD_DIRS = {'in': IN_DIR, 'out': OUT_DIR}   # static/in: xe vào, static/out: xe ra
@@ -500,6 +504,7 @@ def gate_context(direction, token='', plate='', note='', form=None):
            'type_options': [], 'slots_by_area': {}, 'entry_mode': None, 'no_slots': False,
            'registered': None, 'reg_month_ok': False, 'reg_expired': False, 'suggest': None,
            'reg_type': None, 'direction': direction, 'gate_error': None,
+           'payment_methods': database.PAYMENT_METHODS,
            'source': 'camera' if request.form.get('source', request.args.get('source')) == 'camera' else 'upload'}
 
     if token and os.path.exists(os.path.join(TMP_FOLDER, f'{token}_ann.jpg')):
@@ -547,14 +552,41 @@ def render_gate(direction, token='', plate='', note='', form=None):
     return render_template('gate.html', **ctx)
 
 
+@app.route('/monitoring/parking')
+@login_required
+@staff_required
+def parking_monitor():
+    areas = database.get_areas()
+    slots_by_area = {area['name']: [] for area in areas}
+    for slot in database.get_all_slots():
+        slots_by_area.setdefault(slot['area'], []).append(slot)
+    return render_template('parking_monitor.html', areas=areas,
+                           slots_by_area=slots_by_area, counts=database.slot_counts())
+
+
 @app.route('/gate')
 @login_required
 @staff_required
 def gate():
+    today = date.today().isoformat()
+    records = [dict(record) for record in database.get_all_records()
+               if record['status'] in ('IN', 'OUT')]
+    entry_record = records[0] if records else None
+    exit_record = max((record for record in records if record['status'] == 'OUT'),
+                      key=lambda record: record['exit_time'] or '', default=None)
+    for record in (entry_record, exit_record):
+        if record is None:
+            continue
+        for direction, folder in (('entry', IN_DIR), ('exit', OUT_DIR)):
+            filename = record.get(f'{direction}_image')
+            record[f'{direction}_image_url'] = (
+                url_for('static', filename=f"{'in' if direction == 'entry' else 'out'}/{filename}")
+                if filename and os.path.basename(filename) == filename
+                and os.path.isfile(os.path.join(folder, filename)) else None)
     return render_template('gate_menu.html',
                            counts=database.slot_counts(),
-                           area_stats=database.area_stats(),
-                           open_records=database.get_open_records())
+                           stats=database.get_statistics(today, today),
+                           entry_record=entry_record, exit_record=exit_record)
 
 
 @app.route('/gate/<direction>/camera', methods=['POST'])
@@ -689,9 +721,13 @@ def gate_confirm(direction, token, plate, note):
     if direction == 'exit':
         now = datetime.now()
         fee, duration, fee_note = calc_fee(record, now)
+        payment_method = request.form.get('payment_method')
+        if payment_method is not None and payment_method not in database.PAYMENT_METHODS:
+            flash('Phương thức thanh toán không hợp lệ.', 'error')
+            return render_gate(direction, token, plate, note, form=request.form)
         filename = promote_tmp(token, 'out')
         try:
-            exit_slot = database.close_record(record['id'], filename, fee, note)
+            exit_slot = database.close_record(record['id'], filename, fee, note, payment_method=payment_method)
         except ValueError as error:
             os.remove(os.path.join(OUT_DIR, filename))
             flash(str(error), 'error')
@@ -855,6 +891,46 @@ def history():
         today_count=today_count,
         user_mode=is_user,
     )
+
+
+# ============================================================
+# HÓA ĐƠN THU PHÍ GỬI XE
+# ============================================================
+
+@app.route('/invoices')
+@login_required
+def invoices():
+    context = parking_invoices.invoice_context(request.args, session.get('role'), session['user_id'])
+    return render_template('invoices.html', **context)
+
+
+@app.route('/invoices/export')
+@login_required
+def invoices_export():
+    from io import BytesIO
+    context = parking_invoices.invoice_context(request.args, session.get('role'), session['user_id'])
+    if context['errors']:
+        abort(400, description=context['errors'][0])
+    records = context['filtered']
+    if request.args.get('ids'):
+        try:
+            selected = {int(value) for value in request.args['ids'].split(',')}
+        except ValueError:
+            abort(400)
+        records = [record for record in records if record['id'] in selected]
+    return send_file(BytesIO(parking_invoices.export_csv(records)),
+                     mimetype='text/csv; charset=utf-8', as_attachment=True,
+                     download_name=f'hoa-don-gui-xe_{date.today().isoformat()}.csv')
+
+
+@app.route('/invoices/<int:record_id>/print')
+@login_required
+def invoice_print(record_id):
+    invoice = next((item for item in parking_invoices.get_invoices(session.get('role'), session['user_id'])
+                    if item['id'] == record_id), None)
+    if invoice is None:
+        abort(404)
+    return render_template('invoice_print.html', invoice=invoice)
 
 
 # ============================================================
@@ -1247,21 +1323,14 @@ def save_vehicles(user_id, vehicles):
 
 
 def render_customers(**extra):
-    customers = database.get_customer_users()
-    all_staff = database.get_staff_users() if session.get('role') == 'admin' else []
-    vehicles_grouped = database.get_vehicles_grouped()
-    total_vehicles = sum(len(vehicles_grouped.get(c['id'], [])) for c in customers)
-    return render_template('customers.html', customers=customers,
-                           staff_count=len(all_staff),
-                           customer_count=len(customers),
-                           total_vehicles=total_vehicles,
-                           vehicles_by_user=vehicles_grouped,
-                           vehicle_types=database.get_vehicle_types(),
-                           ticket_labels=TICKET_LABELS, today=date.today().isoformat(),
-                           price_info=build_price_info(), max_months=MAX_MONTHS,
-                           active_tab='customers',
-                           form=None, form_vehicles=None,
-                           **extra)
+    context = parking_customers.customer_context(request.args)
+    context.update(vehicle_types=database.get_vehicle_types(), ticket_labels=TICKET_LABELS,
+                   today=date.today().isoformat(), price_info=build_price_info(), max_months=MAX_MONTHS,
+                   min_password_len=MIN_PASSWORD_LEN,
+                   form=None, form_vehicles=None, form_errors=[], edit_form=None, edit_errors=[],
+                   open_modal=False, open_edit_modal=False)
+    context.update(extra)
+    return render_template('customers.html', **context)
 
 
 def render_accounts(**extra):
@@ -1294,6 +1363,42 @@ def render_edit_user(target, **extra):
 @staff_required
 def customers():
     return render_customers()
+
+
+@app.route('/customers/export')
+@login_required
+@staff_required
+def customers_export():
+    from io import BytesIO
+    context = parking_customers.customer_context(request.args)
+    if context['filter_errors']:
+        abort(400, description=context['filter_errors'][0])
+    rows = context['filtered_customers']
+    if request.args.get('ids'):
+        try:
+            selected = {int(value) for value in request.args['ids'].split(',')}
+        except ValueError:
+            abort(400)
+        rows = [customer for customer in rows if customer['id'] in selected]
+    return send_file(BytesIO(parking_customers.export_customers(rows)), as_attachment=True,
+                     mimetype='text/csv; charset=utf-8', download_name=f'khach-hang_{date.today().isoformat()}.csv')
+
+
+@app.route('/customers/<int:user_id>/profile', methods=['POST'])
+@login_required
+@staff_required
+def customer_profile_save(user_id):
+    target = database.get_user_by_id(user_id)
+    if target is None or target['role'] != 'user' or not can_manage_user(target):
+        abort(403)
+    profile, errors = parking_customers.parse_profile(request.form)
+    if errors:
+        return render_customers(open_edit_modal=True,
+                                edit_form=dict(profile, id=user_id, username=target['username'], code=f'KH{user_id:06d}'),
+                                edit_errors=errors)
+    database.update_customer_profile(user_id, **profile)
+    flash('Đã cập nhật hồ sơ khách hàng.', 'success')
+    return redirect(url_for('customers', open=user_id))
 
 
 @app.route('/accounts')
@@ -1349,6 +1454,8 @@ def add_customer():
     password = request.form.get('password', '')
 
     vehicles, errors, prefill = parse_vehicle_forms(request.form)
+    profile, profile_errors = parking_customers.parse_profile(request.form)
+    errors.extend(profile_errors)
 
     if not username or not fullname or not password:
         errors.insert(0, 'Vui lòng nhập đầy đủ thông tin.')
@@ -1361,17 +1468,18 @@ def add_customer():
         for e in errors:
             flash(e, 'error')
         return render_customers(open_modal=True,
-                                form={'username': username, 'fullname': fullname},
+                                form=dict(profile, username=username), form_errors=errors,
                                 form_vehicles=prefill)
 
     new_id = database.add_user(username, fullname, password, 'user')
+    database.update_customer_profile(new_id, **profile)
     save_vehicles(new_id, vehicles)
     extra = f' và đăng ký {len(vehicles)} xe' if vehicles else ''
     total = sum(v['paid_amount'] or 0 for v in vehicles)
     if total:
         extra += f' — tiền vé tháng cần thu: {vnd_filter(total)}'
     flash(f'Đã thêm khách hàng "{username}"{extra}.', 'success')
-    return redirect(url_for('customers'))
+    return redirect(url_for('customers', open=new_id))
 
 
 @app.route('/accounts/add', methods=['POST'])

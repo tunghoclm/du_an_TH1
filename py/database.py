@@ -21,6 +21,7 @@ from plate_utils import plate_key
 
 DEFAULT_AREAS = ['A', 'B', 'C']
 SLOTS_PER_AREA = 6
+PAYMENT_METHODS = {'cash': 'Tiền mặt', 'card': 'Thẻ', 'transfer': 'Chuyển khoản'}
 
 
 def get_connection():
@@ -65,10 +66,16 @@ def init_db():
                     "ALTER TABLE parking_records ADD COLUMN vehicle_type_id INTEGER",
                     "ALTER TABLE parking_records ADD COLUMN vehicle_type_name TEXT",
                     "ALTER TABLE parking_records ADD COLUMN note TEXT",
+                    "ALTER TABLE parking_records ADD COLUMN payment_method TEXT CHECK(payment_method IN ('cash','card','transfer'))",
                     "ALTER TABLE user_vehicles ADD COLUMN start_on TEXT",
                     "ALTER TABLE user_vehicles ADD COLUMN months INTEGER",
                     "ALTER TABLE user_vehicles ADD COLUMN paid_amount INTEGER",
                     "ALTER TABLE users ADD COLUMN password_changes INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN phone TEXT",
+                    "ALTER TABLE users ADD COLUMN email TEXT",
+                    "ALTER TABLE users ADD COLUMN address TEXT",
+                    "ALTER TABLE users ADD COLUMN customer_note TEXT",
+                    "ALTER TABLE users ADD COLUMN created_at TEXT",
                     "ALTER TABLE users ADD COLUMN plate_changes INTEGER NOT NULL DEFAULT 0"):
         try:
             conn.execute(col_sql)
@@ -166,8 +173,10 @@ def find_open_record(plate_number: str):
     return row
 
 
-def close_record(record_id: int, exit_image: str, fee: int, note: str = None):
+def close_record(record_id: int, exit_image: str, fee: int, note: str = None, payment_method: str = None):
     """Đóng lượt gửi xe. Nếu có ghi chú lúc ra thì nối thêm vào ghi chú lúc vào (nếu có)."""
+    if payment_method is not None and payment_method not in PAYMENT_METHODS:
+        raise ValueError('Phương thức thanh toán không hợp lệ.')
     with _parking_transaction() as conn:
         record = conn.execute('SELECT * FROM parking_records WHERE id=?', (record_id,)).fetchone()
         if record is None or record['status'] != 'IN':
@@ -179,14 +188,14 @@ def close_record(record_id: int, exit_image: str, fee: int, note: str = None):
             _slot_record(conn, slot, record_id)
         conn.execute(
         """UPDATE parking_records
-           SET exit_time = ?, exit_image = ?, fee = ?, status = 'OUT',
+           SET exit_time = ?, exit_image = ?, fee = ?, payment_method = ?, status = 'OUT',
                note = CASE
                         WHEN ? IS NULL THEN note
                         WHEN note IS NULL OR note = '' THEN 'Ra: ' || ?
                         ELSE note || ' | Ra: ' || ?
                       END
            WHERE id = ?""",
-        (datetime.now().isoformat(timespec='seconds'), exit_image, fee,
+        (datetime.now().isoformat(timespec='seconds'), exit_image, fee, payment_method if fee > 0 else None,
          note or None, note, note, record_id)
         )
         if record['slot_name']:
@@ -584,8 +593,8 @@ def add_user(username: str, fullname: str, password: str, role: str) -> int:
     """Thêm tài khoản, trả về id của tài khoản mới."""
     conn = get_connection()
     cur = conn.execute(
-        "INSERT INTO users (username, fullname, password, role, status) VALUES (?, ?, ?, ?, 'active')",
-        (username, fullname, password, role)
+        "INSERT INTO users (username, fullname, password, role, status, created_at) VALUES (?, ?, ?, ?, 'active', ?)",
+        (username, fullname, password, role, datetime.now().isoformat(timespec='seconds'))
     )
     new_id = cur.lastrowid
     conn.commit()
@@ -598,6 +607,11 @@ def update_user(user_id: int, fullname: str, role: str):
     conn.execute("UPDATE users SET fullname = ?, role = ? WHERE id = ?", (fullname, role, user_id))
     conn.commit()
     conn.close()
+
+
+def update_customer_profile(user_id, fullname, phone='', email='', address='', customer_note=''):
+    _exec("UPDATE users SET fullname=?,phone=?,email=?,address=?,customer_note=? WHERE id=? AND role='user'",
+          (fullname, phone, email, address, customer_note, user_id))
 
 
 def set_user_password(user_id: int, new_password: str):

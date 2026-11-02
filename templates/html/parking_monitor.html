@@ -1,0 +1,79 @@
+{% extends "_layout.html" %}
+{% set active_page = 'parking_monitor' %}
+
+{% block title %}Giám sát bãi xe — Smart Parking{% endblock %}
+{% block breadcrumb %}Giám sát bãi xe / Bãi xe{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/parking-monitor.css">
+{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>Giám sát bãi xe</h1>
+    <p>Theo dõi các ô đang có xe đỗ và các ô còn trống trong bãi.</p>
+  </div>
+  <div class="heading-actions">
+    <a href="{{ url_for('parking') }}" class="btn btn-outline">Sơ đồ &amp; Quản lý xe</a>
+  </div>
+</div>
+
+<div class="parking-monitor-overview">
+  <section class="panel parking-monitor-camera" aria-labelledby="parking-camera-title">
+    <div class="panel-heading">
+      <h2 id="parking-camera-title">Camera bãi xe</h2>
+      <span class="badge badge-amber">Chưa kết nối</span>
+    </div>
+    <div class="parking-camera-placeholder">
+      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg>
+      <h3>Chờ tích hợp camera giám sát</h3>
+      <p>Camera sẽ nhận diện vị trí có xe đỗ và ô còn trống để cập nhật tình trạng từng ô.</p>
+    </div>
+  </section>
+
+  <section class="panel parking-monitor-status" aria-labelledby="parking-status-title">
+    <h2 id="parking-status-title">Tình trạng ô đỗ</h2>
+    <p class="muted">Theo dữ liệu quản lý xe ra/vào</p>
+    <dl class="parking-monitor-counts">
+      <div><dt>Tổng số ô đỗ</dt><dd>{{ counts.total }}</dd></div>
+      <div class="available"><dt>Còn trống</dt><dd>{{ counts.available }}</dd></div>
+      <div class="occupied"><dt>Đang có xe</dt><dd>{{ counts.occupied }}</dd></div>
+      <div class="maintenance"><dt>Bảo trì</dt><dd>{{ counts.maintenance }}</dd></div>
+    </dl>
+    <p class="parking-monitor-note">Trạng thái bên dưới lấy từ hệ thống quản lý xe. Nhận diện ô đỗ bằng camera sẽ được bổ sung sau.</p>
+    <a href="{{ url_for('parking_monitor') }}" class="btn btn-outline">Làm mới trạng thái</a>
+  </section>
+</div>
+
+{% for area in areas %}
+  <section class="panel chart-card parking-section" aria-labelledby="monitor-area-{{ area.id }}">
+    <div class="parking-monitor-area-heading">
+      <h2 id="monitor-area-{{ area.id }}">Khu {{ area.name }}</h2>
+      <span class="muted">{{ slots_by_area.get(area.name, [])|length }} ô đỗ</span>
+    </div>
+    <div class="parking-grid">
+      {% for slot in slots_by_area.get(area.name, []) %}
+        <div class="slot {{ slot.status }}">
+          <div class="slot-head">
+            <span class="slot-name">{{ slot.slot_name }}</span>
+            <span class="slot-badge">{% if slot.status == 'occupied' %}Có xe{% elif slot.status == 'maintenance' %}Bảo trì{% else %}Trống{% endif %}</span>
+          </div>
+          {% if slot.status == 'occupied' %}
+            <span class="slot-plate">{{ slot.plate_number or 'Đang đỗ' }}</span>
+          {% elif slot.status == 'maintenance' %}
+            <p class="slot-meta">{{ slot.maintenance_reason or 'Đang bảo trì' }}</p>
+          {% else %}
+            <p class="slot-meta">Ô đỗ còn trống</p>
+          {% endif %}
+        </div>
+      {% else %}
+        <p class="muted">Khu vực này chưa có ô đỗ.</p>
+      {% endfor %}
+    </div>
+  </section>
+{% else %}
+  <section class="panel chart-card">
+    <p class="muted">Bãi xe chưa có khu vực nào. Cấu hình khu vực và ô đỗ tại Sơ đồ &amp; Quản lý xe.</p>
+  </section>
+{% endfor %}
+{% endblock %}

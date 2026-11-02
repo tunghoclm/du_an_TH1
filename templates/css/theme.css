@@ -911,6 +911,50 @@ small {
 .subnav a:hover {
   color: white;
 }
+.nav-menu > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.nav-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.nav-chevron {
+  transition: transform 0.18s;
+}
+.nav-menu[open] > summary .nav-chevron {
+  transform: rotate(90deg);
+}
+.sidebar .nav-menu .subnav {
+  display: grid;
+  padding: 2px 0 6px 35px;
+  font-size: 12px;
+}
+.sidebar .nav-menu:not([open]) .subnav {
+  display: none;
+}
+.nav-menu .subnav a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.nav-menu .subnav a:hover,
+.nav-menu .subnav a.active {
+  color: #fff;
+  background: #17365e;
+}
+.sidebar.collapsed .nav-menu .nav-chevron,
+.sidebar.collapsed .nav-menu .subnav a > span {
+  display: none;
+}
+.sidebar.collapsed .nav-menu .subnav {
+  padding-left: 0;
+}
+.sidebar.collapsed .nav-menu .subnav a {
+  justify-content: center;
+}
 .sidebar-bottom {
   margin-top: auto;
   padding: 26px 17px 0;
@@ -3205,6 +3249,16 @@ tbody tr:focus-visible {
   .sidebar .nav-item {
     justify-content: center;
     padding: 13px 0;
+  }
+  .sidebar .nav-menu .nav-chevron,
+  .sidebar .nav-menu .subnav a > span {
+    display: none;
+  }
+  .sidebar .nav-menu .subnav {
+    padding-left: 0;
+  }
+  .sidebar .nav-menu .subnav a {
+    justify-content: center;
   }
   .sidebar .sidebar-foot {
     justify-content: center;

@@ -1,4 +1,5 @@
 Flask>=3.0
+lunar-vn>=1.4,<2    # Bộ lọc thời gian theo âm lịch Việt Nam (UTC+7)
 numpy>=2.0
 opencv-python-headless>=4.10
 easyocr>=1.7

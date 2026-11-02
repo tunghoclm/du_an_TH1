@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Phiếu thu {{ invoice.code }} — Smart Parking</title><link rel="stylesheet" href="{{ url_for('css_files', filename='invoices.css') }}"></head>
+<body class="invoice-print">
+  <main class="invoice-print-sheet">
+    <div class="invoice-print-brand">SmartParking</div>
+    <h1>PHIẾU THU PHÍ GỬI XE</h1><p class="invoice-print-code">{{ invoice.code }}</p>
+    <dl><dt>Khách hàng</dt><dd>{{ invoice.customer_name }}</dd><dt>Biển số xe</dt><dd><b>{{ invoice.plate_number }}</b></dd><dt>Loại xe</dt><dd>{{ invoice.vehicle_type_name }}</dd><dt>Vị trí đỗ</dt><dd>{{ ('Khu ' ~ invoice.area_name ~ ' · ') if invoice.area_name else '' }}{{ invoice.slot_name or '—' }}</dd><dt>Thời gian vào</dt><dd>{{ invoice.entry_time_label }}</dd><dt>Thời gian ra</dt><dd>{{ invoice.exit_time_label }}</dd><dt>Thời gian gửi</dt><dd>{{ invoice.duration }}</dd></dl>
+    <dl><dt>Phương thức</dt><dd>{{ invoice.payment_method_label }}</dd></dl>
+    <div class="invoice-print-total"><span>Phí đã ghi nhận</span><strong>{{ invoice.fee|vnd }}</strong></div>
+    {% if invoice.note %}<p class="invoice-print-note"><b>Ghi chú:</b> {{ invoice.note }}</p>{% endif %}
+    <p class="invoice-print-thanks">Cảm ơn quý khách. Hẹn gặp lại!</p>
+  </main>
+  <div class="invoice-print-tools"><a href="{{ url_for('invoices') }}">Danh sách hóa đơn</a><button type="button" onclick="window.print()">In phiếu thu</button></div>
+</body></html>

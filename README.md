@@ -129,6 +129,32 @@ bạn không cần nhớ lệnh `source venv/bin/activate` nữa.
 
 Mở trình duyệt tại: **http://localhost:5000**
 
+### Cập nhật để kiểm thử bản mới
+
+Nếu đã tải dự án trước đó, cập nhật nhánh `tung` rồi cài lại các thư viện mới:
+
+```bash
+git switch tung
+git pull --ff-only origin tung
+```
+
+**Windows:**
+```powershell
+.\cache\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\run.bat
+```
+
+**macOS / Linux:**
+```bash
+./cache/venv/bin/python -m pip install -r requirements.txt
+./run.sh
+```
+
+Nếu chưa có môi trường ảo, chạy `setup.bat` hoặc `./setup.sh` trước.
+Ứng dụng tự tạo hoặc cập nhật cấu trúc bảng khi khởi động. Không cần tải database,
+ảnh xe hay model từ máy thành viên khác; mỗi máy giữ dữ liệu chạy thử riêng.
+Để kiểm tra giao diện mới, mở `/gate`, `/invoices`, `/customers` và thử hộp **Thêm khách hàng**.
+
 ## 4. Cách sử dụng
 
 Tài khoản demo mặc định (đăng nhập tại `/login`):
@@ -143,12 +169,14 @@ Tài khoản demo mặc định (đăng nhập tại `/login`):
 | `/login`       | Đăng nhập hệ thống                                                          |
 | `/`            | Menu chính — số liệu nhanh + lối vào các chức năng                          |
 | `/parking`     | Sơ đồ khu và ô đỗ: admin quản lý khu/ô và loại xe được phép; admin/nhân viên chuyển xe, xóa xe có lý do và quản lý bảo trì |
-| `/gate`        | **Xe vào / ra** — màn hình chọn **Xe vào** hoặc **Xe ra** |
+| `/gate`        | **Xe ra/vào** — hai làn với 8 khung camera/ảnh đối chiếu, bảng biển số, thời gian và tiền xe; mở nhận diện **Xe vào** hoặc **Xe ra** |
+| `/monitoring/parking` | **Giám sát bãi xe → Bãi xe** — xem ô có xe / ô trống theo dữ liệu quản lý; khung camera chờ tích hợp nhận diện ô đỗ |
 | `/entry`       | **Xe vào** — tải ảnh hoặc chọn camera → nhận diện → chọn loại xe / vị trí → xác nhận. Chặn xe đang gửi trong bãi |
-| `/exit`        | **Xe ra** — tải ảnh hoặc chọn camera → nhận diện → kiểm tra lượt gửi / phí → xác nhận. Chỉ cho xe đang gửi ra bãi |
+| `/exit`        | **Xe ra** — tải ảnh hoặc chọn camera → nhận diện → kiểm tra lượt gửi / phí, chọn phương thức thanh toán → xác nhận. Chỉ cho xe đang gửi ra bãi |
 | `/history`     | Lịch sử lượt gửi, di chuyển và xóa xe; lọc biển số, giao dịch, ngày, khung giờ theo giờ vào hoặc giờ ra/xóa |
+| `/invoices`    | Hóa đơn thu phí các lượt xe đã ra: tìm mã/biển số/khách hàng; lọc ngày giờ, tuần/tháng/quý/năm và âm lịch, khu/loại xe/phí/phương thức thanh toán; xem chi tiết, xuất CSV và in phiếu thu; khách hàng chỉ thấy xe của mình |
 | `/statistics`  | Thống kê tổng lượt xe, doanh thu, tỉ lệ lấp đầy bãi đỗ; **xuất báo cáo Excel / PDF** |
-| `/customers`   | Quản lý khách hàng: đăng ký thông tin chủ xe, biển số phương tiện và vé tháng |
+| `/customers`   | Danh sách khách hàng với bộ lọc, hồ sơ liên hệ, phương tiện, vé tháng, lịch sử gửi xe và xuất CSV |
 | `/accounts`    | Quản lý tài khoản nhân viên & quản trị viên: cấp tài khoản, phân quyền, khóa/mở khóa |
 | `/pricing`     | Bảng giá xe — 3 bảng: **khung thời gian** (tự đặt giờ/ngày bắt đầu–kết thúc), **loại xe** (tự tạo tên), **giá theo loại xe + thời gian** (lượt/tháng). Ai cũng xem, admin/nhân viên thêm-sửa-xóa |
 | `/settings`    | Cài đặt cá nhân (ai đăng nhập cũng dùng được) — tự chọn chế độ gửi xe: **tự động** hoặc **tự chọn vị trí** |

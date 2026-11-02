@@ -1,0 +1,13 @@
+<div class="customer-vehicle-rows" id="vehicle-rows">
+  {% for v in form_vehicles or [{}] %}
+  {% set monthly = v.ticket == 'month' %}
+  <div class="customer-vehicle-row{% if monthly %} is-monthly{% endif %}" data-vehicle-row>
+    <div class="form-field"><label for="customer-vehicle-{{ loop.index }}-plate" data-vehicle-label="plate">Biển số xe</label><input id="customer-vehicle-{{ loop.index }}-plate" name="plate" value="{{ v.plate or '' }}" placeholder="VD: 59A1-12345" data-customer-vehicle-field="plate"></div>
+    <div class="form-field"><label for="customer-vehicle-{{ loop.index }}-type" data-vehicle-label="type">Loại xe</label><select id="customer-vehicle-{{ loop.index }}-type" name="vehicle_type_id" data-customer-vehicle-field="type"><option value="">Chọn loại xe</option>{% for vt in vehicle_types %}<option value="{{ vt.id }}"{% if v.type|string == vt.id|string %} selected{% endif %}>{{ vt.name }}</option>{% endfor %}</select></div>
+    <div class="form-field"><label for="customer-vehicle-{{ loop.index }}-ticket" data-vehicle-label="ticket">Loại vé</label><select id="customer-vehicle-{{ loop.index }}-ticket" name="ticket_type" data-ticket-select data-customer-vehicle-field="ticket">{% for code,label in ticket_labels.items() %}<option value="{{ code }}"{% if (v.ticket or 'turn') == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="form-field" data-customer-months{% if not monthly %} hidden{% endif %}><label for="customer-vehicle-{{ loop.index }}-months" data-vehicle-label="months">Số tháng thuê</label><input id="customer-vehicle-{{ loop.index }}-months" type="{{ 'number' if monthly else 'hidden' }}" name="months" min="1" max="{{ max_months }}" value="{{ v.months or 1 }}" data-customer-vehicle-field="months"></div>
+    <button type="button" class="customer-remove-vehicle" data-remove-vrow aria-label="Xóa phương tiện {{ loop.index }}" title="Xóa phương tiện">{{ icon('close',18) }}</button>
+  </div>
+  {% endfor %}
+</div>
+<div class="customer-vehicle-footer"><button type="button" id="add-vehicle-row">{{ icon('plus',17) }} Thêm phương tiện</button><p>Vé tháng được tính từ ngày đăng ký theo Bảng giá hiện hành.</p></div>

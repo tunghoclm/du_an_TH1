@@ -131,6 +131,16 @@
       </div>
       <span class="badge badge-green"><span></span>Sẵn sàng thu phí</span>
     </div>
+    {% if fee_preview.fee > 0 %}
+    <div class="form-field" style="margin-top:16px;">
+      <label for="exit-payment-method">Phương thức thanh toán</label>
+      <select id="exit-payment-method" name="payment_method" required>
+        {% for value, label in payment_methods.items() %}
+        <option value="{{ value }}"{% if request.form.get('payment_method', 'cash') == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
 
   {% else %}
     <div class="barrier-strip">
