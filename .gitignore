@@ -25,3 +25,9 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 *.log
+
+# ---- Khóa API và cấu hình riêng của từng máy ----
+.env
+.env.*
+!.env.example
+cache/secrets/

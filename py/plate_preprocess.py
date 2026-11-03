@@ -26,6 +26,73 @@ LOW_CONTRAST_STD = 45.0   # độ lệch chuẩn mức xám dưới ngưỡng n�
 MIN_QUAD_RECT = 0.6       # độ "vuông vắn" tối thiểu để coi một contour là hình biển số
 
 
+def plate_regions(image, limit=3):
+    """Rank plate-shaped bright regions with character rows, rather than the largest edge.
+
+    Multiple masks retain white/yellow plates under uneven light. Text geometry
+    is evaluated on small crops, before any neural OCR; no plate text is guessed.
+    Returned boxes are in the supplied image's coordinate system.
+    """
+    gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    height, width = gray.shape
+    area = height * width
+    smooth = cv2.GaussianBlur(gray, (3, 3), 0)
+    otsu, binary = cv2.threshold(smooth, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    masks = [binary, cv2.inRange(smooth, max(100, int(otsu * 0.8)), 255), cv2.Canny(smooth, 40, 160)]
+    candidates = []
+    for mask in masks:
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        for contour in sorted(contours, key=cv2.contourArea, reverse=True)[:70]:
+            contour_area = cv2.contourArea(contour)
+            x, y, w, h = cv2.boundingRect(contour)
+            if (w < 65 or h < 22 or not 1.1 <= w / h <= 6.7
+                    or not 0.0015 * area <= contour_area <= 0.95 * area):
+                continue
+            _, (rw, rh), _ = cv2.minAreaRect(contour)
+            fill = contour_area / max(1, rw * rh)
+            if fill < 0.65:
+                continue
+            px, py = max(3, round(w * 0.03)), max(5, round(h * 0.12))
+            x0, y0 = max(0, x-px), max(0, y-py)
+            x1, y1 = min(width, x+w+px), min(height, y+h+py)
+            rect = (x0, y0, x1-x0, y1-y0)
+            if any(_region_overlap(rect, previous[1]) > 0.78 for previous in candidates):
+                continue
+            crop = gray[y0:y1, x0:x1]
+            ratio = min(1.0, 360 / max(w, h))
+            small = cv2.resize(crop, None, fx=ratio, fy=ratio) if ratio < 1 else crop
+            rows = text_rows(small)
+            if not rows:
+                approx = cv2.approxPolyDP(contour, 0.025 * cv2.arcLength(contour, True), True)
+                if len(approx) != 4 or not cv2.isContourConvex(approx):
+                    continue
+                straight = _warp_quad(gray, approx.reshape(4, 2))
+                if straight is None:
+                    continue
+                scale = min(1.0, 360 / max(straight.shape))
+                small = cv2.resize(straight, None, fx=scale, fy=scale) if scale < 1 else straight
+                rows = text_rows(small)
+                crop = straight
+            if crop.std() < 22 or np.median(crop) < 105:
+                continue
+            # A plate has character-sized dark components on a brighter face.
+            # Headlights, windows and large background rectangles lack these rows.
+            if not rows:
+                continue
+            score = 3 + min(float(crop.std()) / 65, 1) + float(np.median(crop)) / 255 + fill * 0.4
+            candidates.append((score, rect))
+    candidates.sort(key=lambda candidate: candidate[0], reverse=True)
+    return [rect for _, rect in candidates[:limit]]
+
+
+def _region_overlap(first, second):
+    x, y, w, h = first
+    sx, sy, sw, sh = second
+    intersection = max(0, min(x+w, sx+sw)-max(x, sx)) * max(0, min(y+h, sy+sh)-max(y, sy))
+    return intersection / max(1, w*h + sw*sh - intersection)
+
+
 def _order_points(pts):
     """Sắp 4 điểm theo thứ tự trên-trái, trên-phải, dưới-phải, dưới-trái."""
     pts = np.asarray(pts, dtype=np.float32)

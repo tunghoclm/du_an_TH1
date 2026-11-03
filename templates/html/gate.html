@@ -155,7 +155,7 @@
               Tự động khóa biển số khi ổn định 2 khung hình liên tiếp
             {% endif %}
           </small>
-          <strong class="plate">{{ plate or 'CHƯA NHẬN DIỆN' }}</strong>
+          <strong class="plate" id="media-plate">{{ plate or 'CHƯA NHẬN DIỆN' }}</strong>
         </div>
       </div>
     </div>
@@ -167,8 +167,8 @@
           <option value="">Mặc định (Camera chính)</option>
         </select>
         <button type="button" id="camera-refresh" class="btn btn-outline">Làm mới</button>
-        <button type="button" id="camera-start" class="btn btn-primary">Bắt đầu</button>
-        <button type="button" id="camera-stop" class="btn btn-outline" disabled>Dừng</button>
+        <button type="button" id="camera-start" class="btn btn-primary camera-toggle" aria-pressed="false">Bắt đầu</button>
+        <button type="button" id="camera-capture" class="btn btn-outline camera-capture" title="Chụp khung hình hiện tại và nhận diện biển số" disabled><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3Z"/><circle cx="12" cy="13" r="4"/></svg><span id="camera-capture-label">Chụp</span></button>
       </div>
 
       <div id="camera-status" class="camera-status-bar" style="margin-top:0;" {% if source == 'upload' %}hidden{% endif %}>

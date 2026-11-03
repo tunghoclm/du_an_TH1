@@ -1,0 +1,62 @@
+<div class="dashboard-bottom">
+  <form method="POST" action="{{ url_for('settings') }}" class="panel settings-panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Chế độ xếp ô đỗ khi xe vào bãi</h2>
+        <p>Áp dụng riêng cho tài khoản vận hành của bạn ({{ current_user_fullname }})</p>
+      </div>
+    </div>
+
+    <div class="toggle-list">
+      <label class="toggle-item" style="cursor:pointer;">
+        <div>
+          <b>Chọn ô đỗ thủ công (Khuyên dùng khi điều phối trực tiếp)</b>
+          <p>Khi xe vào cổng, nhân viên trực tiếp chọn vị trí ô trống phù hợp với loại phương tiện trước khi bấm xác nhận.</p>
+        </div>
+        <input type="radio" name="entry_mode" value="manual" {% if entry_mode == 'manual' %}checked{% endif %} style="width:18px;height:18px;">
+      </label>
+
+      <label class="toggle-item" style="cursor:pointer;">
+        <div>
+          <b>Tự động gán ô đỗ trống đầu tiên</b>
+          <p>Hệ thống tự động đề xuất ô trống đầu tiên thuộc phân khu tương thích với loại xe để tăng tốc độ thông qua làn.</p>
+        </div>
+        <input type="radio" name="entry_mode" value="auto" {% if entry_mode == 'auto' %}checked{% endif %} style="width:18px;height:18px;">
+      </label>
+    </div>
+
+    <div class="settings-footer">
+      <button type="submit" class="btn btn-primary">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
+        Lưu thay đổi
+      </button>
+    </div>
+  </form>
+
+  <section class="panel settings-panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Thông tin phiên làm việc &amp; Phân hệ</h2>
+        <p>Chi tiết tài khoản đang đăng nhập và lối tắt cấu hình</p>
+      </div>
+    </div>
+
+    <div class="detail-grid" style="margin-bottom: 18px;">
+      <div><span>Họ và tên nhân sự</span><b>{{ current_user_fullname }}</b></div>
+      <div><span>Vai trò hệ thống</span><b><span class="badge badge-blue"><span></span>{{ role_label }}</span></b></div>
+      <div style="grid-column: 1 / -1;"><span>Chế độ cổng hiện tại</span><b>{{ 'Tự động gán ô trống' if entry_mode == 'auto' else 'Chọn ô thủ công' }}</b></div>
+    </div>
+
+    <div class="info-banner">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+      <span>
+        Để cấu hình danh mục loại xe, khung giờ và đơn giá vé, vui lòng truy cập mục
+        <a href="{{ url_for('pricing') }}" style="color:var(--primary);font-weight:700;">Vé &amp; Gói cước</a>.
+        {% if current_user_role == 'admin' %}
+          Để quản lý nhân sự và khách hàng đăng ký xe, truy cập mục
+          <a href="{{ url_for('customers') }}" style="color:var(--primary);font-weight:700;">Khách hàng</a> hoặc <a href="{{ url_for('accounts') }}" style="color:var(--primary);font-weight:700;">Tài khoản nhân viên</a>.
+        {% endif %}
+      </span>
+    </div>
+  </section>
+</div>

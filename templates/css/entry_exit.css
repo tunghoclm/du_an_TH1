@@ -44,6 +44,11 @@
   color: #10244b;
   font-size: 13px;
 }
+.camera-toggle { min-width:92px; }
+.camera-toggle.is-running { background:#e54e59; border-color:#e54e59; }
+.camera-toggle.is-running:hover { background:#cf3c49; }
+.camera-capture { gap:7px; min-width:87px; }
+.camera-capture:disabled { opacity:.45; }
 
 .camera-status-bar {
   margin-top: 10px;

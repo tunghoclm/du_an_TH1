@@ -179,19 +179,109 @@ Tài khoản demo mặc định (đăng nhập tại `/login`):
 | `/customers`   | Danh sách khách hàng với bộ lọc, hồ sơ liên hệ, phương tiện, vé tháng, lịch sử gửi xe và xuất CSV |
 | `/accounts`    | Quản lý tài khoản nhân viên & quản trị viên: cấp tài khoản, phân quyền, khóa/mở khóa |
 | `/pricing`     | Bảng giá xe — 3 bảng: **khung thời gian** (tự đặt giờ/ngày bắt đầu–kết thúc), **loại xe** (tự tạo tên), **giá theo loại xe + thời gian** (lượt/tháng). Ai cũng xem, admin/nhân viên thêm-sửa-xóa |
-| `/settings`    | Cài đặt cá nhân (ai đăng nhập cũng dùng được) — tự chọn chế độ gửi xe: **tự động** hoặc **tự chọn vị trí** |
+| `/settings`    | Cài đặt chế độ gửi xe; tab **Trợ lý AI** riêng dành cho quản trị viên để cấu hình nhà cung cấp, model và khóa API |
+
+### Hỗ trợ: trợ lý AI và chat với đội ngũ
+
+Nút **Hỗ trợ** ở góc phải dưới xuất hiện trên các trang sau đăng nhập. Cửa sổ mở/thu
+gọn bằng hiệu ứng trượt và mờ; có trợ lý AI, hộp thư riêng và câu hỏi thường gặp.
+
+- **Trợ lý AI:** gọi API của nhà cung cấp được quản trị viên cấu hình từ máy chủ. Khóa API đã lưu không trả về trình duyệt;
+  khóa được mã hóa trước khi lưu trong database. Chỉ nội dung hội thoại AI được gửi tới nhà cung cấp; tin nhắn
+  với nhân viên, dữ liệu xe, hóa đơn và hồ sơ khách hàng không tự động đưa vào AI.
+- **Chat với đội ngũ:** chọn một quản trị viên/nhân viên còn hoạt động. Người đó mở
+  **Hỗ trợ → Chat với đội ngũ → Hộp thư của bạn** để xem và trả lời. Chỉ hai người
+  tham gia đọc/gửi được trong hội thoại; quản trị viên khác không tự xem được.
+- Lưu lịch sử, tải tin cũ, số tin chưa đọc và tự cập nhật khoảng 3 giây khi mở,
+  15 giây khi thu gọn. Để hai người chat với nhau, họ phải mở **cùng một máy chủ
+  Smart Parking**; các bản `localhost` với database riêng không dùng chung hộp thư.
+
+Quản trị viên mở tab riêng **Cài đặt → Trợ lý AI** (`/settings?section=ai`),
+chọn nhà cung cấp, nhập model và khóa API rồi bấm **Lưu cấu hình → Kiểm tra kết nối**.
+Tab này tách khỏi Cấu hình cổng vào. Cấu hình áp dụng ngay, không cần khởi động lại.
+Khi vừa nhập khóa/model mới, nút **Lưu & kiểm tra** lưu thay đổi trước khi gọi API;
+không cần bấm Lưu cấu hình riêng. Kiểm tra dùng yêu cầu ngắn, không gửi lịch sử chat.
+Gemini mặc định dùng `gemini-3.5-flash-lite`; có thể điền mã model khác phù hợp với
+tài khoản. Các cấu hình model đã lưu được giữ nguyên khi ứng dụng khởi động lại.
+Yêu cầu AI chờ tối đa 60 giây trên mỗi lần đọc mạng; trình duyệt chờ tối đa 90 giây.
+Lỗi trả về phân biệt thời gian chờ, DNS/chứng chỉ, khóa, quyền, model và hạn mức;
+không trả nội dung lỗi gốc có thể chứa khóa API. Kiểm tra metadata/model thành công
+chưa đủ xác nhận dự án được quyền tạo câu trả lời; cần kiểm tra sinh nội dung thực tế.
+
+| Nhà cung cấp | Chuẩn API | Base URL |
+| --- | --- | --- |
+| Google Gemini | Generate Content | `https://generativelanguage.googleapis.com/v1beta` |
+| OpenAI | Chat Completions | `https://api.openai.com/v1` |
+| Anthropic · Claude | Messages | `https://api.anthropic.com/v1` |
+| DeepSeek | Chat Completions | `https://api.deepseek.com` |
+| Tùy chỉnh · tương thích OpenAI | Chat Completions | Quản trị viên nhập URL HTTPS công khai |
+
+Với API tùy chỉnh, hệ thống thêm `/chat/completions` vào Base URL. Không hỗ trợ
+các dịch vụ có định dạng yêu cầu riêng ngoài ba chuẩn trên. Các địa chỉ nội bộ,
+URL chứa mật khẩu/tham số và chuyển hướng HTTP bị chặn; kết nối tùy chỉnh kiểm tra
+địa chỉ DNS công khai và xác minh chứng chỉ TLS. Không dùng proxy môi trường cho
+kết nối tùy chỉnh. Dùng đúng mã model khả dụng của tài khoản; OpenAI/Claude không
+tự chọn model để tránh dùng nhầm model hoặc quyền truy cập.
+
+Để trống ô khóa khi chỉ đổi model để giữ khóa hiện tại. Đổi nhà cung cấp hoặc
+Base URL phải nhập khóa tương ứng. Cấu hình Gemini từ bản trước vẫn được đọc;
+lần lưu tiếp theo chuyển sang cấu hình chung mà không làm mất khóa.
+**Ngắt kết nối** bỏ khóa đã lưu và tắt AI, kể cả khi máy chủ vẫn có khóa trong biến
+môi trường. Chat với đội ngũ tiếp tục hoạt động. Chỉ quản trị viên còn hoạt động được
+đọc trạng thái, lưu cấu hình hoặc kiểm tra kết nối; khóa đã lưu không được hiển thị lại.
+
+Khóa được mã hóa bằng Fernet; tệp khóa mã hóa nằm tại `cache/secrets/gemini.key`,
+bên ngoài thư mục web và được Git bỏ qua. Khi sao lưu/chuyển máy chủ, cần giữ cả
+database và tệp khóa này, chỉ cấp quyền truy cập cho người vận hành máy chủ.
+Nếu mất tệp khóa, nhập lại khóa API. Cài thư viện mới bằng
+`python -m pip install -r requirements.txt` trong môi trường chạy ứng dụng.
+
+Nếu chưa lưu cấu hình trong Cài đặt, ứng dụng vẫn hỗ trợ biến môi trường
+**đặt trước khi khởi động Flask**. Ví dụ PowerShell:
+
+```powershell
+$env:GEMINI_API_KEY = 'khoa-api-cua-ban'
+$env:GEMINI_MODEL = 'gemini-3.5-flash-lite'
+.\run.bat
+```
+
+Trên macOS/Linux, dùng `export GEMINI_API_KEY='khoa-api-cua-ban'`,
+`export GEMINI_MODEL='gemini-3.5-flash-lite'` rồi `./run.sh`.
+`.env.example` liệt kê các biến tham khảo; ứng dụng đọc biến môi trường của tiến trình,
+không tự nạp tệp `.env`. Có thể dùng `GOOGLE_API_KEY` nếu chưa đặt `GEMINI_API_KEY`.
+Biến `SUPPORT_AI_PROVIDER` chọn `gemini`, `openai`, `anthropic`, `deepseek` hoặc
+`compatible`; `SUPPORT_AI_API_KEY`, `SUPPORT_AI_MODEL`, `SUPPORT_AI_BASE_URL` đặt
+thông tin tương ứng. Khóa riêng `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+`DEEPSEEK_API_KEY` cũng được hỗ trợ khi chọn đúng nhà cung cấp. Chỉ khi chưa có
+cấu hình đã lưu thì các biến này mới được dùng.
+
+Tài liệu chuẩn API: [Gemini](https://ai.google.dev/api/generate-content),
+[OpenAI](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create),
+[Claude](https://platform.claude.com/docs/en/api/messages/create),
+[DeepSeek](https://api-docs.deepseek.com/).
+
+Khi chưa có khóa, cửa sổ thông báo AI chưa kết nối và vẫn cho chat với đội ngũ.
+Khi lỗi mạng/hết hạn mức, không sinh câu trả lời giả; nội dung nhập được giữ để thử lại.
+AI giới hạn 5 câu hỏi/phút/tài khoản và một câu đang xử lý để tránh gửi trùng.
+Hạn mức và phí thực tế phụ thuộc tài khoản của nhà cung cấp.
+
+Khi chạy cho nhiều người truy cập, đặt `FLASK_SECRET_KEY` thành một chuỗi ngẫu nhiên,
+ổn định trên máy chủ. Không commit khóa thật, tệp `.env`, `cache/secrets/`, database hoặc nội dung chat.
+Các bảng `support_threads`, `support_messages`, `support_ai_turns` được tạo tự động
+khi khởi động. Kiểm thử tại `tests/test_support_chat.py`, `tests/test_support_settings.py`
+và `tests/test_support_providers.py` dùng SQLite tạm và giả lập API, không gửi nội dung ra nhà cung cấp.
 
 **Nhận diện bằng camera (admin / nhân viên):**
 Giao diện gồm hai cột: bên trái hiển thị camera / ảnh cùng nút bật tắt, chọn thiết bị và tải ảnh; bên phải có hai nút **Camera / Tải ảnh**, ghi chú, biển số, loại xe, vị trí và xác nhận. Trên màn hình nhỏ, hai cột xếp dọc.
 
 1. Mở **Xe vào / ra**, chọn **Xe vào** hoặc **Xe ra**, rồi nhấn nút **Camera** ở phần Chọn hình thức nhận diện.
 2. Chọn thiết bị và bấm **Bắt đầu**. Cho phép trình duyệt dùng camera; sau khi được cấp quyền, danh sách hiển thị tên webcam tích hợp, USB hoặc camera ảo trên máy đang mở web.
-3. Camera tự quét từng khung hình, vẽ khung xanh và hiện biển số ngay trên video. Khi hai lần đọc liên tiếp khớp nhau và đúng cấu trúc biển số, hệ thống giữ ảnh, tự điền biển số và thông tin xe ngay trên trang.
+3. Camera tự quét từng khung hình; khung xanh dành cho kết quả đủ tin cậy, khung vàng dành cho vùng chưa đọc chắc chắn. Khi hai lần đọc liên tiếp khớp nhau và đủ tin cậy, hệ thống giữ ảnh, tự điền biển số và thông tin xe ngay trên trang.
 4. Kiểm tra kết quả, chọn loại xe / vị trí nếu là xe vào, rồi bấm **Xác nhận xe vào / xe ra**. Có thể sửa biển số và bấm **Cập nhật biển số**, hoặc bấm **Bắt đầu** để nhận diện lại.
 
-Có nút **Tìm camera**, **Bắt đầu**, **Tắt Camera**; hệ thống nhớ thiết bị riêng cho chiều vào và ra. Bấm **Tắt Camera** để giữ khung hình đã xử lý gần nhất và nhập tay nếu OCR chưa rõ. Camera tự tắt khi nhận được kết quả ổn định, rời trang hoặc chuyển sang Tải ảnh; chỉ ghi nhận xe khi xác nhận.
+Nút **Bắt đầu** chuyển thành **Dừng** khi mở camera; bấm lại để dừng. Nút **Chụp** bên cạnh giữ đúng khung hình tại thời điểm bấm, dừng camera và nhận diện với cấu hình ảnh tĩnh. Ảnh chụp giữ tối đa 1920 px cạnh dài; quét trực tiếp dùng tối đa 1280 px. Nếu đang có một lượt OCR, ảnh vừa chụp chờ lượt đó kết thúc để tránh gửi chồng yêu cầu. Hệ thống nhớ thiết bị riêng cho chiều vào và ra. Kết quả chưa đủ tin cậy cần sửa và bấm **Cập nhật biển số** trước khi xác nhận. Camera tự tắt khi nhận được kết quả ổn định, rời trang hoặc chuyển sang Tải ảnh; chỉ ghi nhận xe khi xác nhận.
 
-Tốc độ quét phụ thuộc CPU và model OCR. Mỗi camera chỉ gửi khung tiếp theo sau khi khung trước xử lý xong; ảnh tạm bị thay thế được dọn tự động.
+Tốc độ quét phụ thuộc CPU và chất lượng ảnh. Bộ dò vùng biển số ưu tiên bố cục dòng ký tự, giữ cả ảnh gốc và ảnh tăng tương phản. Camera không chạy OCR toàn ảnh khi không tìm được vùng biển số; các dòng rõ được đọc trực tiếp để bỏ qua bước dò chữ tốn thời gian. Giữa hai lượt xử lý là khoảng nghỉ 80 ms, mỗi camera chỉ có một yêu cầu đang chạy. Nút Chụp không tự bật API nhận diện đám mây; vẫn cần `PLATE_API_CAMERA=1` nếu muốn gửi ảnh camera tới dịch vụ đã cấu hình.
 
 **Nhận diện từ ảnh:** nhấn **Tải ảnh**, chọn file ở cột trái để xem trước, rồi bấm **Nhận diện ảnh**. Kiểm tra kết quả ở cột phải và xác nhận. Với cả hai hình thức, khi xe vào cần chọn loại xe và một vị trí trống (trừ chế độ gán vị trí tự động).
 

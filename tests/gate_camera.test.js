@@ -36,7 +36,7 @@ class Element {
 
 function harness({ secure = true, preview = false, initialSource = 'upload' } = {}) {
     const ids = ['gate-form', 'image', 'source-select', 'camera-video', 'camera-overlay', 'camera-snapshot',
-        'camera-select', 'camera-status', 'camera-start', 'camera-stop', 'camera-refresh', 'recognize-button',
+        'camera-select', 'camera-status', 'camera-start', 'camera-capture', 'camera-capture-label', 'media-plate', 'camera-refresh', 'recognize-button',
         'confirm-button', 'camera-placeholder', 'upload-panel', 'camera-panel', 'camera-controls',
         'gate-token', 'checked-plate', 'gate-result', 'plate', 'image-recognize-button',
         'media-source-label', 'media-placeholder-icon', 'media-placeholder-title', 'media-placeholder-text',
@@ -188,6 +188,115 @@ test('camera starts only after Start and remembers device selection', async () =
     assert.equal(h.saved.get('smart-parking-camera-entry'), 'usb');
 });
 
+test('one toggle starts, stops, and starts camera again with matching label and pressed state', async () => {
+    const h = harness();
+    assert.equal(h.$('camera-start').textContent, 'Bắt đầu');
+    assert.equal(h.$('camera-capture').disabled, true);
+    await h.start();
+    assert.equal(h.$('camera-start').textContent, 'Dừng');
+    assert.equal(h.$('camera-start').getAttribute('aria-pressed'), 'true');
+    assert.equal(h.$('camera-start').disabled, false);
+    assert.equal(h.$('camera-capture').disabled, false);
+    await h.$('camera-start').emit('click');
+    assert.equal(h.streams[0].getTracks()[0].readyState, 'ended');
+    assert.equal(h.$('camera-start').textContent, 'Bắt đầu');
+    assert.equal(h.$('camera-start').getAttribute('aria-pressed'), 'false');
+    assert.equal(h.$('camera-capture').disabled, true);
+    await h.$('camera-start').emit('click');
+    await tick();
+    assert.equal(h.requests.length, 2);
+    assert.equal(h.$('camera-start').textContent, 'Dừng');
+});
+
+test('Capture freezes a full-size frame, requests accurate OCR and waits for manual confirmation', async () => {
+    const h = harness();
+    await h.start();
+    await h.$('camera-capture').emit('click');
+    await tick();
+    assert.equal(h.canvas().width, 1920);
+    assert.equal(h.streams[0].getTracks()[0].readyState, 'ended');
+    assert.equal(h.frames.length, 1);
+    assert.equal(h.frames[0].body.get('profile'), 'capture');
+    assert.equal(h.$('gate-token').value, '000000000001');
+    assert.equal(h.$('media-plate').textContent, '51F-12345');
+    assert.equal(h.$('confirm-button').disabled, false);
+    assert.equal(h.$('camera-start').textContent, 'Bắt đầu');
+    assert.equal(h.posts.length, 0);
+});
+
+test('Capture waits for in-flight scan and discards its result instead of using it as the photo', async () => {
+    const h = harness();
+    let finishScan;
+    h.responses.push(() => new Promise(resolve => { finishScan = resolve; }));
+    await h.start();
+    await h.runScan();
+    await h.$('camera-capture').emit('click');
+    await tick();
+    assert.equal(h.frames.length, 1);
+    assert.equal(h.$('camera-start').disabled, true);
+    finishScan({plate:'30A-54321'});
+    await tick();
+    await tick();
+    assert.equal(h.frames.length, 2);
+    assert.equal(h.frames[1].body.get('profile'), 'capture');
+    assert.equal(h.$('gate-token').value, '000000000002');
+    assert.ok(h.discarded.includes('000000000001'));
+    assert.equal(h.$('plate').value, '51F-12345');
+});
+
+test('low-confidence capture keeps photo for correction and does not enable confirmation', async () => {
+    const h = harness();
+    h.responses.push({valid:false,confidence:0.3,can_confirm:true});
+    await h.start();
+    await h.$('camera-capture').emit('click');
+    await tick();
+    assert.equal(h.$('camera-snapshot').hidden, false);
+    assert.equal(h.$('confirm-button').disabled, true);
+    assert.equal(h.$('recognize-button').hidden, false);
+    assert.equal(h.$('plate').readOnly, false);
+    assert.equal(h.$('media-plate').textContent, 'CHƯA ĐỌC RÕ');
+});
+
+test('failed capture cannot confirm a stale plate or token from the preceding photo', async () => {
+    const h = harness({preview:true});
+    h.responses.push({status:500,error:'Không đọc được ảnh'});
+    await h.start();
+    await h.$('camera-capture').emit('click');
+    await tick();
+    assert.equal(h.$('gate-token').value, '');
+    assert.equal(h.$('checked-plate').value, '');
+    assert.equal(h.$('confirm-button').disabled, true);
+    assert.equal(h.$('camera-start').disabled, false);
+    assert.ok(h.discarded.includes('accepted-old'));
+});
+
+test('a late capture response after switching source cannot overwrite the current form', async () => {
+    const h = harness();
+    let finishCapture;
+    h.responses.push(() => new Promise(resolve => { finishCapture = resolve; }));
+    await h.start();
+    await h.$('camera-capture').emit('click');
+    await tick();
+    await h.useSource('upload');
+    finishCapture({});
+    await tick();
+    assert.equal(h.$('gate-token').value, '');
+    assert.equal(h.$('confirm-button').disabled, true);
+    assert.ok(h.discarded.includes('000000000001'));
+});
+
+test('live plate badge replaces old text and hides low-confidence guesses', async () => {
+    const h = harness();
+    h.$('media-plate').textContent = 'old-plate';
+    h.responses.push({plate:'18A-12345',confidence:0.9},{plate:'15-P103737',valid:false,confidence:0.3});
+    await h.start();
+    assert.equal(h.$('media-plate').textContent, 'ĐANG QUÉT');
+    await h.runScan();
+    assert.equal(h.$('media-plate').textContent, '18A-12345');
+    await h.runScan();
+    assert.equal(h.$('media-plate').textContent, 'CHƯA ĐỌC RÕ');
+});
+
 test('automatically scans two matching frames, draws a box, fills the form and waits for confirmation', async () => {
     const h = harness();
     await h.start();
@@ -252,7 +361,7 @@ test('a late OCR response after Stop is discarded and cannot change the form', a
     h.responses.push(() => new Promise(resolve => { resolveFrame = resolve; }));
     await h.start();
     await h.runScan();
-    await h.$('camera-stop').emit('click');
+    await h.$('camera-start').emit('click');
     resolveFrame({});
     await tick();
     assert.equal(h.$('gate-token').value, '');
@@ -266,7 +375,7 @@ test('Stop keeps the last unclear frame for manual correction', async () => {
     h.responses.push({ plate: '', valid: false, can_confirm: false, checked_plate: '' });
     await h.start();
     await h.runScan();
-    await h.$('camera-stop').emit('click');
+    await h.$('camera-start').emit('click');
     assert.equal(h.$('gate-token').value, '000000000001');
     assert.equal(h.$('confirm-button').disabled, true);
     assert.equal(h.$('recognize-button').hidden, false);
@@ -317,7 +426,7 @@ test('permission rejection allows another Start attempt', async () => {
     await h.start();
     assert.ok(h.$('camera-status').classes.has('error'));
     assert.equal(h.$('camera-start').disabled, false);
-    assert.equal(h.$('camera-stop').disabled, true);
+    assert.equal(h.$('camera-capture').disabled, true);
 });
 
 test('camera permission arriving after Stop releases the new stream', async () => {
@@ -325,7 +434,7 @@ test('camera permission arriving after Stop releases the new stream', async () =
     let resolveOpen;
     h.media.getUserMedia = () => new Promise(resolve => { resolveOpen = resolve; });
     await h.start();
-    await h.$('camera-stop').emit('click');
+    await h.$('camera-start').emit('click');
     resolveOpen(h.makeStream());
     await tick();
     assert.equal(h.streams[0].getTracks()[0].readyState, 'ended');
@@ -401,16 +510,16 @@ test('low confidence repeated text does not freeze the camera', async () => {
     assert.equal(h.$('gate-token').value, '');
     assert.equal(h.$('confirm-button').disabled, true);
     assert.equal(h.streams[0].getTracks()[0].readyState, 'live');
-    await h.$('camera-stop').emit('click');
+    await h.$('camera-start').emit('click');
     assert.equal(h.$('gate-token').value, '000000000002'); // vẫn giữ ảnh để sửa tay
 });
 
-test('next scan waits 150 ms and displays server processing time', async () => {
+test('next scan waits 80 ms and displays server processing time', async () => {
     const h = harness();
     h.responses.push({ confidence: 0.95, elapsed_ms: 230 });
     await h.start();
     await h.runScan();
-    assert.ok([...h.timers.values()].some(timer => timer.delay === 150));
+    assert.ok([...h.timers.values()].some(timer => timer.delay === 80));
     assert.match(h.$('media-caption').textContent, /230 ms/);
 });
 

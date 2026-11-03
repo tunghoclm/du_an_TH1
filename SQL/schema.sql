@@ -125,3 +125,41 @@ CREATE TABLE IF NOT EXISTS ticket_payments (
     paid_on          TEXT NOT NULL,                 -- YYYY-MM-DD (ngày thu tiền)
     created_at       TEXT NOT NULL
 );
+
+-- Hội thoại hỗ trợ riêng giữa người hỏi và nhân viên được chọn.
+CREATE TABLE IF NOT EXISTS support_threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL,
+    agent_id INTEGER NOT NULL,
+    owner_read_id INTEGER NOT NULL DEFAULT 0,
+    agent_read_id INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(owner_id, agent_id),
+    CHECK(owner_id <> agent_id)
+);
+CREATE TABLE IF NOT EXISTS support_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL,
+    sender_id INTEGER NOT NULL,
+    body TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(thread_id, sender_id, client_id)
+);
+CREATE INDEX IF NOT EXISTS idx_support_messages_thread ON support_messages(thread_id, id);
+CREATE INDEX IF NOT EXISTS idx_support_threads_agent ON support_threads(agent_id, updated_at);
+
+-- Chỉ lưu hội thoại AI của chính tài khoản; không đưa API key vào database.
+CREATE TABLE IF NOT EXISTS support_ai_turns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    client_id TEXT NOT NULL,
+    user_text TEXT NOT NULL,
+    answer TEXT,
+    state TEXT NOT NULL CHECK(state IN ('pending','done','error')),
+    created_at TEXT NOT NULL,
+    finished_at TEXT,
+    UNIQUE(user_id, client_id)
+);
+CREATE INDEX IF NOT EXISTS idx_support_ai_user ON support_ai_turns(user_id, id);

@@ -13,7 +13,7 @@
     const select = $('camera-select');
     const status = $('camera-status');
     const startButton = $('camera-start');
-    const stopButton = $('camera-stop');
+    const captureButton = $('camera-capture');
     const refreshButton = $('camera-refresh');
     const recognizeButton = $('recognize-button');
     const imageRecognizeButton = $('image-recognize-button');
@@ -24,11 +24,12 @@
     const storageKey = 'smart-parking-camera-' + form.dataset.direction;
     let hasPreview = recognizeButton.dataset.hasPreview === 'true';
     let canConfirm = !confirmButton.disabled;
-    let stream = null, generation = 0, opening = false, scanning = false, submitting = false;
+    let stream = null, generation = 0, opening = false, scanning = false, submitting = false, capturing = false;
     let scanTimer = null, activeRequest = null, lastResult = null;
     let candidate = '', candidateHits = 0, failures = 0;
     let acceptedPreviewUrl = snapshot.getAttribute('src') || '';
     let uploadPreviewUrl = null;
+    let capturePreviewUrl = null;
 
     const source = () => sourceSelect.value;
     const message = (text, error = false) => {
@@ -66,28 +67,37 @@
         // Giữ nguyên các control cho tới khi trình duyệt gom xong dữ liệu POST,
         // đặc biệt name=action của nút Xác nhận. Chỉ khóa ở task kế tiếp.
         if (submitting) return;
-        startButton.disabled = opening || scanning || submitting;
-        stopButton.disabled = (!stream && !opening) || submitting;
-        select.disabled = opening || submitting;
-        refreshButton.disabled = opening || submitting;
-        recognizeButton.disabled = scanning;
+        const running = opening || scanning || !!stream;
+        startButton.disabled = capturing;
+        startButton.textContent = running ? 'Dừng' : 'Bắt đầu';
+        startButton.setAttribute('aria-pressed', String(running));
+        startButton.classList.toggle('is-running', running);
+        captureButton.disabled = !stream || opening || capturing;
+        $('camera-capture-label').textContent = capturing ? 'Đang đọc…' : 'Chụp';
+        select.disabled = opening || capturing;
+        refreshButton.disabled = opening || capturing;
+        recognizeButton.disabled = scanning || capturing;
         recognizeButton.hidden = !hasPreview;
         recognizeButton.textContent = 'Cập nhật biển số';
-        imageRecognizeButton.disabled = scanning || !image.files.length;
-        confirmButton.disabled = submitting || scanning || !canConfirm || image.files.length > 0 || !syncSlotOptions();
+        imageRecognizeButton.disabled = scanning || capturing || !image.files.length;
+        confirmButton.disabled = scanning || capturing || !canConfirm || image.files.length > 0 || !syncSlotOptions();
         const plate = $('plate');
-        if (plate) plate.readOnly = scanning;
+        if (plate) plate.readOnly = scanning || capturing;
     }
     function clearUploadPreview() {
         if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
         uploadPreviewUrl = null;
     }
     function showPreview() {
-        const url = source() === 'upload' && uploadPreviewUrl ? uploadPreviewUrl : acceptedPreviewUrl;
+        const url = capturePreviewUrl || (source() === 'upload' && uploadPreviewUrl ? uploadPreviewUrl : acceptedPreviewUrl);
         if (url) snapshot.src = url;
         else snapshot.removeAttribute('src');
         snapshot.hidden = !url;
         $('camera-placeholder').hidden = !!url;
+    }
+    function clearCapturePreview() {
+        if (capturePreviewUrl) URL.revokeObjectURL(capturePreviewUrl);
+        capturePreviewUrl = null;
     }
     function discard(token) {
         if (!token || token === tokenInput.value) return;
@@ -103,20 +113,25 @@
         checkedPlate.value = data.checked_plate;
         acceptedPreviewUrl = data.preview_url;
         clearUploadPreview();
+        clearCapturePreview();
         snapshot.src = acceptedPreviewUrl;
         $('media-caption').textContent = 'Ảnh đã nhận diện · ' + (data.plate || 'Chưa đọc rõ biển số');
         hasPreview = true;
-        canConfirm = data.can_confirm;
+        canConfirm = data.can_confirm && data.valid !== false;
+        $('media-plate').textContent = data.valid === false ? 'CHƯA ĐỌC RÕ' : (data.plate || 'CHƯA NHẬN DIỆN');
         discard(previous);
     }
-    function stopCamera(review = false, showMessage = true) {
+    function stopCamera(review = false, showMessage = true, keepRequest = false) {
         generation += 1;
         scanning = false;
         opening = false;
+        capturing = false;
         clearTimeout(scanTimer);
         scanTimer = null;
-        activeRequest?.controller.abort();
-        activeRequest = null;
+        if (!keepRequest) {
+            activeRequest?.controller.abort();
+            activeRequest = null;
+        }
         if (review && lastResult) applyResult(lastResult);
         if (lastResult) discard(lastResult.token);
         lastResult = null;
@@ -161,7 +176,7 @@
             message('Không đọc được danh sách camera. Hãy kiểm tra quyền truy cập rồi thử lại.', true);
         }
     }
-    function scheduleScan(epoch, delay = 150) {
+    function scheduleScan(epoch, delay = 80) {
         if (!scanning || epoch !== generation || scanTimer !== null) return;
         scanTimer = setTimeout(() => {
             scanTimer = null;
@@ -177,10 +192,10 @@
         if (!data.rect) return;
         const [x, y, width, height] = data.rect;
         const fontSize = Math.max(18, Math.round(data.width / 45));
-        context.strokeStyle = '#22e65b';
+        context.strokeStyle = data.valid ? '#22e65b' : '#f5bf49';
         context.lineWidth = Math.max(3, Math.round(data.width / 320));
         context.strokeRect(x, y, width, height);
-        if (data.plate) {
+        if (data.plate && data.valid) {
             context.font = 'bold ' + fontSize + 'px Arial';
             const textY = y >= fontSize + 10 ? y - 6 : Math.min(data.height - 6, y + height + fontSize + 6);
             context.fillStyle = 'rgba(0,0,0,.7)';
@@ -193,9 +208,10 @@
         if (!scanning || epoch !== generation || activeRequest) return;
         if (video.readyState < 2 || !video.videoWidth) { scheduleScan(epoch, 250); return; }
         const request = { epoch, controller: new AbortController() };
+        request.done = new Promise(resolve => { request.finish = resolve; });
         activeRequest = request;
         let timeout;
-        let retryDelay = 150;
+        let retryDelay = 80;
         try {
             const canvas = document.createElement('canvas');
             const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
@@ -225,6 +241,7 @@
             lastResult = data;
             if (previous) discard(previous.token);
             const reliable = data.valid && (data.confidence === undefined || data.confidence >= 0.65);
+            $('media-plate').textContent = reliable ? data.plate : 'CHƯA ĐỌC RÕ';
             if (reliable && data.plate_key === candidate) candidateHits += 1;
             else { candidate = reliable ? data.plate_key : ''; candidateHits = reliable ? 1 : 0; }
             if (candidateHits >= 2) {
@@ -250,7 +267,77 @@
         } finally {
             clearTimeout(timeout);
             if (activeRequest === request) activeRequest = null;
+            request.finish();
             if (scanning && epoch === generation) scheduleScan(epoch, retryDelay);
+        }
+    }
+    async function captureFrame() {
+        if (!stream || opening || capturing || submitting || video.readyState < 2 || !video.videoWidth) return;
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, 1920 / Math.max(video.videoWidth, video.videoHeight));
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        const pending = activeRequest;
+        // Freeze the clicked frame immediately, then wait for the current OCR
+        // request to finish so the single server worker is not overloaded.
+        stopCamera(false, false, true);
+        const epoch = generation;
+        capturing = true;
+        canConfirm = false;
+        updateControls();
+        $('media-plate').textContent = 'ĐANG NHẬN DIỆN';
+        message('Đã chụp khung hình. Đang đọc biển số…');
+        let request, timeout;
+        try {
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.96));
+            if (epoch !== generation) return;
+            if (!blob) throw new Error('Không chụp được ảnh. Hãy bấm Bắt đầu và chụp lại.');
+            const oldToken = tokenInput.value;
+            tokenInput.value = '';
+            checkedPlate.value = '';
+            acceptedPreviewUrl = '';
+            hasPreview = false;
+            if ($('plate')) $('plate').value = '';
+            discard(oldToken);
+            updateControls();
+            clearCapturePreview();
+            capturePreviewUrl = URL.createObjectURL(blob);
+            showPreview();
+            $('media-caption').textContent = 'Ảnh vừa chụp · Đang nhận diện';
+            if (pending) await pending.done;
+            if (epoch !== generation) return;
+            request = { epoch, controller: new AbortController() };
+            activeRequest = request;
+            const body = new FormData();
+            body.set('image', blob, 'camera-capture.jpg');
+            body.set('source', 'camera');
+            body.set('profile', 'capture');
+            timeout = setTimeout(() => request.controller.abort(), 30000);
+            let data;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const response = await fetch(cameraUrl, { method:'POST', body, signal:request.controller.signal });
+                if (response.redirected) throw new Error('Phiên đăng nhập đã hết hoặc bạn không có quyền. Hãy tải lại trang.');
+                if (response.status === 429 && attempt < 2) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    if (epoch !== generation) return;
+                    continue;
+                }
+                data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Không nhận diện được ảnh vừa chụp.');
+                break;
+            }
+            if (epoch !== generation) { discard(data?.token); return; }
+            applyResult(data);
+            snapshot.hidden = false;
+            message(data.valid ? 'Đã chụp và nhận diện: ' + data.plate + '. Kiểm tra thông tin rồi xác nhận.' :
+                'Đã chụp ảnh nhưng biển số chưa đủ rõ. Kiểm tra hoặc sửa biển số rồi bấm Cập nhật biển số.', !data.valid);
+        } catch (error) {
+            if (epoch === generation) message(error.name === 'AbortError' ? 'Nhận diện ảnh chụp mất quá lâu. Hãy bắt đầu và chụp lại.' : error.message, true);
+        } finally {
+            clearTimeout(timeout);
+            if (activeRequest === request) activeRequest = null;
+            if (epoch === generation) { capturing = false; updateControls(); }
         }
     }
     async function startCamera() {
@@ -262,6 +349,7 @@
             return;
         }
         stopCamera(false, false);
+        clearCapturePreview();
         const epoch = generation;
         opening = true;
         scanning = true;
@@ -272,7 +360,7 @@
         updateControls();
         message('Đang mở camera… Hãy cho phép truy cập nếu trình duyệt yêu cầu.');
         try {
-            const constraints = { width: { ideal: 1280 }, height: { ideal: 720 } };
+            const constraints = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal:30, max:30 } };
             if (select.value) constraints.deviceId = { exact: select.value };
             else constraints.facingMode = { ideal: 'environment' };
             const opened = await navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
@@ -288,6 +376,7 @@
             video.hidden = false;
             $('camera-placeholder').hidden = true;
             $('media-caption').textContent = 'Camera đang hoạt động · Giữ biển số trong khung hình';
+            $('media-plate').textContent = 'ĐANG QUÉT';
             await video.play();
             if (epoch !== generation) return;
             const id = track.getSettings().deviceId || '';
@@ -307,6 +396,7 @@
         const useCamera = source() === 'camera';
         $('upload-panel').hidden = useCamera;
         $('camera-controls').hidden = !useCamera;
+        status.hidden = !useCamera;
         $('media-source-label').textContent = useCamera ? 'Camera' : 'Ảnh tải lên';
         $('media-placeholder-icon').textContent = useCamera ? '📷' : '🖼️';
         $('media-placeholder-title').textContent = useCamera ? 'Camera sẵn sàng' : 'Chưa có hình ảnh';
@@ -324,6 +414,7 @@
     function changeSource() {
         if (submitting) return;
         stopCamera(false, false);
+        clearCapturePreview();
         image.value = '';
         clearUploadPreview();
         $('media-caption').textContent = hasPreview ? 'Ảnh đã giữ để xác nhận.' : 'Ảnh nhận diện sẽ xuất hiện tại đây.';
@@ -351,8 +442,8 @@
         showPreview();
         updateControls();
     });
-    startButton.addEventListener('click', () => { void startCamera(); });
-    stopButton.addEventListener('click', () => stopCamera(true));
+    startButton.addEventListener('click', () => { if (stream || opening || scanning) stopCamera(true); else void startCamera(); });
+    captureButton.addEventListener('click', () => { void captureFrame(); });
     refreshButton.addEventListener('click', () => { void refreshCameras(); });
     select.addEventListener('change', () => {
         remember(select.value);
@@ -362,7 +453,7 @@
         if (scanning && !opening) scheduleScan(generation, 0);
     });
     form.addEventListener('submit', event => {
-        if (submitting || scanning) {
+        if (submitting || scanning || capturing) {
             event.preventDefault();
             return;
         }
@@ -379,7 +470,7 @@
             event.submitter.textContent = 'Đang xử lý…';
         }, 0);
     });
-    window.addEventListener('pagehide', () => { stopCamera(false, false); clearUploadPreview(); });
+    window.addEventListener('pagehide', () => { stopCamera(false, false); clearUploadPreview(); clearCapturePreview(); });
     window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden) stopCamera(true); });
     navigator.mediaDevices?.addEventListener('devicechange', () => { if (source() === 'camera') void refreshCameras(); });

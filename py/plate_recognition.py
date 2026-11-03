@@ -104,18 +104,23 @@ def _best(candidates):
                                          c.conf, min(len(plate_key(c.text)), 9)))
 
 
-def _read_crop(crop, rect, fast=False, direct=True, engine='easyocr'):
-    image = _resize(crop, 480 if fast else MAX_OCR_SIDE)
+def _read_crop(crop, rect, fast=False, direct=True, engine='easyocr', detect=True):
+    image = _resize(crop, MAX_OCR_SIDE)
+    candidates = []
     if direct and rect is not None:
         boxes = plate_preprocess.text_rows(image)
         if boxes:
             result = _ocr_result(_reader.recognize(image, horizontal_list=boxes, free_list=[],
                                                   allowlist=PLATE_ALLOWLIST, detail=1, workers=0))
             cand = _Cand(*result[:2], image, rect, result[2], 'easyocr-rows')
-            if _valid(cand) and cand.conf >= 0.85:
+            candidates.append(cand)
+            if _valid(cand) and cand.conf >= (0.75 if fast else 0.85):
                 return cand
+    if not detect:
+        return candidates[0] if candidates else _Cand('', 0.0, image, rect, [], engine)
     text, conf, rows = ocr_read(image)
-    return _Cand(text, conf, image, rect, rows, engine)
+    candidates.append(_Cand(text, conf, image, rect, rows, engine))
+    return _best(candidates)
 
 
 def _use_yolo():
@@ -133,11 +138,50 @@ def find_plate_contour(edged):
     return None
 
 
-def _contour_rect(image):
+def _contour_rect(image, *, strict=False):
+    regions = plate_preprocess.plate_regions(image, limit=1)
+    if regions:
+        return regions[0]
+    if strict:
+        return None
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(cv2.GaussianBlur(gray, (3, 3), 0), 40, 160)
     contour = find_plate_contour(edges)
     return cv2.boundingRect(contour) if contour is not None else None
+
+
+def _fast_crop(img, rect, detection, ratio, yolo):
+    x, y, w, h = rect
+    tight = img[y:y+h, x:x+w]
+    padded = crop_plate(img, rect)
+    candidates = []
+    # Two cheap recognizer passes retain the original character detail. CRAFT
+    # is reserved for crops whose row segmentation cannot yield a valid plate.
+    for crop in (padded, plate_preprocess.enhance(tight)):
+        candidate = _read_crop(crop, rect, fast=True, detect=False)
+        candidates.append(candidate)
+        if _valid(candidate) and candidate.conf >= 0.75:
+            return candidate
+    best = _best(candidates)
+    if _valid(best):
+        return best
+    if yolo:
+        border = _contour_rect(detection, strict=True)
+        if border is not None:
+            border = tuple(int(round(v / ratio)) for v in border) if ratio < 1 else border
+            if border != rect:
+                candidate = _read_crop(plate_preprocess.enhance(crop_plate(img, border)), border, fast=True)
+                candidates.append(candidate)
+                if _valid(candidate):
+                    return _best(candidates)
+    corrected = plate_preprocess.rectify_detected(img, rect)
+    if corrected is not None:
+        recovered, recovered_rect = corrected
+        candidate = _read_crop(plate_preprocess.enhance(recovered), recovered_rect, fast=True,
+                               engine='easyocr-perspective')
+    else:
+        candidate = _read_crop(plate_preprocess.enhance(tight), rect, fast=True, direct=False)
+    return _best(candidates + [candidate])
 
 
 def _recognize_api(img, image_path, fast=False):
@@ -167,21 +211,28 @@ def _local(img, fast=False):
     yolo = _use_yolo()
     rect = plate_yolo.detect_best(detection) if yolo else None
     if rect is None:
-        rect = _contour_rect(detection)
+        rect = _contour_rect(detection, strict=fast)
     if rect is not None and ratio < 1:
         rect = tuple(int(round(v / ratio)) for v in rect)
-    if fast and rect is None and yolo:
+    if fast and rect is None:
         return _Cand('', 0.0, detection, None, [], 'easyocr')
     if rect is None:
         image = _resize(img, 960 if fast else 1280)
         text, conf, rows = ocr_read(image)
         return _Cand(text, conf, image, None, rows, 'easyocr')
 
+    if fast:
+        return _fast_crop(img, rect, detection, ratio, yolo)
+
+    seed = _fast_crop(img, rect, detection, ratio, yolo)
+    if _valid(seed) and seed.conf >= 0.80:
+        return seed
+
     crop = crop_plate(img, rect)
     original = _read_crop(plate_preprocess.enhance(crop), rect, fast)
     if _valid(original) and original.conf >= (0.75 if fast else 0.85):
         return original
-    candidates = [original]
+    candidates = [seed, original]
     # Some plate detectors return just the digits of one row. A cheap border
     # fallback recovers the full plate before any expensive lighting retries.
     if yolo and not _valid(original):
@@ -219,17 +270,18 @@ def _local(img, fast=False):
     return _best(candidates)
 
 
-def _run(image_path, fast=False):
+def _run(image_path, fast=False, *, camera=False):
     started = time.perf_counter()
     img = cv2.imread(image_path)
     if img is None:
         raise ValueError('Cannot read image')
     mode = os.environ.get('PLATE_API_MODE', 'fallback').strip().lower()
+    allow_api = not camera or os.environ.get('PLATE_API_CAMERA', '0') == '1'
     with _INFERENCE_LOCK:
-        result = _recognize_api(img, image_path, fast) if mode == 'first' else None
+        result = _recognize_api(img, image_path, fast) if mode == 'first' and allow_api else None
         if result is None:
             result = _local(img, fast)
-            if mode not in ('off', 'first') and (not _valid(result) or result.conf < 0.80):
+            if allow_api and mode not in ('off', 'first') and (not _valid(result) or result.conf < 0.80):
                 remote = _recognize_api(img, image_path, fast)
                 if remote is not None:
                     result = remote
@@ -251,8 +303,8 @@ def recognize_plate_annotated(image_path, max_width=900):
     return plate, _annotate_plate(img, plate, rect, max_width)
 
 
-def recognize_plate_live(image_path, max_width=900, *, details=False):
-    result, img, elapsed = _run(image_path, fast=True)
+def recognize_plate_live(image_path, max_width=900, *, details=False, accurate=False):
+    result, img, elapsed = _run(image_path, fast=not accurate, camera=True)
     height, width = img.shape[:2]
     values = (result.text, _annotate_plate(img, result.text, result.rect, max_width), result.rect, width, height)
     if details:

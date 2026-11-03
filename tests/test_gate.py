@@ -333,7 +333,18 @@ class GateTests(unittest.TestCase):
         self.assertFalse(data['valid'])
         self.assertEqual(data['elapsed_ms'], 123)
         self.assertEqual(data['confidence'], 0.4)
+        self.assertFalse(data['can_confirm'])
+        self.assertEqual(data['checked_plate'], '')
         self.assertEqual(database.count_open(), 0)
+
+    def test_capture_requests_accurate_camera_profile_without_creating_entry(self):
+        with patch.object(self.module,'recognize_plate_live',return_value=('51F-12345',self.frame,(10,10,100,40),200,80,
+                          dict(confidence=0.95,elapsed_ms=100,engine='easyocr-rows'))) as recognize:
+            response=self.client.post('/gate/entry/camera',data={'profile':'capture','image':(BytesIO(self.jpg),'capture.jpg')})
+        self.assertEqual(response.status_code,200)
+        self.assertTrue(recognize.call_args.kwargs['accurate'])
+        self.assertEqual(database.count_open(),0)
+        self.assertEqual(self.client.post('/gate/entry/camera',data={'profile':'invalid'}).status_code,400)
 
     def test_live_discard_cleans_temporary_frames_only(self):
         first = self.live_frame().json

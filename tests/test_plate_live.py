@@ -28,7 +28,7 @@ class PlateLiveTests(unittest.TestCase):
         candidate = self.recognition._Cand('51F-12345', 0.95, frame, rect, ['51F-12345'])
         with patch.object(self.recognition, '_run', return_value=(candidate, frame, 200)) as ocr:
             plate, annotated, box, width, height = self.recognition.recognize_plate_live('frame.jpg')
-        ocr.assert_called_once_with('frame.jpg', fast=True)
+        ocr.assert_called_once_with('frame.jpg', fast=True, camera=True)
         self.assertEqual((plate, box, width, height), ('51F-12345', rect, 1600, 1200))
         self.assertEqual(annotated.shape[:2], (675, 900))
         self.assertFalse(np.any(frame))  # vẽ khung không sửa ảnh gốc
@@ -59,7 +59,44 @@ class PlateLiveTests(unittest.TestCase):
         self.assertEqual(result.engine, 'easyocr-rows')
         reader.readtext.assert_not_called()
 
-    def test_live_uses_one_recovery_attempt_instead_of_full_frame_retries(self):
+    def test_crop_detector_cannot_replace_a_valid_row_read_with_invalid_text(self):
+        p = self.recognition
+        frame = np.full((100,400,3),240,np.uint8)
+        reader = MagicMock()
+        reader.recognize.return_value = [([[0,0],[390,0],[390,90],[0,90]],'18A12345',0.72)]
+        with patch.object(p,'_reader',reader), patch.object(p.plate_preprocess,'text_rows',return_value=[[0,390,0,90]]), \
+                patch.object(p,'ocr_read',return_value=('garbage',0.99,['garbage'])):
+            result = p._read_crop(frame,(0,0,400,100),fast=True)
+        self.assertEqual(result.text,'18A-12345')
+        self.assertEqual(result.conf,0.72)
+
+    def test_empty_live_scene_does_not_invoke_full_frame_ocr(self):
+        p = self.recognition
+        with patch.object(p,'_use_yolo',return_value=False), patch.object(p,'_reader') as reader:
+            result = p._local(np.full((720,1280,3),100,np.uint8),fast=True)
+        self.assertEqual(result.text,'')
+        reader.readtext.assert_not_called()
+        reader.recognize.assert_not_called()
+
+    def test_capture_uses_accurate_profile_with_camera_privacy_flag(self):
+        p = self.recognition
+        frame = np.zeros((80,200,3),np.uint8)
+        candidate = p._Cand('18A-12345',0.95,frame,(10,10,100,40),['18A12345'])
+        with patch.object(p,'_run',return_value=(candidate,frame,100)) as run:
+            p.recognize_plate_live('capture.jpg',accurate=True)
+        run.assert_called_once_with('capture.jpg',fast=False,camera=True)
+
+    def test_accurate_camera_capture_does_not_enable_cloud_uploads(self):
+        p = self.recognition
+        frame = np.zeros((80,200,3),np.uint8)
+        candidate = p._Cand('',0,frame,None,[])
+        with patch.dict('os.environ',{'PLATE_API_MODE':'first','PLATE_API_CAMERA':'0','PLATE_API_TOKEN':'test-only'}), \
+                patch.object(p.cv2,'imread',return_value=frame), patch.object(p,'_local',return_value=candidate), \
+                patch.object(p,'_recognize_api') as remote:
+            p._run('capture.jpg',fast=False,camera=True)
+        remote.assert_not_called()
+
+    def test_live_bounds_crop_attempts_instead_of_full_frame_retries(self):
         p = self.recognition
         frame = np.zeros((720, 1280, 3), np.uint8)
         rect = (100, 100, 200, 80)
@@ -71,7 +108,7 @@ class PlateLiveTests(unittest.TestCase):
                 patch.object(p, '_read_crop', return_value=uncertain) as crop_read, \
                 patch.object(p, 'ocr_read') as full_read:
             p._local(frame, fast=True)
-        self.assertEqual(crop_read.call_count, 2)
+        self.assertEqual(crop_read.call_count, 3)
         full_read.assert_not_called()
 
     def test_recovery_can_replace_incomplete_detection_and_keep_original_coordinates(self):

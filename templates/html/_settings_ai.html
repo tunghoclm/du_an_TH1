@@ -1,0 +1,26 @@
+<div class="ai-settings-layout">
+  <section class="panel ai-settings" id="ai-settings" data-csrf="{{ support_csrf }}" aria-labelledby="ai-settings-title">
+    <header class="ai-settings-heading">
+      <span class="ai-settings-icon"><svg aria-hidden="true" width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg></span>
+      <div><h2 id="ai-settings-title">Trợ lý AI</h2><p>Một kết nối, hỗ trợ trên toàn hệ thống</p></div>
+      <span class="badge badge-amber" id="ai-config-status" role="status">Đang tải cấu hình</span>
+    </header>
+    <form id="ai-settings-form" autocomplete="off">
+      <div class="ai-settings-fields">
+        <div class="form-field"><label for="ai-provider">Nhà cung cấp</label><select id="ai-provider" name="provider" required disabled><option value="">Đang tải…</option></select><small id="ai-provider-hint">Chọn dịch vụ bạn đang sử dụng.</small></div>
+        <div class="form-field"><label for="ai-model">Model</label><input type="text" id="ai-model" name="model" maxlength="200" required spellcheck="false" placeholder="Nhập mã model" aria-describedby="ai-model-hint" disabled><small id="ai-model-hint">Dùng đúng mã model được cấp cho tài khoản API của bạn.</small></div>
+        <div class="form-field full"><label for="ai-base-url">Địa chỉ API <span class="ai-field-optional">Base URL</span></label><input type="url" id="ai-base-url" name="base_url" maxlength="500" required spellcheck="false" placeholder="https://api.example.com/v1" aria-describedby="ai-base-hint" disabled><small id="ai-base-hint">Địa chỉ được điền sẵn theo nhà cung cấp.</small></div>
+        <div class="form-field full"><div class="ai-key-label"><label for="ai-api-key">Khóa API</label><a id="ai-key-link" target="_blank" rel="noopener noreferrer" hidden>Lấy khóa API ↗</a></div><div class="ai-key-field"><input type="password" id="ai-api-key" name="api_key" autocomplete="new-password" autocapitalize="off" spellcheck="false" minlength="16" maxlength="4096" placeholder="Nhập khóa API" aria-describedby="ai-key-hint" disabled><button type="button" id="ai-key-toggle" class="ai-key-toggle" aria-controls="ai-api-key" aria-pressed="false" aria-label="Hiện khóa vừa nhập" disabled>Hiện</button></div><small id="ai-key-hint">Khóa được lưu mã hóa và không hiển thị lại sau khi lưu.</small></div>
+      </div>
+      <p class="ai-settings-source" id="ai-config-source"></p>
+      <div class="ai-settings-feedback" id="ai-settings-feedback" role="status" aria-live="polite" hidden></div>
+      <button type="button" class="btn btn-outline" id="ai-settings-retry" hidden>Thử tải lại</button>
+      <footer class="ai-settings-footer"><div class="ai-settings-actions"><button type="submit" class="btn btn-primary" id="ai-save" disabled>Lưu cấu hình</button><button type="button" class="btn btn-outline" id="ai-test" disabled>Kiểm tra kết nối</button><button type="button" class="btn ai-disconnect" id="ai-disconnect" disabled>Ngắt kết nối</button></div><p>Cấu hình có hiệu lực ngay sau khi lưu.</p></footer>
+    </form>
+  </section>
+  <aside class="ai-settings-aside">
+    <section class="panel ai-connection-summary"><span class="ai-settings-eyebrow">CẤU HÌNH ĐÃ LƯU</span><h3 id="ai-summary-provider">Chưa có kết nối</h3><dl><div><dt>Model</dt><dd id="ai-summary-model">—</dd></div><div><dt>Máy chủ</dt><dd id="ai-summary-host">—</dd></div></dl><p>Chỉ quản trị viên được thay đổi cấu hình AI.</p></section>
+    <section class="panel ai-settings-guide"><h3>Kết nối trong 3 bước</h3><ol><li>Chọn nhà cung cấp và nhập mã model.</li><li>Nhập khóa API rồi lưu cấu hình.</li><li>Kiểm tra kết nối trước khi sử dụng.</li></ol><div class="ai-guide-note">Với dịch vụ khác, chọn <b>Tùy chỉnh · tương thích OpenAI</b> và nhập Base URL HTTPS của dịch vụ đó.</div></section>
+    <p class="ai-human-note">Chat với quản trị viên và nhân viên vẫn hoạt động khi trợ lý AI chưa kết nối.</p>
+  </aside>
+</div>

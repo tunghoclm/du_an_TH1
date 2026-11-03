@@ -61,6 +61,7 @@ from plate_recognition import recognize_plate_annotated, recognize_plate, recogn
 from plate_utils import normalize_plate, plate_key, is_valid_plate_format
 import parking_invoices
 import parking_customers
+import support_chat
 
 TMP_FOLDER = TMP_DIR   # ảnh tạm (cache/tmp) giữa bước "Nhận diện" và bước "Xác nhận"
 UPLOAD_DIRS = {'in': IN_DIR, 'out': OUT_DIR}   # static/in: xe vào, static/out: xe ra
@@ -69,7 +70,7 @@ FEE_PER_HOUR = 5000  # đơn giá DỰ PHÒNG (5.000 VNĐ/giờ) — chỉ dùng
 MIN_PASSWORD_LEN = 4
 
 app = Flask(__name__, template_folder=TEMPLATES_HTML_DIR)
-app.secret_key = 'demo-smart-parking-secret-key'
+app.secret_key = os.environ.get('FLASK_SECRET_KEY') or 'demo-smart-parking-secret-key'
 
 
 @app.route('/css/<path:filename>')
@@ -94,6 +95,8 @@ def tmp_preview(filename):
 
 with app.app_context():
     database.init_db()
+
+support_chat.register_support(app)
 
 
 # ============================================================
@@ -599,6 +602,9 @@ def gate_camera(direction):
     if request.form.get('action') == 'discard':
         drop_tmp(request.form.get('token', ''))
         return '', 204
+    profile = request.form.get('profile', 'live')
+    if profile not in ('live', 'capture'):
+        return jsonify(error='Chế độ nhận diện camera không hợp lệ.'), 400
     file = request.files.get('image')
     if not file or not file.filename:
         return jsonify(error='Chưa có hình ảnh từ camera.'), 400
@@ -617,20 +623,21 @@ def gate_camera(direction):
             _last_camera_cleanup = time.monotonic()
         with open(path, 'wb') as out:
             out.write(frame)
-        plate, annotated, rect, width, height, metrics = recognize_plate_live(path, details=True)
+        plate, annotated, rect, width, height, metrics = recognize_plate_live(path, details=True, accurate=profile == 'capture')
         plate = clean_plate_input(plate)
         if not cv2.imwrite(os.path.join(TMP_FOLDER, token + '_ann.jpg'), annotated):
             raise OSError('Không lưu được ảnh xem trước.')
         ctx = gate_context(direction, token, plate)
         ctx['source'] = 'camera'
+        confident = is_valid_plate_format(plate) and metrics['confidence'] >= 0.65
         return jsonify(
             token=token, plate=plate, plate_key=plate_key(plate),
-            valid=is_valid_plate_format(plate) and metrics['confidence'] >= 0.65,
+            valid=confident,
             confidence=metrics['confidence'], elapsed_ms=metrics['elapsed_ms'], engine=metrics['engine'],
             rect=list(rect) if rect is not None else None,
             width=int(width), height=int(height), preview_url=ctx['preview_url'],
-            checked_plate=plate if ctx['mode'] else '',
-            can_confirm=bool(ctx['mode'] and not (ctx['mode'] == 'entry' and ctx['no_slots'])),
+            checked_plate=plate if ctx['mode'] and confident else '',
+            can_confirm=bool(confident and ctx['mode'] and not (ctx['mode'] == 'entry' and ctx['no_slots'])),
             html=render_template('_gate_result.html', **ctx),
         )
     except (ValueError, OSError) as error:
@@ -1016,6 +1023,11 @@ def parse_stats_range(args):
 @app.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings():
+    actor = database.get_user_by_id(session['user_id'])
+    ai_admin = bool(actor and actor['role'] == 'admin' and actor['status'] == 'active')
+    settings_section = 'ai' if request.args.get('section') == 'ai' else 'entry'
+    if settings_section == 'ai' and not ai_admin:
+        abort(403)
     if session.get('role') == 'user':      # người dùng: trang cài đặt tài khoản riêng
         return render_user_settings()
     if request.method == 'POST':
@@ -1028,7 +1040,7 @@ def settings():
         return redirect(url_for('settings'))
 
     entry_mode = database.get_user_setting(session['user_id'], 'entry_mode', 'manual')
-    return render_template('settings.html', entry_mode=entry_mode)
+    return render_template('settings.html', entry_mode=entry_mode, ai_admin=ai_admin, settings_section=settings_section)
 
 
 # ============================================================
