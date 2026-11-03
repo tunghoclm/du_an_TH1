@@ -1,6 +1,5 @@
 {% set _invoices_active = active_page == 'invoices' %}
 {% set _gate_active = active_page in ('gate', 'entry', 'exit') %}
-{% set _more_active = active_page in ('parking_monitor', 'settings') or _gate_active %}
 {% macro nav_link(endpoint, label, selected, title=none) -%}
 <a href="{{ url_for(endpoint) }}" class="topbar-link{% if selected %} active{% endif %}"{% if selected %} aria-current="page"{% endif %}{% if title %} title="{{ title }}"{% endif %}>{{ label }}</a>
 {%- endmacro %}
@@ -17,6 +16,7 @@
     <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
   </button>
 
+  <div class="topbar-navigation">
   <nav class="primary-nav" id="primary-navigation" aria-label="Điều hướng chính">
     {{ nav_link('index', 'Tổng quan', active_page == 'dashboard') }}
     {{ nav_link('parking', 'Bãi đỗ', active_page == 'parking', 'Sơ đồ & Quản lý xe') }}
@@ -32,23 +32,17 @@
     {% if _is_staff %}
       <a href="{{ url_for('statistics') }}" class="topbar-link topbar-report{% if active_page == 'statistics' %} active{% endif %}"{% if active_page == 'statistics' %} aria-current="page"{% endif %}>Báo cáo</a>
     {% endif %}
-    <div class="dropdown-wrap topbar-more" data-header-dropdown>
-      <button type="button" class="topbar-link{% if _more_active %} active{% endif %}" id="more-menu-btn" aria-controls="more-menu-popover" aria-expanded="false">
+    <div class="dropdown-wrap topbar-more" data-header-dropdown hidden>
+      <button type="button" class="topbar-link" id="more-menu-btn" aria-controls="more-menu-popover" aria-expanded="false">
         Khác
         <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="popover topbar-popover more-menu" id="more-menu-popover" hidden>
-        {% if _is_staff %}
-        <p class="topbar-menu-heading">Giám sát bãi xe</p>
-        <a href="{{ url_for('gate') }}"{% if _gate_active %} class="active" aria-current="page"{% endif %}>Xe ra/vào</a>
-        <a href="{{ url_for('parking_monitor') }}"{% if active_page == 'parking_monitor' %} class="active" aria-current="page"{% endif %}>Bãi xe</a>
-        <hr>
-        {% endif %}
-        <a href="{{ url_for('settings') }}"{% if active_page == 'settings' %} class="active" aria-current="page"{% endif %}>Cài đặt {{ 'hệ thống' if _is_staff else 'cá nhân' }}</a>
-        <a href="{{ url_for('logout') }}">Đăng xuất</a>
+        <div class="topbar-overflow-links" id="nav-overflow-links" hidden></div>
       </div>
     </div>
   </nav>
+  </div>
 
   <div class="topbar-tools">
     <form action="{{ url_for('history') }}" method="get" class="header-search" role="search">
@@ -59,7 +53,20 @@
     </form>
 
     {% if _is_staff %}
-    <a href="{{ url_for('gate') }}" class="cabin-button{% if _gate_active %} active{% endif %}" title="Mở cabin giám sát xe ra/vào">cabin</a>
+    <div class="dropdown-wrap cabin-control{% if _gate_active %} active{% endif %}" data-header-dropdown>
+      <a href="{{ url_for('gate') }}" class="cabin-button" title="Mở cabin giám sát xe ra/vào"{% if active_page == 'gate' %} aria-current="page"{% endif %}>
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 12h8M8 16h8"/></svg>
+        <span>Cabin</span>
+      </a>
+      <button type="button" class="cabin-menu-toggle" id="cabin-menu-btn" aria-label="Tùy chọn cabin" aria-controls="cabin-menu-popover" aria-expanded="false">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="popover topbar-popover cabin-menu" id="cabin-menu-popover" hidden>
+        <a href="{{ url_for('entry') }}">Xe vào</a>
+        <a href="{{ url_for('exit_gate') }}">Xe ra</a>
+        <a href="{{ url_for('parking_monitor') }}">Giám sát bãi xe</a>
+      </div>
+    </div>
     {% endif %}
 
     <div class="dropdown-wrap" data-header-dropdown>

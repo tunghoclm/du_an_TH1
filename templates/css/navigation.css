@@ -17,7 +17,7 @@
   --menu-hover: #dceaff;
   display: flex;
   height: 94px;
-  gap: 8px;
+  gap: 16px;
   padding: 12px;
   border-bottom: 1px solid #dce9f9;
   background: linear-gradient(180deg, #fff 0%, #f6faff 30%, var(--menu-bg) 100%);
@@ -69,12 +69,18 @@
   letter-spacing: .9px;
 }
 
+.topbar-navigation {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
 .primary-nav {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0;
-  flex: 0 1 940px;
+  width: max-content;
+  max-width: 100%;
   min-width: 0;
   height: 56px;
   padding: 2px;
@@ -95,7 +101,7 @@
   padding: 0 12px;
   border-radius: 26px;
   color: #fff;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 24px;
   letter-spacing: 0;
@@ -146,16 +152,17 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  flex: 1 0 410px;
+  gap: 8px;
+  flex: 0 0 auto;
   min-width: 0;
-  margin-left: 20px;
+  margin-left: 0;
 }
 
 .header-search {
   display: flex;
   align-items: center;
-  flex: 1 1 160px;
+  flex: 0 0 200px;
+  width: 200px;
   min-width: 100px;
   max-width: 270px;
   height: 40px;
@@ -201,29 +208,59 @@
   color: var(--menu-text);
 }
 
-.cabin-button {
-  display: grid;
-  place-items: center;
-  flex: 0 1 160px;
-  min-width: 88px;
+.cabin-control {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 140px;
+  min-width: 140px;
   height: 40px;
-  border: 1px solid var(--menu-border);
+  border: 1px solid #a8ccff;
   border-radius: 24px;
-  background: var(--menu-surface);
-  color: var(--menu-text);
+  background: #fff;
+  color: #0070ff;
+  box-shadow: 0 2px 8px #0070ff14;
+}
+
+.cabin-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 10px;
+  border-radius: 24px 0 0 24px;
+  color: inherit;
   font-size: 18px;
   font-weight: 500;
+  line-height: 24px;
+  white-space: nowrap;
 }
 
-.cabin-button:hover {
-  background: var(--menu-hover);
-  color: var(--primary);
+.cabin-menu-toggle {
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  padding: 0;
+  border-left: 1px solid #b4d3ff;
+  border-radius: 0 24px 24px 0;
+  color: inherit;
 }
 
-.cabin-button.active {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: #fff;
+.cabin-button:hover,
+.cabin-menu-toggle:hover,
+.cabin-menu-toggle[aria-expanded="true"] {
+  background: #f0f6ff;
+  color: #0070ff;
+}
+
+.cabin-control.active {
+  border-color: #7bb5ff;
+}
+
+.cabin-menu {
+  width: 190px;
+  min-width: 190px;
 }
 
 .header-icon {
@@ -278,17 +315,26 @@
   background: var(--input);
 }
 
-.topbar-menu-heading {
-  padding: 8px 12px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
+.more-menu {
+  max-height: calc(100dvh - 112px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.more-menu hr {
-  margin: 6px 4px;
-  border: 0;
-  border-top: 1px solid var(--border);
+.topbar-overflow-links > a {
+  display: block;
+  padding: 11px 12px;
+  border-radius: 7px;
+  color: var(--navy);
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.topbar-overflow-links > a:hover,
+.topbar-overflow-links > a.active {
+  color: var(--primary);
+  background: var(--input);
 }
 
 .help-menu {
@@ -338,67 +384,16 @@
   border: 0;
 }
 
-@media (max-width: 1599px) and (min-width: 1241px) {
-  .topbar-link {
-    padding-inline: 8px;
-    font-size: clamp(14px, calc(1.6vw - 6px), 16px);
-  }
-  .topbar-tools {
-    flex-basis: 275px;
-    gap: 6px;
-    margin-left: 8px;
-  }
+@media (max-width: 1699px) {
   .header-search {
     display: none;
-  }
-  .cabin-button {
-    flex-basis: 106px;
-  }
-}
-
-@media (max-width: 1240px) {
-  .app-header.topbar {
-    flex-wrap: wrap;
-    height: auto;
-    min-height: 78px;
-    padding: 12px 16px;
-    gap: 12px;
-  }
-  .topbar-tools {
-    flex: 1 1 300px;
-    margin-left: auto;
-  }
-  .primary-nav {
-    flex: 1 0 100%;
-    order: 3;
-  }
-  .topbar-link {
-    flex-grow: 1;
-    font-size: 15px;
-  }
-  .topbar-more > .topbar-link {
-    padding-inline: 16px;
-  }
-  .topbar-report {
-    margin-left: 0;
-  }
-  .more-menu {
-    right: 0;
-  }
-}
-
-@media (min-width: 761px) and (max-width: 900px) {
-  .topbar-link {
-    padding-inline: 8px;
-    font-size: 13px;
-  }
-  .topbar-more > .topbar-link {
-    padding-inline: 8px;
   }
 }
 
 @media (max-width: 760px) {
   .app-header.topbar {
+    flex-wrap: wrap;
+    height: auto;
     gap: 10px;
     min-height: 114px;
     padding: 12px;
@@ -420,7 +415,10 @@
     order: 2;
   }
   .header-search {
-    flex-basis: 0;
+    display: flex;
+    flex: 1 1 40px;
+    width: auto;
+    max-width: none;
     min-width: 40px;
     height: 36px;
     padding-left: 10px;
@@ -428,16 +426,35 @@
   .header-search input {
     font-size: 11px;
   }
-  .cabin-button {
-    flex: 0 0 60px;
+  .cabin-control {
+    flex: 0 0 128px;
     min-width: 0;
     height: 36px;
+  }
+  .cabin-button {
+    gap: 6px;
+    padding-inline: 10px;
     font-size: 16px;
+  }
+  .cabin-button > svg {
+    width: 18px;
+    height: 18px;
+  }
+  .cabin-menu-toggle {
+    flex-basis: 32px;
+  }
+  .topbar-navigation {
+    flex: 1 0 100%;
+    order: 3;
   }
   .primary-nav {
     display: none;
+    width: 100%;
     flex-wrap: wrap;
     height: auto;
+    max-height: calc(100dvh - 140px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 6px;
     border-radius: 20px;
   }
@@ -447,7 +464,7 @@
   .topbar-link,
   .topbar-more {
     flex: 1 0 calc(33.333% - 6px);
-    font-size: 13px;
+    font-size: 14px;
   }
   .topbar-more > .topbar-link {
     width: 100%;
@@ -461,6 +478,34 @@
   .more-menu {
     position: absolute;
     top: calc(100% + 8px);
+  }
+  .cabin-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: auto;
+    width: 190px;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar-tools {
+    gap: 6px;
+  }
+  .header-search {
+    display: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .topbar-tools {
+    gap: 4px;
+  }
+  .cabin-control {
+    flex-basis: 120px;
+  }
+  .cabin-button {
+    padding-inline: 8px;
   }
 }
 
