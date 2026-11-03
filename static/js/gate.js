@@ -18,6 +18,7 @@
     const recognizeButton = $('recognize-button');
     const imageRecognizeButton = $('image-recognize-button');
     const confirmButton = $('confirm-button');
+    const payButton = $('pay-button');
     const tokenInput = $('gate-token');
     const checkedPlate = $('checked-plate');
     const cameraUrl = form.dataset.cameraUrl;
@@ -80,7 +81,9 @@
         recognizeButton.hidden = !hasPreview;
         recognizeButton.textContent = 'Cập nhật biển số';
         imageRecognizeButton.disabled = scanning || capturing || !image.files.length;
-        confirmButton.disabled = scanning || capturing || !canConfirm || image.files.length > 0 || !syncSlotOptions();
+        const disableConfirm = scanning || capturing || !canConfirm || image.files.length > 0 || !syncSlotOptions();
+        confirmButton.disabled = disableConfirm;
+        if (payButton) payButton.disabled = disableConfirm;
         const plate = $('plate');
         if (plate) plate.readOnly = scanning || capturing;
     }
@@ -111,6 +114,9 @@
         $('gate-result').innerHTML = data.html;
         tokenInput.value = data.token;
         checkedPlate.value = data.checked_plate;
+        // Ô biển số nằm ngoài #gate-result nên phải điền trực tiếp từ kết quả camera
+        const plateField = $('plate');
+        if (plateField && data.plate && data.valid !== false) plateField.value = data.plate;
         acceptedPreviewUrl = data.preview_url;
         clearUploadPreview();
         clearCapturePreview();
@@ -476,6 +482,229 @@
     navigator.mediaDevices?.addEventListener('devicechange', () => { if (source() === 'camera') void refreshCameras(); });
     syncSource();
     if (source() === 'camera') void refreshCameras(remembered());
+    const printFrame = $('invoice-print-frame');
+    if (printFrame) {
+        let printed = false;
+        const doPrint = () => {
+            if (printed) return;
+            printed = true;
+            setTimeout(() => {
+                try {
+                    printFrame.contentWindow.focus();
+                    printFrame.contentWindow.print();
+                } catch (err) {
+                    console.error('Lỗi in hóa đơn:', err);
+                }
+            }, 300);
+        };
+        printFrame.addEventListener('load', doPrint);
+        if (printFrame.contentDocument && printFrame.contentDocument.readyState === 'complete') {
+            doPrint();
+        }
+    }
+
+    if (window.history && window.history.replaceState) {
+        try {
+            const currentUrl = new URL(window.location.href);
+            if (currentUrl.searchParams.has('print_invoice')) {
+                currentUrl.searchParams.delete('print_invoice');
+                setTimeout(() => {
+                    window.history.replaceState({}, document.title, currentUrl.toString());
+                }, 1000);
+            }
+        } catch (_) {}
+    }
+
+    // ============================================================
+    // KIOTVIET FNB POS PAYMENT MODAL INTERACTION & CALCULATOR
+    // ============================================================
+    const posModal = $('pos-payment-modal');
+    if (posModal && payButton) {
+        let currentMethod = 'cash';
+        const feeBox = $('pos-fee-display');
+        const getFee = () => (feeBox ? parseInt(feeBox.dataset.fee || '0', 10) : 0);
+        const formatMoney = num => Math.max(0, num).toLocaleString('vi-VN') + ' VNĐ';
+
+        function updateChangeDue() {
+            const fee = getFee();
+            const input = $('pos-cash-given');
+            const changeBox = $('pos-change-box');
+            const changeVal = $('pos-change-val');
+            if (!input || !changeVal) return;
+            const rawVal = input.value.replace(/[^0-9]/g, '');
+            const given = parseInt(rawVal || '0', 10);
+            if (rawVal) {
+                input.value = given.toLocaleString('vi-VN');
+            }
+            const diff = given - fee;
+            if (diff >= 0) {
+                changeBox.classList.remove('negative');
+                changeBox.querySelector('span').textContent = 'Tiền thừa trả khách:';
+                changeVal.textContent = formatMoney(diff);
+            } else {
+                changeBox.classList.add('negative');
+                changeBox.querySelector('span').textContent = 'Còn thiếu:';
+                changeVal.textContent = formatMoney(Math.abs(diff));
+            }
+        }
+
+        function switchPosMethod(method) {
+            currentMethod = method;
+            posModal.querySelectorAll('[data-pos-method]').forEach(tab => {
+                const active = tab.dataset.posMethod === method;
+                tab.classList.toggle('active', active);
+                tab.setAttribute('aria-selected', String(active));
+            });
+            ['cash', 'transfer'].forEach(m => {
+                const content = $('pos-tab-' + m);
+                if (content) content.hidden = (m !== method);
+            });
+            const mainSelect = $('exit-payment-method');
+            if (mainSelect) mainSelect.value = method;
+        }
+
+        function openPosModal() {
+            const plateInput = $('plate');
+            const curPlate = plateInput ? plateInput.value.trim() : '';
+            const plateDisp = $('pos-plate-display');
+            if (plateDisp && curPlate) plateDisp.textContent = curPlate;
+
+            const fee = getFee();
+            const cleanPlate = curPlate.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+
+            // Dynamic VietQR Configuration from System Settings
+            const qrBin = form.dataset.vietqrBin || '970407';
+            const qrBankName = form.dataset.vietqrBankName || 'Techcombank';
+            const qrAccount = form.dataset.vietqrAccount || '19036888888';
+            const qrName = form.dataset.vietqrName || 'SMART PARKING';
+            const qrTemplate = form.dataset.vietqrTemplate || 'compact2';
+
+            const qrImg = $('pos-vietqr-img');
+            const qrBankEl = posModal.querySelector('.pos-qr-bank');
+            const qrNameEl = posModal.querySelector('.pos-qr-name');
+            const qrAmount = $('pos-qr-amount-text');
+            const qrMemo = $('pos-qr-memo-text');
+
+            if (qrBankEl) qrBankEl.textContent = qrBankName + ' · ' + qrAccount;
+            if (qrNameEl) qrNameEl.textContent = qrName;
+            if (qrImg) {
+                qrImg.src = 'https://img.vietqr.io/image/' + qrBin + '-' + encodeURIComponent(qrAccount)
+                    + '-' + qrTemplate + '.png?amount=' + fee
+                    + '&addInfo=' + encodeURIComponent('XE ' + cleanPlate)
+                    + '&accountName=' + encodeURIComponent(qrName);
+            }
+            if (qrAmount) qrAmount.textContent = formatMoney(fee);
+            if (qrMemo) qrMemo.textContent = 'Nội dung: XE ' + cleanPlate;
+
+            // Reset Tiền khách đưa
+            const cashInput = $('pos-cash-given');
+            if (cashInput) {
+                cashInput.value = fee > 0 ? fee.toLocaleString('vi-VN') : '0';
+                updateChangeDue();
+            }
+
+            switchPosMethod('cash');
+            posModal.removeAttribute('hidden');
+            setTimeout(() => { if (cashInput) cashInput.focus(); }, 100);
+        }
+
+        function closePosModal() {
+            posModal.setAttribute('hidden', '');
+        }
+
+        let isPosSubmitting = false;
+
+        payButton.addEventListener('click', event => {
+            if (isPosSubmitting) {
+                return; // Let the real submission through
+            }
+            if (canConfirm) {
+                event.preventDefault();
+                openPosModal();
+            }
+        });
+
+        const closeBtn = $('pos-modal-close-btn');
+        if (closeBtn) closeBtn.addEventListener('click', closePosModal);
+        const cancelBtn = $('pos-modal-cancel-btn');
+        if (cancelBtn) cancelBtn.addEventListener('click', closePosModal);
+
+        posModal.addEventListener('click', event => {
+            if (event.target === posModal) closePosModal();
+        });
+
+        document.addEventListener('keydown', event => {
+            if (!posModal.hasAttribute('hidden')) {
+                if (event.key === 'Escape') {
+                    closePosModal();
+                } else if (event.key === 'F9') {
+                    event.preventDefault();
+                    confirmPosPayment();
+                }
+            }
+        });
+
+        // Tabs
+        posModal.querySelectorAll('[data-pos-method]').forEach(tab => {
+            tab.addEventListener('click', () => switchPosMethod(tab.dataset.posMethod));
+        });
+
+        // Chips
+        posModal.querySelectorAll('.pos-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const cashInput = $('pos-cash-given');
+                if (cashInput) {
+                    cashInput.value = chip.dataset.amount;
+                    updateChangeDue();
+                }
+            });
+        });
+
+        const exactBtn = $('pos-exact-btn');
+        if (exactBtn) {
+            exactBtn.addEventListener('click', () => {
+                const cashInput = $('pos-cash-given');
+                if (cashInput) {
+                    cashInput.value = getFee().toString();
+                    updateChangeDue();
+                }
+            });
+        }
+
+        const cashInput = $('pos-cash-given');
+        if (cashInput) {
+            cashInput.addEventListener('input', updateChangeDue);
+        }
+
+        function confirmPosPayment() {
+            const confirmBtn = $('pos-modal-confirm-btn');
+            if (confirmBtn) {
+                confirmBtn.classList.add('is-loading');
+                confirmBtn.disabled = true;
+                const label = $('pos-confirm-label');
+                if (label) label.textContent = 'Đang thanh toán…';
+            }
+
+            const mainSelect = $('exit-payment-method');
+            if (mainSelect) mainSelect.value = currentMethod;
+
+            const printReceipt = $('pos-print-receipt-cb');
+            const shouldPrint = !printReceipt || printReceipt.checked;
+
+            isPosSubmitting = true;
+            closePosModal();
+
+            // Submit using payButton (value="pay") or confirmButton (value="confirm")
+            const targetBtn = shouldPrint ? payButton : confirmButton;
+            form.requestSubmit(targetBtn);
+        }
+
+        const modalConfirmBtn = $('pos-modal-confirm-btn');
+        if (modalConfirmBtn) {
+            modalConfirmBtn.addEventListener('click', confirmPosPayment);
+        }
+    }
+
     setTimeout(() => {
         document.querySelectorAll('.toast').forEach(toast => {
             toast.classList.add('out');

@@ -11,5 +11,12 @@
     {% if invoice.note %}<p class="invoice-print-note"><b>Ghi chú:</b> {{ invoice.note }}</p>{% endif %}
     <p class="invoice-print-thanks">Cảm ơn quý khách. Hẹn gặp lại!</p>
   </main>
-  <div class="invoice-print-tools"><a href="{{ url_for('invoices') }}">Danh sách hóa đơn</a><button type="button" onclick="window.print()">In phiếu thu</button></div>
+  <div class="invoice-print-tools"><a href="{{ url_for('exit_gate') }}">← Quay lại làn xe ra</a><a href="{{ url_for('invoices') }}">Danh sách hóa đơn</a><button type="button" onclick="window.print()">In phiếu thu</button></div>
+  {% if request.args.get('autoprint') == '1' %}
+  <script>
+    window.addEventListener('load', function() {
+      setTimeout(function() { window.print(); }, 250);
+    });
+  </script>
+  {% endif %}
 </body></html>

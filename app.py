@@ -53,6 +53,7 @@ except ImportError as e:
     print("=" * 60)
     sys.exit(1)
 
+from markupsafe import Markup
 from config import TMP_DIR, IN_DIR, OUT_DIR, TEMPLATES_HTML_DIR, TEMPLATES_CSS_DIR
 import database
 import export_stats
@@ -65,6 +66,25 @@ import support_chat
 
 TMP_FOLDER = TMP_DIR   # ảnh tạm (cache/tmp) giữa bước "Nhận diện" và bước "Xác nhận"
 UPLOAD_DIRS = {'in': IN_DIR, 'out': OUT_DIR}   # static/in: xe vào, static/out: xe ra
+
+VIETNAM_BANKS = [
+    {'bin': '970407', 'short_name': 'Techcombank', 'name': 'Techcombank - Ngân hàng Kỹ Thương'},
+    {'bin': '970436', 'short_name': 'Vietcombank', 'name': 'Vietcombank - Ngân hàng Ngoại Thương'},
+    {'bin': '970422', 'short_name': 'MBBank', 'name': 'MBBank - Ngân hàng Quân Đội'},
+    {'bin': '970415', 'short_name': 'VietinBank', 'name': 'VietinBank - Ngân hàng Công Thương'},
+    {'bin': '970418', 'short_name': 'BIDV', 'name': 'BIDV - Ngân hàng Đầu tư & Phát triển'},
+    {'bin': '970432', 'short_name': 'VPBank', 'name': 'VPBank - Ngân hàng Việt Nam Thịnh Vượng'},
+    {'bin': '970423', 'short_name': 'TPBank', 'name': 'TPBank - Ngân hàng Tiên Phong'},
+    {'bin': '970416', 'short_name': 'ACB', 'name': 'ACB - Ngân hàng Á Châu'},
+    {'bin': '970403', 'short_name': 'Sacombank', 'name': 'Sacombank - Ngân hàng Sài Gòn Thương Tín'},
+    {'bin': '970405', 'short_name': 'Agribank', 'name': 'Agribank - Ngân hàng Nông nghiệp & PTNT'},
+    {'bin': '970441', 'short_name': 'VIB', 'name': 'VIB - Ngân hàng Quốc Tế'},
+    {'bin': '970437', 'short_name': 'HDBank', 'name': 'HDBank - Ngân hàng Phát triển TP.HCM'},
+    {'bin': '970443', 'short_name': 'SHB', 'name': 'SHB - Ngân hàng Sài Gòn - Hà Nội'},
+    {'bin': '970426', 'short_name': 'MSB', 'name': 'MSB - Ngân hàng Hàng Hải'},
+    {'bin': '970448', 'short_name': 'OCB', 'name': 'OCB - Ngân hàng Phương Đông'},
+    {'bin': '970440', 'short_name': 'SeABank', 'name': 'SeABank - Ngân hàng Đông Nam Á'},
+]
 
 FEE_PER_HOUR = 5000  # đơn giá DỰ PHÒNG (5.000 VNĐ/giờ) — chỉ dùng cho xe cũ chưa có loại xe / không còn giá
 MIN_PASSWORD_LEN = 4
@@ -514,6 +534,14 @@ def gate_context(direction, token='', plate='', note='', form=None):
         ctx['preview_url'] = url_for('tmp_preview', filename=f'{token}_ann.jpg',
                                      v=int(os.path.getmtime(os.path.join(TMP_FOLDER, f'{token}_ann.jpg'))))
 
+    ctx.update(
+        vietqr_bank_bin=database.get_setting('vietqr_bank_bin', '970407'),
+        vietqr_bank_name=database.get_setting('vietqr_bank_name', 'Techcombank'),
+        vietqr_account_number=database.get_setting('vietqr_account_number', '19036888888'),
+        vietqr_account_name=database.get_setting('vietqr_account_name', 'SMART PARKING'),
+        vietqr_template=database.get_setting('vietqr_template', 'compact2'),
+    )
+
     if token and len(plate_key(plate)) >= 4:
         registered = database.get_registered_vehicle(plate_key(plate))
         ctx['registered'] = registered
@@ -661,7 +689,7 @@ def handle_gate(direction):
     token = token if find_tmp(token) else ''
     plate = clean_plate_input(request.form.get('plate'))
 
-    if action == 'confirm':
+    if action in ('confirm', 'pay'):
         return gate_confirm(direction, token, plate, note)
     return gate_recognize(direction, token, plate, note)
 
@@ -739,11 +767,19 @@ def gate_confirm(direction, token, plate, note):
             os.remove(os.path.join(OUT_DIR, filename))
             flash(str(error), 'error')
             return redirect(url_for('exit_gate', source=request.form.get('source', 'upload')))
+        invoice_print_url = url_for('invoice_print', record_id=record['id'])
         flash(
-            f'✅ Xe {plate} đã ra bãi (vị trí {exit_slot or "?"}). '
-            f'Thời gian gửi: {duration}. Phí: {fee:,} VNĐ ({fee_note})',
+            Markup(
+                f'✅ Xe <b>{plate}</b> đã ra bãi (vị trí {exit_slot or "?"}). '
+                f'Thời gian gửi: {duration}. Phí: {fee:,} VNĐ ({fee_note}). '
+                f'<a href="{invoice_print_url}" target="_blank" style="margin-left:8px;font-weight:600;text-decoration:underline;">🖨️ In hóa đơn</a>'
+            ),
             'success'
         )
+        if request.form.get('action') == 'pay':
+            return redirect(url_for('exit_gate',
+                                    source=request.form.get('source', 'upload'),
+                                    print_invoice=record['id']))
         return redirect(url_for('exit_gate', source=request.form.get('source', 'upload')))
 
     # ---------- XE VÀO ----------
@@ -1025,12 +1061,35 @@ def parse_stats_range(args):
 def settings():
     actor = database.get_user_by_id(session['user_id'])
     ai_admin = bool(actor and actor['role'] == 'admin' and actor['status'] == 'active')
-    settings_section = 'ai' if request.args.get('section') == 'ai' else 'entry'
+    section_param = request.args.get('section', 'entry')
+    settings_section = 'ai' if section_param == 'ai' else ('payment' if section_param == 'payment' else 'entry')
     if settings_section == 'ai' and not ai_admin:
         abort(403)
     if session.get('role') == 'user':      # người dùng: trang cài đặt tài khoản riêng
         return render_user_settings()
+
     if request.method == 'POST':
+        if request.form.get('setting_type') == 'payment':
+            if session.get('role') not in ('admin', 'manager'):
+                abort(403)
+            bank_bin = request.form.get('vietqr_bank_bin', '').strip()
+            bank_name = request.form.get('vietqr_bank_name', '').strip()
+            acc_num = request.form.get('vietqr_account_number', '').strip()
+            acc_name = request.form.get('vietqr_account_name', '').strip().upper()
+            template = request.form.get('vietqr_template', 'compact2').strip()
+
+            if not acc_num or not bank_bin:
+                flash('Vui lòng chọn ngân hàng và nhập số tài khoản hợp lệ.', 'error')
+                return redirect(url_for('settings', section='payment'))
+
+            database.set_setting('vietqr_bank_bin', bank_bin)
+            database.set_setting('vietqr_bank_name', bank_name or 'Ngân hàng')
+            database.set_setting('vietqr_account_number', acc_num)
+            database.set_setting('vietqr_account_name', acc_name or 'SMART PARKING')
+            database.set_setting('vietqr_template', template or 'compact2')
+            flash('Đã lưu cấu hình tài khoản nhận tiền VietQR thành công.', 'success')
+            return redirect(url_for('settings', section='payment'))
+
         mode = request.form.get('entry_mode')
         if mode not in ('auto', 'manual'):
             flash('Lựa chọn không hợp lệ.', 'error')
@@ -1040,7 +1099,24 @@ def settings():
         return redirect(url_for('settings'))
 
     entry_mode = database.get_user_setting(session['user_id'], 'entry_mode', 'manual')
-    return render_template('settings.html', entry_mode=entry_mode, ai_admin=ai_admin, settings_section=settings_section)
+    vietqr_bank_bin = database.get_setting('vietqr_bank_bin', '970407')
+    vietqr_bank_name = database.get_setting('vietqr_bank_name', 'Techcombank')
+    vietqr_account_number = database.get_setting('vietqr_account_number', '19036888888')
+    vietqr_account_name = database.get_setting('vietqr_account_name', 'SMART PARKING')
+    vietqr_template = database.get_setting('vietqr_template', 'compact2')
+
+    return render_template(
+        'settings.html',
+        entry_mode=entry_mode,
+        ai_admin=ai_admin,
+        settings_section=settings_section,
+        banks=VIETNAM_BANKS,
+        vietqr_bank_bin=vietqr_bank_bin,
+        vietqr_bank_name=vietqr_bank_name,
+        vietqr_account_number=vietqr_account_number,
+        vietqr_account_name=vietqr_account_name,
+        vietqr_template=vietqr_template
+    )
 
 
 # ============================================================

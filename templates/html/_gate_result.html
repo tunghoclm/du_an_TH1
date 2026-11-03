@@ -94,14 +94,6 @@
       {% endif %}
     </div>
 
-    <div class="barrier-strip">
-      <div>
-        <span>Trạng thái Barrier làn vào</span>
-        <b>Sẵn sàng mở cổng khi xác nhận</b>
-      </div>
-      <span class="badge badge-green"><span></span>Hợp lệ</span>
-    </div>
-
   {% elif mode == 'exit' %}
     <div class="badge badge-green"><span></span>XE RA BÃI</div>
     <div class="exit-info">
@@ -132,14 +124,7 @@
       <span class="badge badge-green"><span></span>Sẵn sàng thu phí</span>
     </div>
     {% if fee_preview.fee > 0 %}
-    <div class="form-field" style="margin-top:16px;">
-      <label for="exit-payment-method">Phương thức thanh toán</label>
-      <select id="exit-payment-method" name="payment_method" required>
-        {% for value, label in payment_methods.items() %}
-        <option value="{{ value }}"{% if request.form.get('payment_method', 'cash') == value %} selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
+    <input type="hidden" id="exit-payment-method" name="payment_method" value="{{ request.form.get('payment_method', 'cash') }}">
     {% endif %}
 
   {% else %}

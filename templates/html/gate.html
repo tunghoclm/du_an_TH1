@@ -81,7 +81,12 @@
       id="gate-form"
       class="lanes-grid"
       data-direction="{{ direction }}"
-      data-camera-url="{{ url_for('gate_camera', direction=direction) }}">
+      data-camera-url="{{ url_for('gate_camera', direction=direction) }}"
+      data-vietqr-bin="{{ vietqr_bank_bin }}"
+      data-vietqr-bank-name="{{ vietqr_bank_name }}"
+      data-vietqr-account="{{ vietqr_account_number }}"
+      data-vietqr-name="{{ vietqr_account_name }}"
+      data-vietqr-template="{{ vietqr_template }}">
 
   <input type="hidden" name="token" id="gate-token" value="{{ token }}">
   <input type="hidden" name="checked_plate" id="checked-plate" value="{{ plate }}">
@@ -255,6 +260,7 @@
       </div>
 
       {% set can_confirm = (mode == 'exit') or (mode == 'entry' and not no_slots) %}
+      {% if direction == 'entry' %}
       <div class="lane-actions" style="grid-template-columns: 1fr;">
         <button type="submit"
                 id="confirm-button"
@@ -264,16 +270,165 @@
                 style="width:100%;justify-content:center;"
                 {% if not can_confirm %}disabled{% endif %}>
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-          {% if direction == 'entry' %}
-            Xác nhận CHO XE VÀO BÃI
-          {% else %}
-            Xác nhận CHO XE RA BÃI
-          {% endif %}
+          Xác nhận CHO XE VÀO BÃI
         </button>
       </div>
+      {% else %}
+      <div class="lane-actions exit-lane-actions">
+        <button type="submit"
+                id="confirm-button"
+                name="action"
+                value="confirm"
+                class="btn btn-outline btn-exit-confirm"
+                title="Xác nhận cho xe ra bãi"
+                {% if not can_confirm %}disabled{% endif %}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span>Xác nhận CHO XE ...</span>
+        </button>
+        <button type="submit"
+                id="pay-button"
+                name="action"
+                value="pay"
+                class="btn btn-primary btn-exit-pay"
+                title="Thanh toán và in hóa đơn"
+                {% if not can_confirm %}disabled{% endif %}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+          <span>Thanh toán</span>
+        </button>
+      </div>
+      {% endif %}
     </div>
   </section>
 </form>
+
+{% if request.args.get('print_invoice') %}
+<iframe id="invoice-print-frame"
+        src="{{ url_for('invoice_print', record_id=request.args.get('print_invoice')|int, autoprint='1') }}"
+        style="position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;border:none;"
+        title="In hóa đơn"></iframe>
+{% endif %}
+
+{% if direction == 'exit' %}
+<!-- MODAL THANH TOÁN KIOTVIET POS -->
+<div id="pos-payment-modal" class="pos-modal-backdrop" hidden>
+  <div class="pos-modal" role="dialog" aria-modal="true" aria-labelledby="pos-modal-title">
+    <div class="pos-modal-header">
+      <div class="pos-modal-title-wrap">
+        <span class="pos-modal-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+        </span>
+        <div>
+          <h3 id="pos-modal-title">Thanh toán vé xe</h3>
+          <span class="pos-modal-subtitle">Giao dịch thu ngân làn xe ra</span>
+        </div>
+      </div>
+      <button type="button" class="pos-modal-close" id="pos-modal-close-btn" aria-label="Đóng cửa sổ">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="pos-modal-body">
+      <!-- Tóm tắt giao dịch -->
+      <div class="pos-transaction-card">
+        <div class="pos-transaction-main">
+          <div>
+            <span class="pos-label">Biển số phương tiện</span>
+            <span class="pos-plate-badge" id="pos-plate-display">{{ record.plate_number if record else '' }}</span>
+          </div>
+          <div>
+            <span class="pos-label">Vị trí đỗ &amp; Loại xe</span>
+            <strong id="pos-slot-type">{{ (record.slot_name or '—') ~ ' · ' ~ (record.vehicle_type_name or '—') if record else '—' }}</strong>
+          </div>
+          <div>
+            <span class="pos-label">Thời lượng gửi</span>
+            <span class="pos-duration-badge" id="pos-duration-display">{{ fee_preview.duration if fee_preview else '—' }}</span>
+          </div>
+        </div>
+
+        <div class="pos-amount-due-box">
+          <span class="pos-amount-label">KHÁCH CẦN TRẢ</span>
+          <div class="pos-amount-val" id="pos-fee-display" data-fee="{{ fee_preview.fee if fee_preview else 0 }}">
+            {{ "{:,}".format(fee_preview.fee).replace(",", ".") if fee_preview else "0" }} <small>VNĐ</small>
+          </div>
+          <small class="pos-amount-note" id="pos-note-display">{{ fee_preview.note if fee_preview else '' }}</small>
+        </div>
+      </div>
+
+      <!-- Chọn phương thức thanh toán -->
+      <div class="pos-method-tabs" role="tablist">
+        <button type="button" class="pos-tab active" data-pos-method="cash" role="tab" aria-selected="true">
+          <span>💵 Tiền mặt</span>
+        </button>
+        <button type="button" class="pos-tab" data-pos-method="transfer" role="tab" aria-selected="false">
+          <span>📲 Chuyển khoản VietQR</span>
+        </button>
+      </div>
+
+      <!-- Tab Tiền mặt -->
+      <div class="pos-tab-content" id="pos-tab-cash">
+        <div class="pos-cash-calculator">
+          <div class="form-field">
+            <label for="pos-cash-given">Tiền khách đưa (VNĐ)</label>
+            <div class="pos-input-group">
+              <input type="text" id="pos-cash-given" inputmode="numeric" placeholder="Nhập số tiền..." autocomplete="off">
+              <button type="button" id="pos-exact-btn" class="btn btn-outline btn-sm">Vừa đủ</button>
+            </div>
+          </div>
+
+          <!-- Mệnh giá gợi ý -->
+          <div class="pos-chips-label">Mệnh giá gợi ý:</div>
+          <div class="pos-chips-grid" id="pos-cash-chips">
+            <button type="button" class="pos-chip" data-amount="5000">5.000</button>
+            <button type="button" class="pos-chip" data-amount="10000">10.000</button>
+            <button type="button" class="pos-chip" data-amount="20000">20.000</button>
+            <button type="button" class="pos-chip" data-amount="50000">50.000</button>
+            <button type="button" class="pos-chip" data-amount="100000">100.000</button>
+            <button type="button" class="pos-chip" data-amount="200000">200.000</button>
+            <button type="button" class="pos-chip" data-amount="500000">500.000</button>
+          </div>
+
+          <!-- Tiền thừa trả khách -->
+          <div class="pos-change-box" id="pos-change-box">
+            <span>Tiền thừa trả khách:</span>
+            <strong id="pos-change-val">0 VNĐ</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Chuyển khoản VietQR -->
+      <div class="pos-tab-content" id="pos-tab-transfer" hidden>
+        <div class="pos-qr-card">
+          <div class="pos-qr-image-wrap">
+            <img id="pos-vietqr-img" src="" alt="Mã VietQR thanh toán" width="160" height="160">
+            <div id="pos-qr-loading" class="pos-qr-loading">Đang tải mã VietQR...</div>
+          </div>
+          <div class="pos-qr-info">
+            <div class="pos-qr-bank">{{ vietqr_bank_name }} · {{ vietqr_account_number }}</div>
+            <div class="pos-qr-name">{{ vietqr_account_name }}</div>
+            <div class="pos-qr-amount" id="pos-qr-amount-text">0 VNĐ</div>
+            <div class="pos-qr-memo" id="pos-qr-memo-text">Nội dung: XE ...</div>
+            <small class="pos-qr-hint">Mở ứng dụng Ngân hàng hoặc Ví MoMo/ZaloPay để quét mã thanh toán</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Checkbox in phiếu thu -->
+      <label class="pos-print-option">
+        <input type="checkbox" id="pos-print-receipt-cb" checked>
+        <span>In phiếu thu hóa đơn ngay sau khi hoàn tất</span>
+      </label>
+    </div>
+
+    <div class="pos-modal-footer">
+      <button type="button" class="btn btn-outline" id="pos-modal-cancel-btn">Bỏ qua (Esc)</button>
+      <button type="button" class="btn btn-primary btn-pos-pay" id="pos-modal-confirm-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        <span id="pos-confirm-label">Xác nhận thanh toán</span>
+      </button>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}

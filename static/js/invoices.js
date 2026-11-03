@@ -187,6 +187,19 @@
     });
   });
   document.addEventListener('click', function (event) {
+    var printBtn = event.target.closest('[data-print-invoice]');
+    if (printBtn) {
+      event.preventDefault();
+      var printUrl = printBtn.dataset.printInvoice;
+      var existing = document.getElementById('invoice-print-frame');
+      if (existing) existing.remove();
+      var frame = document.createElement('iframe');
+      frame.id = 'invoice-print-frame';
+      frame.style.cssText = 'position:fixed;top:-1000px;left:-1000px;width:1px;height:1px;border:none;opacity:0;pointer-events:none;';
+      frame.src = printUrl;
+      document.body.appendChild(frame);
+      return;
+    }
     if (!paymentPicker.contains(event.target)) paymentPicker.open = false;
     document.querySelectorAll('.invoice-column-picker[open]').forEach(function (picker) {
       if (!picker.contains(event.target)) picker.open = false;

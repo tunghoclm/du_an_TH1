@@ -94,7 +94,7 @@
           <details class="invoice-method-picker" id="invoice-method-picker">
             <summary class="invoice-method-trigger{% if filters.payment_method %} is-selected{% endif %}" aria-label="Phương thức thanh toán"><span>{{ payment_methods.get(filters.payment_method, 'Chọn phương thức') }}</span><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary>
             <div class="invoice-method-options" aria-labelledby="invoice-payment-label">
-              {% for value, label in payment_methods.items() %}<button type="submit" name="payment_choice" value="{{ value }}" data-invoice-payment="{{ value }}" aria-pressed="{{ 'true' if filters.payment_method == value else 'false' }}">{{ label }}{% if filters.payment_method == value %}<span aria-hidden="true">✓</span>{% endif %}</button>{% endfor %}
+              {% for value, label in payment_methods.items() if value != 'card' %}<button type="submit" name="payment_choice" value="{{ value }}" data-invoice-payment="{{ value }}" aria-pressed="{{ 'true' if filters.payment_method == value else 'false' }}">{{ label }}{% if filters.payment_method == value %}<span aria-hidden="true">✓</span>{% endif %}</button>{% endfor %}
             </div>
           </details>
         </div>
@@ -151,7 +151,7 @@
                   {% if invoice.entry_image or invoice.exit_image %}
                   <details class="invoice-evidence"><summary>Ảnh đối chiếu xe vào / ra</summary><div>{% for direction, label in [('entry', 'Ảnh xe vào'), ('exit', 'Ảnh xe ra')] %}<figure><figcaption>{{ label }}</figcaption>{% if invoice[direction ~ '_image'] %}<img loading="lazy" src="{{ url_for('static', filename=('in/' if direction == 'entry' else 'out/') ~ invoice[direction ~ '_image']) }}" alt="{{ label }} {{ invoice.plate_number }}">{% else %}<p>Không có ảnh</p>{% endif %}</figure>{% endfor %}</div></details>
                   {% endif %}
-                  <div class="invoice-detail-actions"><a href="{{ url_for('invoice_print', record_id=invoice.id) }}" class="invoice-action invoice-action-primary" target="_blank" rel="noopener">{{ icon('print') }} In phiếu thu</a></div>
+                  <div class="invoice-detail-actions"><a href="{{ url_for('invoice_print', record_id=invoice.id) }}" data-print-invoice="{{ url_for('invoice_print', record_id=invoice.id, autoprint='1') }}" class="invoice-action invoice-action-primary" target="_blank" rel="noopener">{{ icon('print') }} In phiếu thu</a></div>
                 </div>
               </section>
             </td></tr>

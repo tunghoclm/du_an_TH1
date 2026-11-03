@@ -445,6 +445,70 @@ class GateTests(unittest.TestCase):
         self.assertEqual(len(source_buttons), 2)
         self.assertTrue(all(attrs['type'] == 'button' for attrs in source_buttons))
 
+    def test_system_settings_vietqr_configuration_and_gate_reflection(self):
+        # 1. Access Settings -> section=payment
+        page = self.client.get('/settings?section=payment')
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('Thanh toán &amp; VietQR', page.text)
+        self.assertIn('name="vietqr_account_number"', page.text)
+
+        # 2. Save custom bank account
+        save_resp = self.client.post('/settings?section=payment', data={
+            'setting_type': 'payment',
+            'vietqr_bank_bin': '970436', # Vietcombank
+            'vietqr_bank_name': 'Vietcombank',
+            'vietqr_account_number': '0011002233445',
+            'vietqr_account_name': 'BAI XE TRUNG TAM',
+            'vietqr_template': 'compact2',
+        })
+        self.assertEqual(save_resp.status_code, 302)
+        self.assertIn('/settings?section=payment', save_resp.location)
+
+        # 3. Check values stored in database
+        self.assertEqual(database.get_setting('vietqr_bank_bin'), '970436')
+        self.assertEqual(database.get_setting('vietqr_account_number'), '0011002233445')
+        self.assertEqual(database.get_setting('vietqr_account_name'), 'BAI XE TRUNG TAM')
+
+        # 4. Check Exit Gate reflects custom VietQR settings
+        self.park(plate='51K-99999')
+        preview, token = self.recognize('/exit', plate='51K-99999')
+        self.assertIn('data-vietqr-bin="970436"', preview.text)
+        self.assertIn('data-vietqr-account="0011002233445"', preview.text)
+        self.assertIn('data-vietqr-name="BAI XE TRUNG TAM"', preview.text)
+
+    def test_exit_lane_has_confirm_and_pay_buttons_and_pay_redirects_to_invoice_print(self):
+        self.park()
+        preview, token = self.recognize('/exit')
+        self.assertIn('id="confirm-button"', preview.text)
+        self.assertIn('id="pay-button"', preview.text)
+        self.assertIn('value="pay"', preview.text)
+        self.assertIn('btn-exit-pay', preview.text)
+        self.assertIn('btn-exit-confirm', preview.text)
+
+        # Action: pay -> closes record and redirects back to exit gate with print_invoice to trigger print directly without leaving gate
+        response = self.client.post('/exit', data={
+            'action': 'pay', 'source': 'camera', 'token': token,
+            'plate': '51F-12345', 'checked_plate': '51F-12345', 'payment_method': 'cash',
+        })
+        self.assertEqual(response.status_code, 302)
+        record = database.find_open_record('51F-12345')
+        self.assertIsNone(record)
+        closed_records = self.module.parking_invoices.get_invoices('admin', 1)
+        invoice = next(r for r in closed_records if r['plate_number'] == '51F-12345')
+        self.assertIn(f"/exit?source=camera&print_invoice={invoice['id']}", response.location)
+
+        # The exit gate page loads with hidden print frame for the invoice, staying right on the gate
+        gate_page = self.client.get(response.location)
+        self.assertEqual(gate_page.status_code, 200)
+        self.assertIn(f'id="invoice-print-frame"', gate_page.text)
+        self.assertIn(f"/invoices/{invoice['id']}/print?autoprint=1", gate_page.text)
+
+        # And the printable invoice endpoint still has the print script
+        print_page = self.client.get(f"/invoices/{invoice['id']}/print?autoprint=1")
+        self.assertEqual(print_page.status_code, 200)
+        self.assertIn('PHIẾU THU PHÍ GỬI XE', print_page.text)
+        self.assertIn('window.print()', print_page.text)
+
 
 if __name__ == '__main__':
     unittest.main()
