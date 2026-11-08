@@ -1,14 +1,14 @@
-{% extends "_layout.html" %}
-{% set active_page = 'gate' %}
+{% extends "_cabin_layout.html" %}
+{% set active_page = 'lanes' %}
+{% from '_cabin_icons.html' import icon %}
 
-{% block title %}Xe ra/vào — Smart Parking{% endblock %}
-{% block breadcrumb %}Giám sát bãi xe / Xe ra/vào{% endblock %}
+{% block title %}Cabin · 2 làn — Smart Parking{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="/css/gate.css">
 {% endblock %}
 
 {% macro camera_icon() -%}
-<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg>
+<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg>
 {%- endmacro %}
 
 {% macro evidence(record, direction) -%}
@@ -20,7 +20,7 @@
       <span class="gate-image-plate">{{ record.plate_number }}</span>
     {% else %}
       <div class="gate-view-empty">
-        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
         <span>Chưa có ảnh xe {{ 'vào' if direction == 'entry' else 'ra' }}</span>
         <small>Ảnh được lưu sau khi xác nhận</small>
       </div>
@@ -29,39 +29,18 @@
 {%- endmacro %}
 
 {% block content %}
-<div class="page-heading gate-page-heading">
-  <div>
-    <h1>Xe ra/vào</h1>
-    <p>Màn hình giám sát và đối chiếu phương tiện tại cổng</p>
-  </div>
-  <div class="heading-actions">
-    <a href="{{ url_for('history') }}" class="btn btn-outline btn-sm">Lịch sử xe</a>
-    <button type="button" id="gate-fullscreen" class="btn btn-outline btn-sm" aria-pressed="false">
-      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg>
-      Phóng to khung
-    </button>
-  </div>
-</div>
-
-<section class="gate-console" id="gate-console" aria-label="Bảng giám sát hai làn xe">
-  <div class="gate-console-toolbar">
-    <div class="gate-notice">
-      <span class="gate-notice-icon" aria-hidden="true">i</span>
-      <div><b>THÔNG BÁO</b><span>Chọn làn để nhận diện và xác nhận xe.</span></div>
-    </div>
-    <dl class="gate-counters">
-      <div><dt>Xe vào hôm nay</dt><dd>{{ stats.period_entries }}</dd></div>
-      <div><dt>Xe ra hôm nay</dt><dd>{{ stats.period_exits }}</dd></div>
-      <div><dt>Xe trong bãi</dt><dd>{{ counts.occupied }}</dd></div>
-      <div><dt>Chỗ trống</dt><dd>{{ counts.available }}<small>/ {{ counts.total }}</small></dd></div>
-      <div class="gate-revenue"><dt>Thu phí hôm nay</dt><dd>{{ stats.period_parking_revenue|vnd }}</dd></div>
-    </dl>
-    <button type="button" id="gate-restore" class="gate-restore" aria-label="Thu nhỏ bảng giám sát" hidden>Thu nhỏ <span aria-hidden="true">×</span></button>
-  </div>
-
-  <div class="gate-dual-lanes">
+<section class="cabin-lanes cabin-pane" aria-label="Bảng giám sát hai làn xe">
+  <div class="gate-dual-lanes" id="cabin-slot-grid">
     {% for direction, lane_name, record, endpoint in [('entry', 'vào', entry_record, 'entry'), ('exit', 'ra', exit_record, 'exit_gate')] %}
-      <section class="gate-console-lane" aria-labelledby="gate-lane-{{ direction }}">
+      <section class="gate-console-lane"
+               aria-labelledby="gate-lane-{{ direction }}"
+               data-cabin-slot="Làn {{ lane_name }}"
+               data-area="{{ direction }}"
+               data-status="{{ 'occupied' if record else 'available' }}"
+               data-plate="{{ record.plate_number if record else '' }}"
+               data-fee="{{ record.preview_fee if record else 0 }}"
+               data-action-url="{{ url_for('exit_gate', plate=record.plate_number) if record and record.status == 'IN' else url_for(endpoint) }}"
+               aria-pressed="false">
         <div class="gate-lane-caption">
           <h2 id="gate-lane-{{ direction }}"><span class="gate-lane-dot {{ direction }}"></span>LÀN {{ lane_name|upper }}</h2>
           <span>{{ 'Lượt vào gần nhất' if direction == 'entry' else 'Lượt ra gần nhất' }}</span>
@@ -106,11 +85,6 @@
           </div>
         </div>
 
-        <div class="gate-lane-strip">
-          <b>LÀN {{ lane_name|upper }}</b>
-          <span>{{ 'Đã ghi nhận xe ' ~ lane_name if record else 'Chờ nhận diện biển số' }}</span>
-          <span class="gate-strip-id">{{ 'CỔNG VÀO' if direction == 'entry' else 'CỔNG RA' }}</span>
-        </div>
         <div class="gate-lane-operation">
           <span>{{ 'Nhận diện biển số và chọn ô đỗ' if direction == 'entry' else 'Đối chiếu ảnh và xác nhận thu phí' }}</span>
           <a href="{{ url_for(endpoint) }}" class="gate-operation-button {{ direction }}">{{ 'Nhận diện xe vào' if direction == 'entry' else 'Nhận diện xe ra' }} <span aria-hidden="true">↗</span></a>
@@ -118,18 +92,57 @@
       </section>
     {% endfor %}
   </div>
-
-  <div class="gate-console-footer">
-    <div><span class="gate-footer-dot"></span>Ảnh và thông tin của lượt xe đã xác nhận</div>
-    <div class="gate-footer-tools">
-      <a href="{{ url_for('gate') }}">Làm mới dữ liệu</a>
-      <span class="gate-footer-divider" aria-hidden="true"></span>
-      <time id="gate-live-clock">—</time>
-    </div>
-  </div>
 </section>
-{% endblock %}
 
-{% block extra_js %}
-<script src="{{ url_for('static', filename='js/gate-monitor.js') }}"></script>
+<section class="cabin-ticket cabin-pane" aria-label="Thông tin phiếu xe">
+  <div class="cabin-ticket-content" aria-live="polite">
+    <div class="cabin-ticket-empty" id="cabin-ticket-empty" aria-hidden="true"></div>
+    {% for direction, lane_name, record in [('entry', 'vào', entry_record), ('exit', 'ra', exit_record)] %}
+    <article class="cabin-slot-detail" data-cabin-detail="Làn {{ lane_name }}" hidden>
+      <div class="cabin-detail-heading">
+        <span>Vé xe · Làn {{ lane_name }}</span>
+        <span class="cabin-state {{ 'occupied' if record else 'available' }}">{{ 'Đang gửi' if record and record.status == 'IN' else ('Đã thu phí' if record else 'Chưa có lượt xe') }}</span>
+      </div>
+      {% if record %}
+        <strong class="cabin-detail-plate">{{ record.plate_number }}</strong>
+        <dl>
+          <div><dt>Vị trí đỗ</dt><dd>{{ record.slot_name or '—' }}</dd></div>
+          <div><dt>Loại xe</dt><dd>{{ record.vehicle_type_name or '—' }}</dd></div>
+          <div><dt>Giờ vào</dt><dd>{{ record.entry_time[:10]|vdate }} · {{ record.entry_time[11:19] }}</dd></div>
+          {% if record.exit_time %}
+          <div><dt>Giờ ra</dt><dd>{{ record.exit_time[:10]|vdate }} · {{ record.exit_time[11:19] }}</dd></div>
+          {% elif record.preview_duration %}
+          <div><dt>Thời gian gửi</dt><dd>{{ record.preview_duration }}</dd></div>
+          {% endif %}
+        </dl>
+      {% else %}
+        <div class="cabin-detail-placeholder">
+          {{ icon('car', 64) }}
+          <h2>Chưa có vé xe ở làn {{ lane_name }}</h2>
+          <span>Nhấn "Nhận diện xe {{ lane_name }}" ở khung bên trái để lập phiếu xe mới.</span>
+        </div>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  <footer class="cabin-ticket-footer">
+    <div class="cabin-ticket-meta">
+      <div class="cabin-ticket-tools">
+        <span class="cabin-staff" title="{{ current_user_fullname or session.get('username') }}"><span>test</span>{{ icon('caret-down', 10) }}</span>
+        <button type="button" class="cabin-round cabin-meta-btn" id="cabin-note-btn" aria-label="Ghi chú phiếu xe" title="Ghi chú">{{ icon('edit', 14) }}</button>
+        <a href="{{ url_for('history') }}" target="_blank" rel="noopener" class="cabin-round cabin-meta-btn" aria-label="Xem lịch sử gửi xe" title="Lịch sử gửi xe">{{ icon('history', 14) }}</a>
+        <a href="{{ url_for('invoices') }}" target="_blank" rel="noopener" class="cabin-round cabin-meta-btn is-muted" aria-label="Hóa đơn" title="Hóa đơn thu phí">{{ icon('ticket-doc', 14) }}</a>
+      </div>
+      <span class="cabin-total">
+        <span id="cabin-total-label">Tổng tiền</span>
+        <span class="cabin-count-badge" id="cabin-total-count">0</span>
+        <strong id="cabin-total">0</strong>
+      </span>
+    </div>
+    <div class="cabin-ticket-actions">
+      <button type="button" class="cabin-secondary-action" id="cabin-exit-action" disabled>{{ icon('bell-solid', 16) }}<span>xe ra</span></button>
+      <button type="button" class="cabin-primary-action" id="cabin-primary-action" disabled>{{ icon('money', 18) }}<span id="cabin-primary-label">Thanh toán</span></button>
+    </div>
+  </footer>
+</section>
 {% endblock %}

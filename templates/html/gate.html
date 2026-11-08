@@ -1,4 +1,4 @@
-{% extends "_layout.html" %}
+{% extends "_cabin_layout.html" %}
 {% set active_page = direction %}
 {% set is_entry = (direction == 'entry') %}
 {% set has_preview = (preview_url is not none and preview_url != '') %}
@@ -122,11 +122,6 @@
     </div>
 
     <div class="camera-frame" style="height: 280px;">
-      <div class="camera-top">
-        <span><i class="live-dot"></i>{{ 'CAM-IN-01 · 1080p · 30fps' if is_entry else 'CAM-OUT-01 · 1080p · 30fps' }}</span>
-        <span>AI LICENSE PLATE OCR</span>
-      </div>
-
       <div class="camera-video-layer">
         <video id="camera-video" playsinline muted hidden></video>
         <canvas id="camera-overlay" hidden></canvas>
@@ -139,29 +134,6 @@
         {% else %}
           <img id="camera-snapshot" class="preview-img" alt="Ảnh nhận diện biển số" hidden>
         {% endif %}
-
-        <div id="camera-placeholder"
-             style="text-align:center;color:#e2ecff;padding:24px;z-index:2;"
-             {% if has_preview %}hidden{% endif %}>
-          <div id="media-placeholder-icon" style="font-size:32px;margin-bottom:6px;">📷</div>
-          <div id="media-placeholder-title" style="font-weight:700;font-size:15px;">Khung hình camera trực tiếp</div>
-          <p id="media-placeholder-text" style="font-size:12px;color:#b8cae8;margin-top:4px;">
-            Bấm "Bắt đầu" để mở camera và tự động quét biển số xe.
-          </p>
-        </div>
-      </div>
-
-      <div class="camera-bottom">
-        <div>
-          <small id="media-caption">
-            {% if has_preview %}
-              Ảnh đã nhận diện · {{ plate or 'Chưa đọc rõ biển số' }}
-            {% else %}
-              Tự động khóa biển số khi ổn định 2 khung hình liên tiếp
-            {% endif %}
-          </small>
-          <strong class="plate" id="media-plate">{{ plate or 'CHƯA NHẬN DIỆN' }}</strong>
-        </div>
       </div>
     </div>
 
@@ -208,8 +180,8 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
         </span>
         <div>
-          <h2>Kết quả nhận diện &amp; Xác nhận</h2>
-          <p>Kiểm tra thông tin biển số, phân khu đỗ xe và điều khiển barrier</p>
+          <h2>{{ 'Phiếu xe vào' if is_entry else 'Phiếu xe ra' }}</h2>
+          <p>{{ 'Nhận diện biển số và chọn vị trí đỗ' if is_entry else 'Đối chiếu phương tiện và xác nhận thu phí' }}</p>
         </div>
       </div>
       {% if plate %}
@@ -270,7 +242,7 @@
                 style="width:100%;justify-content:center;"
                 {% if not can_confirm %}disabled{% endif %}>
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-          Xác nhận CHO XE VÀO BÃI
+          Xác nhận xe vào
         </button>
       </div>
       {% else %}
@@ -283,7 +255,7 @@
                 title="Xác nhận cho xe ra bãi"
                 {% if not can_confirm %}disabled{% endif %}>
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-          <span>Xác nhận CHO XE ...</span>
+          <span>Xe ra</span>
         </button>
         <button type="submit"
                 id="pay-button"

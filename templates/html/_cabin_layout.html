@@ -1,0 +1,84 @@
+{% from '_cabin_icons.html' import icon %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Cabin — Smart Parking{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/images/logo.svg">
+  <link rel="stylesheet" href="/css/theme.css">
+  {% block extra_css %}{% endblock %}
+  <link rel="stylesheet" href="/css/cabin.css">
+</head>
+<body class="cabin-page" data-cabin-page="{{ active_page }}">
+  <h1 class="cabin-sr-only">Cabin quản lý bãi xe</h1>
+  <div class="cabin-shell">
+    <header class="cabin-topbar">
+      <div class="cabin-topbar-left">
+        <nav class="cabin-tabs" aria-label="Chức năng cabin">
+          <a href="{{ url_for('gate') }}" class="cabin-tab parking{% if active_page == 'gate' %} active{% endif %}"{% if active_page == 'gate' %} aria-current="page"{% endif %}>
+            <span class="menu-content"><span class="btn-icon-min">{{ icon('parking', 16) }}</span><span class="tab-title">BÃI ĐỖ</span></span>
+            <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
+          </a>
+          <a href="{{ url_for('exit_gate') }}" class="cabin-tab exit{% if active_page == 'exit' %} active{% endif %}"{% if active_page == 'exit' %} aria-current="page"{% endif %}>
+            <span class="menu-content"><span class="btn-icon-min">{{ icon('exit', 16) }}</span><span class="tab-title">Xe ra</span></span>
+            <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
+          </a>
+          <a href="{{ url_for('entry') }}" class="cabin-tab entry{% if active_page == 'entry' %} active{% endif %}"{% if active_page == 'entry' %} aria-current="page"{% endif %}>
+            <span class="menu-content"><span class="btn-icon-min">{{ icon('entry', 16) }}</span><span class="tab-title">Xe vào</span></span>
+            <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
+          </a>
+          <a href="{{ url_for('gate_lanes') }}" class="cabin-tab lanes{% if active_page == 'lanes' %} active{% endif %}"{% if active_page == 'lanes' %} aria-current="page"{% endif %}>
+            <span class="menu-content"><span class="btn-icon-min">{{ icon('lanes', 16) }}</span><span class="tab-title">2 làn</span></span>
+            <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
+          </a>
+        </nav>
+        <form action="{{ url_for('gate') }}" method="get" class="cabin-search" role="search">
+          {{ icon('search', 16) }}
+          <input type="search" id="cabin-search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Tìm kiếm" aria-label="Tìm ô đỗ hoặc biển số" autocomplete="off">
+        </form>
+      </div>
+      <div class="cabin-topbar-right">
+        <div class="cabin-ticket-tabs">
+          <div class="cabin-ticket-tab active">
+            <span class="menu-content">
+              <span class="name-tab" id="cabin-ticket-tab-label">{{ 'Xe vào' if active_page == 'entry' else ('Xe ra' if active_page == 'exit' else ('2 làn' if active_page == 'lanes' else '1-5')) }}</span>
+              <a href="{{ url_for('gate') }}" class="close-tab" aria-label="Đóng phiếu xe">{{ icon('close', 10) }}</a>
+            </span>
+            <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-active') }}</span>
+          </div>
+          <a href="{{ url_for('entry') }}" class="cabin-new-ticket" aria-label="Tạo phiếu xe mới" title="Tạo phiếu xe mới">{{ icon('plus', 18) }}</a>
+        </div>
+        <div class="cabin-tools">
+          <button type="button" class="cabin-tool" aria-label="Thông báo" title="Thông báo">{{ icon('bell-solid', 15) }}</button>
+          <span class="cabin-tool-sep" aria-hidden="true"></span>
+          <button type="button" id="cabin-refresh" class="cabin-tool" aria-label="Làm mới cabin" title="Làm mới dữ liệu">{{ icon('refresh', 15) }}</button>
+          <span class="cabin-tool-sep" aria-hidden="true"></span>
+          <a href="{{ url_for('invoices') }}" target="_blank" rel="noopener" class="cabin-tool" aria-label="In hóa đơn" title="Hóa đơn &amp; In phiếu">{{ icon('printer', 15) }}</a>
+          <span class="cabin-tool-sep" aria-hidden="true"></span>
+          <span class="cabin-lang-pill" title="Tiếng Việt">{{ icon('vn-flag', 18) }}{{ icon('caret-down', 10) }}</span>
+          <span class="cabin-tool-sep" aria-hidden="true"></span>
+          <span class="cabin-operator" title="{{ current_user_fullname or session.get('username') }}">938147...</span>
+          <div class="cabin-menu-wrap">
+            <button type="button" id="cabin-menu-toggle" class="cabin-tool" aria-label="Menu cabin" aria-controls="cabin-menu" aria-expanded="false">{{ icon('menu', 18) }}</button>
+            <nav id="cabin-menu" class="cabin-menu" aria-label="Menu cabin" hidden>
+              <button type="button" id="cabin-fullscreen" class="cabin-menu-item" aria-pressed="false">Toàn màn hình</button>
+              <a href="{{ url_for('index') }}" target="_blank" rel="noopener">Trang quản lý</a>
+              <a href="{{ url_for('parking') }}" target="_blank" rel="noopener">Quản lý khu và ô đỗ</a>
+              <a href="{{ url_for('history') }}" target="_blank" rel="noopener">Lịch sử xe vào / ra</a>
+              <a href="{{ url_for('invoices') }}" target="_blank" rel="noopener">Hóa đơn thu phí</a>
+              <a href="{{ url_for('settings') }}" target="_blank" rel="noopener">Cài đặt</a>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </header>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}<div class="cabin-flashes" role="status">{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}<button type="button" id="cabin-dismiss-flash" aria-label="Đóng thông báo">{{ icon('close', 16) }}</button></div>{% endif %}
+    {% endwith %}
+    <main class="cabin-main">{% block content %}{% endblock %}</main>
+  </div>
+  <script src="{{ url_for('static', filename='js/cabin.js') }}" defer></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

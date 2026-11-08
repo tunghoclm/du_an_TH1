@@ -206,6 +206,44 @@ class GateTests(unittest.TestCase):
         with self.client.get('/static/js/gate.js') as script_response:
             self.assertEqual(script_response.status_code, 200)
 
+    def test_cabin_is_separate_from_management_and_opens_a_new_tab(self):
+        management = self.client.get('/parking').text
+        cabin_link = re.search(r'<a\b[^>]*class="cabin-button"[^>]*>', management)
+        self.assertIsNotNone(cabin_link)
+        self.assertIn('target="_blank"', cabin_link.group())
+        self.assertIn('rel="noopener"', cabin_link.group())
+        self.assertNotIn('/css/cabin.css', management)
+        cabin = self.client.get('/gate').text
+        self.assertIn('/css/cabin.css', cabin)
+        self.assertNotIn('class="app-header topbar"', cabin)
+        self.assertIn('data-cabin-slot="A01"', cabin)
+
+    def test_cabin_previews_occupied_slot_without_checking_out_vehicle(self):
+        record_id = self.park()
+        database._exec('UPDATE parking_records SET entry_time = ? WHERE id = ?',
+                       ('2026-11-08T09:00:00', record_id))
+
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 11, 8, 10)
+
+        with patch.object(self.module, 'datetime', Clock):
+            cabin = self.client.get('/gate')
+        self.assertEqual(cabin.status_code, 200)
+        self.assertIn('data-status="occupied" data-plate="51F-12345" data-fee="7000"', cabin.text)
+        self.assertIn('/exit?plate=51F-12345', cabin.text)
+        self.assertEqual(database.count_open(), 1)
+        self.assertEqual(database.slot_counts()['occupied'], 1)
+
+    def test_plate_from_cabin_does_not_bypass_image_recognition(self):
+        self.park()
+        response = self.client.get('/exit?plate=51F-12345')
+        self.assertIn('value="51F-12345"', response.text)
+        confirm = re.search(r'<button\b[^>]*id="confirm-button"[^>]*>', response.text)
+        self.assertIn('disabled', confirm.group())
+        self.assertEqual(database.count_open(), 1)
+
     def test_camera_recognition_does_not_record_until_confirmed(self):
         response, token = self.recognize()
         self.assertIn('name="source" id="source-select" value="camera"', response.text)

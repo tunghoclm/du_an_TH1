@@ -36,11 +36,10 @@ class Element {
 
 function harness({ secure = true, preview = false, initialSource = 'upload' } = {}) {
     const ids = ['gate-form', 'image', 'source-select', 'camera-video', 'camera-overlay', 'camera-snapshot',
-        'camera-select', 'camera-status', 'camera-start', 'camera-capture', 'camera-capture-label', 'media-plate', 'camera-refresh', 'recognize-button',
-        'confirm-button', 'camera-placeholder', 'upload-panel', 'camera-panel', 'camera-controls',
+        'camera-select', 'camera-status', 'camera-start', 'camera-capture', 'camera-capture-label', 'camera-refresh', 'recognize-button',
+        'confirm-button', 'upload-panel', 'camera-panel', 'camera-controls',
         'gate-token', 'checked-plate', 'gate-result', 'plate', 'image-recognize-button',
-        'media-source-label', 'media-placeholder-icon', 'media-placeholder-title', 'media-placeholder-text',
-        'media-caption', 'source-camera', 'source-upload'];
+        'media-source-label', 'source-camera', 'source-upload'];
     const elements = Object.fromEntries(ids.map(id => [id, new Element()]));
     const $ = id => elements[id];
     const form = $('gate-form');
@@ -218,7 +217,7 @@ test('Capture freezes a full-size frame, requests accurate OCR and waits for man
     assert.equal(h.frames.length, 1);
     assert.equal(h.frames[0].body.get('profile'), 'capture');
     assert.equal(h.$('gate-token').value, '000000000001');
-    assert.equal(h.$('media-plate').textContent, '51F-12345');
+    assert.equal(h.$('plate').value, '51F-12345');
     assert.equal(h.$('confirm-button').disabled, false);
     assert.equal(h.$('camera-start').textContent, 'Bắt đầu');
     assert.equal(h.posts.length, 0);
@@ -254,7 +253,6 @@ test('low-confidence capture keeps photo for correction and does not enable conf
     assert.equal(h.$('confirm-button').disabled, true);
     assert.equal(h.$('recognize-button').hidden, false);
     assert.equal(h.$('plate').readOnly, false);
-    assert.equal(h.$('media-plate').textContent, 'CHƯA ĐỌC RÕ');
 });
 
 test('failed capture cannot confirm a stale plate or token from the preceding photo', async () => {
@@ -283,18 +281,6 @@ test('a late capture response after switching source cannot overwrite the curren
     assert.equal(h.$('gate-token').value, '');
     assert.equal(h.$('confirm-button').disabled, true);
     assert.ok(h.discarded.includes('000000000001'));
-});
-
-test('live plate badge replaces old text and hides low-confidence guesses', async () => {
-    const h = harness();
-    h.$('media-plate').textContent = 'old-plate';
-    h.responses.push({plate:'18A-12345',confidence:0.9},{plate:'15-P103737',valid:false,confidence:0.3});
-    await h.start();
-    assert.equal(h.$('media-plate').textContent, 'ĐANG QUÉT');
-    await h.runScan();
-    assert.equal(h.$('media-plate').textContent, '18A-12345');
-    await h.runScan();
-    assert.equal(h.$('media-plate').textContent, 'CHƯA ĐỌC RÕ');
 });
 
 test('automatically scans two matching frames, draws a box, fills the form and waits for confirmation', async () => {
@@ -514,13 +500,12 @@ test('low confidence repeated text does not freeze the camera', async () => {
     assert.equal(h.$('gate-token').value, '000000000002'); // vẫn giữ ảnh để sửa tay
 });
 
-test('next scan waits 80 ms and displays server processing time', async () => {
+test('next scan waits 80 ms', async () => {
     const h = harness();
     h.responses.push({ confidence: 0.95, elapsed_ms: 230 });
     await h.start();
     await h.runScan();
     assert.ok([...h.timers.values()].some(timer => timer.delay === 80));
-    assert.match(h.$('media-caption').textContent, /230 ms/);
 });
 
 test('busy OCR backs off without accepting or overlapping frames', async () => {

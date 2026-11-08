@@ -6,7 +6,7 @@ Chức năng:
   /login, /logout   - Đăng nhập / đăng xuất
   /                  - Menu chính (trang chủ)
   /parking           - Sơ đồ bãi đỗ theo khu A/B/C (dữ liệu thật từ DB)
-  /gate              - Giám sát hai làn với khung camera, ảnh đối chiếu và lượt xe gần nhất
+  /gate              - Cabin riêng: sơ đồ ô đỗ, chọn phương tiện và điều hướng xe vào / ra
   /monitoring/parking - Giám sát ô đỗ, chờ tích hợp camera nhận diện tình trạng bãi
   /entry, /exit      - Nhận diện từ ảnh / camera -> kiểm tra -> xác nhận đúng chiều vào / ra
   /history           - Lịch sử toàn bộ lượt gửi xe (có bộ lọc)
@@ -599,15 +599,40 @@ def parking_monitor():
 @login_required
 @staff_required
 def gate():
+    open_records = {record['id']: dict(record) for record in database.get_open_records()}
+    cabin_slots = []
+    now = datetime.now()
+    for item in database.get_all_slots():
+        slot = dict(item)
+        slot['record'] = open_records.get(slot['record_id'])
+        slot['preview_fee'], slot['preview_duration'] = 0, ''
+        if slot['record']:
+            slot['preview_fee'], slot['preview_duration'], _ = calc_fee(slot['record'], now)
+        cabin_slots.append(slot)
+    return render_template('cabin_parking.html',
+                           areas=database.get_areas(), cabin_slots=cabin_slots,
+                           counts=database.slot_counts())
+
+
+@app.route('/gate/lanes')
+@login_required
+@staff_required
+def gate_lanes():
     today = date.today().isoformat()
     records = [dict(record) for record in database.get_all_records()
                if record['status'] in ('IN', 'OUT')]
     entry_record = records[0] if records else None
     exit_record = max((record for record in records if record['status'] == 'OUT'),
                       key=lambda record: record['exit_time'] or '', default=None)
+    now = datetime.now()
     for record in (entry_record, exit_record):
         if record is None:
             continue
+        if record.get('status') == 'IN':
+            record['preview_fee'], record['preview_duration'], _ = calc_fee(record, now)
+        else:
+            record['preview_fee'] = record.get('fee') or 0
+            record['preview_duration'] = ''
         for direction, folder in (('entry', IN_DIR), ('exit', OUT_DIR)):
             filename = record.get(f'{direction}_image')
             record[f'{direction}_image_url'] = (
@@ -681,7 +706,7 @@ def gate_camera(direction):
 
 def handle_gate(direction):
     if request.method == 'GET':
-        return render_gate(direction)
+        return render_gate(direction, plate=normalize_plate(request.args.get('plate', '')[:32]))
 
     action = request.form.get('action', 'recognize')
     note = request.form.get('note', '').strip()

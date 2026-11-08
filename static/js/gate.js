@@ -96,7 +96,6 @@
         if (url) snapshot.src = url;
         else snapshot.removeAttribute('src');
         snapshot.hidden = !url;
-        $('camera-placeholder').hidden = !!url;
     }
     function clearCapturePreview() {
         if (capturePreviewUrl) URL.revokeObjectURL(capturePreviewUrl);
@@ -121,10 +120,8 @@
         clearUploadPreview();
         clearCapturePreview();
         snapshot.src = acceptedPreviewUrl;
-        $('media-caption').textContent = 'Ảnh đã nhận diện · ' + (data.plate || 'Chưa đọc rõ biển số');
         hasPreview = true;
         canConfirm = data.can_confirm && data.valid !== false;
-        $('media-plate').textContent = data.valid === false ? 'CHƯA ĐỌC RÕ' : (data.plate || 'CHƯA NHẬN DIỆN');
         discard(previous);
     }
     function stopCamera(review = false, showMessage = true, keepRequest = false) {
@@ -239,15 +236,10 @@
             if (epoch !== generation || !scanning) { discard(data.token); return; }
             failures = 0;
             drawDetection(data);
-            if (Number.isFinite(data.elapsed_ms)) {
-                $('media-caption').textContent = 'Đang quét · ' + data.elapsed_ms + ' ms / lần'
-                    + (data.confidence ? ' · Độ tin cậy ' + Math.round(data.confidence * 100) + '%' : '');
-            }
             const previous = lastResult;
             lastResult = data;
             if (previous) discard(previous.token);
             const reliable = data.valid && (data.confidence === undefined || data.confidence >= 0.65);
-            $('media-plate').textContent = reliable ? data.plate : 'CHƯA ĐỌC RÕ';
             if (reliable && data.plate_key === candidate) candidateHits += 1;
             else { candidate = reliable ? data.plate_key : ''; candidateHits = reliable ? 1 : 0; }
             if (candidateHits >= 2) {
@@ -292,7 +284,6 @@
         capturing = true;
         canConfirm = false;
         updateControls();
-        $('media-plate').textContent = 'ĐANG NHẬN DIỆN';
         message('Đã chụp khung hình. Đang đọc biển số…');
         let request, timeout;
         try {
@@ -310,7 +301,6 @@
             clearCapturePreview();
             capturePreviewUrl = URL.createObjectURL(blob);
             showPreview();
-            $('media-caption').textContent = 'Ảnh vừa chụp · Đang nhận diện';
             if (pending) await pending.done;
             if (epoch !== generation) return;
             request = { epoch, controller: new AbortController() };
@@ -380,9 +370,6 @@
             });
             video.srcObject = opened;
             video.hidden = false;
-            $('camera-placeholder').hidden = true;
-            $('media-caption').textContent = 'Camera đang hoạt động · Giữ biển số trong khung hình';
-            $('media-plate').textContent = 'ĐANG QUÉT';
             await video.play();
             if (epoch !== generation) return;
             const id = track.getSettings().deviceId || '';
@@ -404,11 +391,6 @@
         $('camera-controls').hidden = !useCamera;
         status.hidden = !useCamera;
         $('media-source-label').textContent = useCamera ? 'Camera' : 'Ảnh tải lên';
-        $('media-placeholder-icon').textContent = useCamera ? '📷' : '🖼️';
-        $('media-placeholder-title').textContent = useCamera ? 'Camera sẵn sàng' : 'Chưa có hình ảnh';
-        $('media-placeholder-text').textContent = useCamera
-            ? 'Bấm Bắt đầu và đưa biển số vào khung hình.'
-            : 'Chọn ảnh có biển số rõ nét để bắt đầu nhận diện.';
         sourceButtons.forEach(button => {
             const active = button.dataset.source === source();
             button.classList.toggle('active', active);
@@ -423,7 +405,6 @@
         clearCapturePreview();
         image.value = '';
         clearUploadPreview();
-        $('media-caption').textContent = hasPreview ? 'Ảnh đã giữ để xác nhận.' : 'Ảnh nhận diện sẽ xuất hiện tại đây.';
         syncSource();
         if (source() === 'camera') void refreshCameras(remembered());
     }
@@ -441,9 +422,6 @@
         const file = image.files[0];
         if (file) {
             uploadPreviewUrl = URL.createObjectURL(file);
-            $('media-caption').textContent = file.name + ' · Chưa nhận diện';
-        } else {
-            $('media-caption').textContent = hasPreview ? 'Ảnh đã giữ để xác nhận.' : 'Ảnh nhận diện sẽ xuất hiện tại đây.';
         }
         showPreview();
         updateControls();

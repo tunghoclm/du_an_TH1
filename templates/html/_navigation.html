@@ -54,7 +54,7 @@
 
     {% if _is_staff %}
     <div class="dropdown-wrap cabin-control{% if _gate_active %} active{% endif %}" data-header-dropdown>
-      <a href="{{ url_for('gate') }}" class="cabin-button" title="Mở cabin giám sát xe ra/vào"{% if active_page == 'gate' %} aria-current="page"{% endif %}>
+      <a href="{{ url_for('gate') }}" target="_blank" rel="noopener" class="cabin-button" title="Mở cabin trong tab mới"{% if active_page == 'gate' %} aria-current="page"{% endif %}>
         <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 12h8M8 16h8"/></svg>
         <span>Cabin</span>
       </a>
@@ -62,8 +62,8 @@
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="popover topbar-popover cabin-menu" id="cabin-menu-popover" hidden>
-        <a href="{{ url_for('entry') }}">Xe vào</a>
-        <a href="{{ url_for('exit_gate') }}">Xe ra</a>
+        <a href="{{ url_for('entry') }}" target="_blank" rel="noopener">Xe vào</a>
+        <a href="{{ url_for('exit_gate') }}" target="_blank" rel="noopener">Xe ra</a>
         <a href="{{ url_for('parking_monitor') }}">Giám sát bãi xe</a>
       </div>
     </div>
@@ -87,7 +87,7 @@
       <div class="popover topbar-popover help-menu" id="help-popover" hidden>
         <h3>Trợ giúp nhanh</h3>
         <p>Tìm biển số xe để tra cứu lịch sử vào / ra và chi tiết thu phí.</p>
-        {% if _is_staff %}<a href="{{ url_for('gate') }}">Mở cabin xe ra/vào <span aria-hidden="true">↗</span></a>{% endif %}
+        {% if _is_staff %}<a href="{{ url_for('gate') }}" target="_blank" rel="noopener">Mở cabin xe ra/vào <span aria-hidden="true">↗</span></a>{% endif %}
         <a href="{{ url_for('pricing') }}">Xem bảng giá gửi xe <span aria-hidden="true">↗</span></a>
         <a href="{{ url_for('settings') }}">Cài đặt tài khoản <span aria-hidden="true">↗</span></a>
       </div>

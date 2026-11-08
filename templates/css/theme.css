@@ -2311,41 +2311,6 @@ tbody tr:focus-visible {
   background-position: 2% 45%;
   filter: brightness(0.8) saturate(0.65);
 }
-.camera-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: absolute;
-  top: 13px;
-  left: 13px;
-  right: 13px;
-  color: #e4edf5;
-  font-size: 9px;
-}
-.camera-top > span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #12355296;
-  padding: 5px 7px;
-  border-radius: 4px;
-}
-.camera-top b {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 8px;
-  font-weight: 500;
-  background: #101b2690;
-  padding: 5px;
-  border-radius: 3px;
-}
-.camera-top b > span {
-  height: 5px;
-  width: 5px;
-  background: #ee6d72;
-  border-radius: 50%;
-}
 .camera-timestamp {
   position: absolute;
   top: 43px;
@@ -2385,21 +2350,6 @@ tbody tr:focus-visible {
 }
 .scan-corners:after {
   transform: rotate(180deg);
-}
-.camera-bottom {
-  position: absolute;
-  left: 15px;
-  right: 15px;
-  bottom: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.camera-bottom > span {
-  font-size: 9px;
-  color: #d1dfed;
-  text-shadow: 0 1px 5px #0c263f;
 }
 .plate {
   display: inline-block;
@@ -4249,10 +4199,8 @@ button.slot:hover {
   height: 100%;
   pointer-events: none;
 }
-.camera-top,
 .camera-timestamp,
-.scan-corners,
-.camera-bottom {
+.scan-corners {
   z-index: 2;
 }
 

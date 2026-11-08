@@ -1,0 +1,78 @@
+{% extends '_cabin_layout.html' %}
+{% set active_page = 'gate' %}
+{% from '_cabin_icons.html' import icon %}
+{% block title %}Cabin · Bãi đỗ — Smart Parking{% endblock %}
+{% block content %}
+<section class="cabin-parking cabin-pane" aria-label="Bãi đỗ xe">
+  <div class="cabin-filters">
+    <div class="cabin-area-row">
+      <div class="cabin-area-tabs" role="group" aria-label="Lọc khu đỗ">
+        <button type="button" class="active" data-cabin-area="all" aria-pressed="true">Tất cả</button>
+        {% for area in areas %}<button type="button" data-cabin-area="{{ area.name }}" aria-pressed="false">Khu {{ area.name }}</button>{% endfor %}
+      </div>
+      <div class="cabin-view-tools">
+        <button type="button" id="cabin-view-toggle" class="cabin-round" aria-label="Đổi kiểu hiển thị" aria-pressed="true" title="Ẩn / hiện danh sách ô đỗ">{{ icon('grid', 15) }}</button>
+        <button type="button" id="cabin-search-focus" class="cabin-round" aria-label="Tìm ô đỗ">{{ icon('search', 15) }}</button>
+      </div>
+    </div>
+    <div class="cabin-status-filters" role="group" aria-label="Lọc trạng thái ô đỗ">
+      <label><input type="radio" name="cabin-status" value="all" checked><span>Tất cả (<span data-cabin-count="all">{{ counts.total }}</span>)</span></label>
+      <label><input type="radio" name="cabin-status" value="occupied"><span>Sử dụng (<span data-cabin-count="occupied">{{ counts.occupied }}</span>)</span></label>
+      <label><input type="radio" name="cabin-status" value="available"><span>Còn trống (<span data-cabin-count="available">{{ counts.available }}</span>)</span></label>
+      {% if counts.maintenance %}<label><input type="radio" name="cabin-status" value="maintenance"><span>Bảo trì (<span data-cabin-count="maintenance">{{ counts.maintenance }}</span>)</span></label>{% endif %}
+    </div>
+  </div>
+  <div class="cabin-slot-scroll" id="cabin-slot-scroll">
+    <div class="cabin-slot-grid" id="cabin-slot-grid">
+      {% for slot in cabin_slots %}
+      <button type="button" class="cabin-slot {{ slot.status }}" data-cabin-slot="{{ slot.slot_name }}" data-area="{{ slot.area }}" data-status="{{ slot.status }}" data-plate="{{ slot.plate_number or '' }}" data-fee="{{ slot.preview_fee }}" data-action-url="{{ url_for('exit_gate', plate=slot.plate_number) if slot.status == 'occupied' else url_for('entry') }}" aria-pressed="false">
+        <span class="cabin-slot-picture">{{ icon('wrench' if slot.status == 'maintenance' else 'car', 34) }}</span>
+        <strong>{{ slot.slot_name }}</strong>
+        <span class="cabin-slot-description">{{ slot.plate_number if slot.status == 'occupied' else ('Bảo trì' if slot.status == 'maintenance' else 'Còn trống') }}</span>
+        <small>Khu {{ slot.area }}</small>
+      </button>
+      {% endfor %}
+    </div>
+    <div class="cabin-no-results" id="cabin-no-results" hidden>{{ icon('search', 36) }}<p>Không tìm thấy ô đỗ phù hợp</p><button type="button" id="cabin-reset-filter">Xóa bộ lọc</button></div>
+  </div>
+</section>
+<section class="cabin-ticket cabin-pane" aria-label="Thông tin phiếu xe">
+  <div class="cabin-ticket-content" aria-live="polite">
+    <div class="cabin-ticket-empty" id="cabin-ticket-empty" aria-hidden="true"></div>
+    {% for slot in cabin_slots %}
+    <article class="cabin-slot-detail" data-cabin-detail="{{ slot.slot_name }}" hidden>
+      <div class="cabin-detail-heading"><span>Ô đỗ {{ slot.slot_name }}</span><span class="cabin-state {{ slot.status }}">{{ 'Đang sử dụng' if slot.status == 'occupied' else ('Đang bảo trì' if slot.status == 'maintenance' else 'Còn trống') }}</span></div>
+      {% if slot.status == 'occupied' %}
+        <strong class="cabin-detail-plate">{{ slot.plate_number }}</strong>
+        <dl><div><dt>Vị trí</dt><dd>Khu {{ slot.area }} · {{ slot.slot_name }}</dd></div>
+        {% if slot.record %}<div><dt>Loại xe</dt><dd>{{ slot.record.vehicle_type_name or '—' }}</dd></div><div><dt>Giờ vào</dt><dd>{{ slot.record.entry_time[:10]|vdate }} · {{ slot.record.entry_time[11:19] }}</dd></div><div><dt>Thời gian gửi</dt><dd>{{ slot.preview_duration }}</dd></div>{% endif %}</dl>
+        <p class="cabin-detail-hint">Đối chiếu ảnh và biển số ở tab Xe ra trước khi xác nhận thu phí.</p>
+      {% elif slot.status == 'maintenance' %}
+        <div class="cabin-detail-placeholder">{{ icon('wrench', 54) }}<h2>Ô đỗ đang bảo trì</h2><p>{{ slot.maintenance_reason or 'Vị trí tạm ngừng tiếp nhận phương tiện.' }}</p></div>
+      {% else %}
+        <div class="cabin-detail-placeholder">{{ icon('car', 64) }}<h2>Sẵn sàng nhận xe</h2><p>Ô {{ slot.slot_name }} · Khu {{ slot.area }}</p><span>Chuyển sang Xe vào để nhận diện biển số và chọn ô đỗ.</span></div>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  <footer class="cabin-ticket-footer">
+    <div class="cabin-ticket-meta">
+      <div class="cabin-ticket-tools">
+        <span class="cabin-staff" title="{{ current_user_fullname or session.get('username') }}"><span>test</span>{{ icon('caret-down', 10) }}</span>
+        <button type="button" class="cabin-round cabin-meta-btn" id="cabin-note-btn" aria-label="Ghi chú phiếu xe" title="Ghi chú">{{ icon('edit', 14) }}</button>
+        <a href="{{ url_for('history') }}" target="_blank" rel="noopener" class="cabin-round cabin-meta-btn" aria-label="Xem lịch sử gửi xe" title="Lịch sử gửi xe">{{ icon('history', 14) }}</a>
+        <a href="{{ url_for('invoices') }}" target="_blank" rel="noopener" class="cabin-round cabin-meta-btn is-muted" aria-label="Hóa đơn" title="Hóa đơn thu phí">{{ icon('ticket-doc', 14) }}</a>
+      </div>
+      <span class="cabin-total">
+        <span id="cabin-total-label">Tổng tiền</span>
+        <span class="cabin-count-badge" id="cabin-total-count">0</span>
+        <strong id="cabin-total">0</strong>
+      </span>
+    </div>
+    <div class="cabin-ticket-actions">
+      <button type="button" class="cabin-secondary-action" id="cabin-exit-action" disabled>{{ icon('bell-solid', 16) }}<span>xe ra</span></button>
+      <button type="button" class="cabin-primary-action" id="cabin-primary-action" disabled>{{ icon('money', 18) }}<span id="cabin-primary-label">Thanh toán</span></button>
+    </div>
+  </footer>
+</section>
+{% endblock %}
