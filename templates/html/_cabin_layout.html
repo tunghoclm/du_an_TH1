@@ -54,11 +54,7 @@
           <span class="cabin-tool-sep" aria-hidden="true"></span>
           <button type="button" id="cabin-refresh" class="cabin-tool" aria-label="Làm mới cabin" title="Làm mới dữ liệu">{{ icon('refresh', 15) }}</button>
           <span class="cabin-tool-sep" aria-hidden="true"></span>
-          <a href="{{ url_for('invoices') }}" target="_blank" rel="noopener" class="cabin-tool" aria-label="In hóa đơn" title="Hóa đơn &amp; In phiếu">{{ icon('printer', 15) }}</a>
-          <span class="cabin-tool-sep" aria-hidden="true"></span>
-          <span class="cabin-lang-pill" title="Tiếng Việt">{{ icon('vn-flag', 18) }}{{ icon('caret-down', 10) }}</span>
-          <span class="cabin-tool-sep" aria-hidden="true"></span>
-          <span class="cabin-operator" title="{{ current_user_fullname or session.get('username') }}">938147...</span>
+          <span class="cabin-operator" title="{{ current_user_fullname or session.get('username') or 'Tài khoản' }}">{{ current_user_fullname or session.get('username') or 'Tài khoản' }}</span>
           <div class="cabin-menu-wrap">
             <button type="button" id="cabin-menu-toggle" class="cabin-tool" aria-label="Menu cabin" aria-controls="cabin-menu" aria-expanded="false">{{ icon('menu', 18) }}</button>
             <nav id="cabin-menu" class="cabin-menu" aria-label="Menu cabin" hidden>

@@ -1,20 +1,182 @@
 {% extends "_layout.html" %}
 {% set active_page = 'settings' %}
-{% block title %}{{ 'Trợ lý AI' if settings_section == 'ai' else ('Tài khoản VietQR' if settings_section == 'payment' else ('Cổng kết nối & Camera' if settings_section == 'devices' else 'Cài đặt hệ thống')) }} — Smart Parking{% endblock %}
-{% block breadcrumb %}Cài đặt hệ thống{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="/css/ai-settings.css">{% endblock %}
-{% block content %}
-<div class="page-heading">
-  <div><h1>Cài đặt hệ thống</h1><p>{{ 'Quản lý kiến thức và huấn luyện trợ lý nội bộ trên máy chủ' if settings_section == 'ai' else ('Cấu hình tài khoản ngân hàng nhận tiền chuyển khoản VietQR' if settings_section == 'payment' else ('Thiết lập camera 2 làn, cổng kết nối barrier, đầu đọc thẻ và thiết bị ngoại vi' if settings_section == 'devices' else 'Cấu hình bãi xe, chế độ cổng vào và quyền vận hành')) }}</p></div>
-</div>
-<nav class="settings-tabs" aria-label="Cài đặt hệ thống">
-  <a href="{{ url_for('settings') }}" class="{{ 'active' if settings_section == 'entry' else '' }}" {% if settings_section == 'entry' %}aria-current="page"{% endif %}>Cấu hình cổng vào</a>
-  <a href="{{ url_for('settings', section='devices') }}" class="{{ 'active' if settings_section == 'devices' else '' }}" {% if settings_section == 'devices' %}aria-current="page"{% endif %}><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>Cổng kết nối &amp; Camera</a>
-  <a href="{{ url_for('settings', section='payment') }}" class="{{ 'active' if settings_section == 'payment' else '' }}" {% if settings_section == 'payment' %}aria-current="page"{% endif %}><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>Thanh toán &amp; VietQR</a>
-  {% if ai_admin %}<a href="{{ url_for('settings', section='ai') }}" class="{{ 'active' if settings_section == 'ai' else '' }}" {% if settings_section == 'ai' %}aria-current="page"{% endif %}><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>Trợ lý AI</a>{% endif %}
-  <a href="{{ url_for('pricing') }}">Cấu hình giá &amp; gói vé</a>
-  {% if current_user_role == 'admin' %}<a href="{{ url_for('accounts') }}">Phân quyền người dùng</a>{% endif %}
-</nav>
-{% if settings_section == 'ai' %}{% include '_settings_ai.html' %}{% elif settings_section == 'payment' %}{% include '_settings_payment.html' %}{% elif settings_section == 'devices' %}{% include '_settings_devices.html' %}{% else %}{% include '_settings_entry.html' %}{% endif %}
+{% block title %}{{ 'Thông tin bãi xe' if settings_section == 'store' else ('Tài khoản VietQR' if settings_section == 'payment' else 'Cổng kết nối & Camera') }} — Smart Parking{% endblock %}
+{% block breadcrumb %}Thiết lập{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/users.css">
+<link rel="stylesheet" href="/css/customers.css">
+<link rel="stylesheet" href="/css/settings-kv.css">
 {% endblock %}
-{% block extra_js %}{% if settings_section == 'ai' %}<script src="/static/js/ai-settings.js" defer></script>{% endif %}{% endblock %}
+
+{% block content %}
+<div class="kv-settings-page">
+  <div class="kv-settings-header">
+    <h1>Thiết lập</h1>
+    <div class="kv-settings-search" role="search">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="search" id="kv-settings-search" placeholder="Tìm kiếm thiết lập" aria-label="Tìm kiếm thiết lập">
+    </div>
+    <div></div>
+  </div>
+
+  <div class="kv-settings-layout">
+    <!-- Cột trái: Danh mục thiết lập giống KiotViet -->
+    <aside class="kv-settings-sidebar" aria-label="Danh mục thiết lập">
+      <div class="kv-sidebar-group-title">Thiết bị &amp; Vận hành</div>
+      <a href="{{ url_for('settings', section='devices') }}"
+         class="kv-sidebar-link{% if settings_section == 'devices' %} active{% endif %}"
+         {% if settings_section == 'devices' %}aria-current="page"{% endif %}>
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+          <span>Cổng kết nối &amp; Camera</span>
+        </span>
+      </a>
+
+      <div class="kv-sidebar-divider"></div>
+      <div class="kv-sidebar-group-title">Tiện ích</div>
+      <a href="{{ url_for('settings', section='payment') }}"
+         class="kv-sidebar-link{% if settings_section == 'payment' %} active{% endif %}"
+         {% if settings_section == 'payment' %}aria-current="page"{% endif %}>
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect width="6" height="6" x="3" y="3" rx="1"/><rect width="6" height="6" x="15" y="3" rx="1"/><rect width="6" height="6" x="3" y="15" rx="1"/><path d="M15 15h2v2h-2zM19 15h2v2h-2zM15 19h2v2h-2zM19 19h2v2h-2z"/></svg>
+          <span>Thanh toán &amp; VietQR</span>
+        </span>
+      </a>
+
+      <div class="kv-sidebar-divider"></div>
+      <div class="kv-sidebar-group-title">Bãi xe</div>
+      <a href="{{ url_for('settings', section='store') }}"
+         class="kv-sidebar-link{% if settings_section == 'store' %} active{% endif %}"
+         {% if settings_section == 'store' %}aria-current="page"{% endif %}>
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>Thông tin bãi xe</span>
+        </span>
+      </a>
+
+      <div class="kv-sidebar-divider"></div>
+      <div class="kv-sidebar-group-title">Quản lý</div>
+      <a href="{{ url_for('pricing') }}" class="kv-sidebar-link">
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <span>Bảng giá &amp; Gói vé</span>
+        </span>
+        <span class="kv-sidebar-ext" aria-hidden="true">↗</span>
+      </a>
+      <a href="{{ url_for('customers') }}" class="kv-sidebar-link">
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          <span>Khách hàng</span>
+        </span>
+        <span class="kv-sidebar-ext" aria-hidden="true">↗</span>
+      </a>
+      {% if current_user_role == 'admin' %}
+      <a href="{{ url_for('accounts') }}" class="kv-sidebar-link">
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+          <span>Quản lý nhân viên</span>
+        </span>
+        <span class="kv-sidebar-ext" aria-hidden="true">↗</span>
+      </a>
+      {% endif %}
+    </aside>
+
+    <!-- Cột giữa: Nội dung thiết lập -->
+    <main class="kv-settings-main" id="kv-settings-main">
+      {% if settings_section == 'devices' %}
+      <div class="kv-auto-entry-note">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <span><strong>Chế độ cổng vào tự động:</strong> Hệ thống tự động gán vị trí đỗ trống phù hợp khi xe vào bãi.</span>
+      </div>
+      {% endif %}
+
+      {% if settings_section == 'payment' %}
+        {% include '_settings_payment.html' %}
+      {% elif settings_section == 'store' %}
+        {% include '_settings_store.html' %}
+      {% else %}
+        {% include '_settings_devices.html' %}
+      {% endif %}
+
+      <div class="kv-search-empty" id="kv-search-empty" hidden>
+        Không tìm thấy mục thiết lập phù hợp trong trang này.
+      </div>
+    </main>
+
+    <!-- Cột phải: Mục lục neo nhanh -->
+    <aside class="kv-settings-toc" aria-label="Mục lục thiết lập">
+      <div class="kv-toc-title">Trong mục này</div>
+      <nav class="kv-toc-list" id="kv-toc-list"></nav>
+    </aside>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+  var main = document.getElementById('kv-settings-main');
+  var tocList = document.getElementById('kv-toc-list');
+  var searchInput = document.getElementById('kv-settings-search');
+  var emptyMsg = document.getElementById('kv-search-empty');
+  if (!main) return;
+
+  // Build Right Table of Contents from panel headings
+  var panels = Array.prototype.slice.call(main.querySelectorAll('.panel'));
+  if (tocList && panels.length) {
+    panels.forEach(function (panel, idx) {
+      var heading = panel.querySelector('h2, h3');
+      if (!heading) return;
+      if (!panel.id) panel.id = 'kv-sec-' + (idx + 1);
+      var link = document.createElement('a');
+      link.href = '#' + panel.id;
+      link.className = 'kv-toc-link' + (idx === 0 ? ' active' : '');
+      link.textContent = heading.textContent.trim();
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        tocList.querySelectorAll('.kv-toc-link').forEach(function (l) { l.classList.remove('active'); });
+        link.classList.add('active');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      tocList.appendChild(link);
+    });
+  }
+
+  // Live filter setting panels
+  if (searchInput) {
+    searchInput.addEventListener('input', function () {
+      var q = (searchInput.value || '').trim().toLowerCase();
+      var visibleCount = 0;
+      panels.forEach(function (panel) {
+        var match = !q || panel.textContent.toLowerCase().indexOf(q) !== -1;
+        panel.hidden = !match;
+        if (match) visibleCount += 1;
+      });
+      if (emptyMsg) emptyMsg.hidden = visibleCount > 0;
+    });
+  }
+
+  // Store & Zones dialogs
+  function openDlg(dlg) {
+    if (!dlg) return;
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+  }
+  function closeDlg(dlg) {
+    if (!dlg) return;
+    if (typeof dlg.close === 'function') dlg.close();
+    else dlg.removeAttribute('open');
+  }
+  document.querySelectorAll('[data-close-dialog]').forEach(function (btn) {
+    btn.addEventListener('click', function () { closeDlg(btn.closest('dialog')); });
+  });
+  var editStoreBtn = document.getElementById('open-edit-store');
+  if (editStoreBtn) {
+    editStoreBtn.addEventListener('click', function () {
+      openDlg(document.getElementById('edit-store-dialog'));
+    });
+  }
+})();
+</script>
+{% endblock %}

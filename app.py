@@ -62,6 +62,7 @@ from plate_recognition import recognize_plate_annotated, recognize_plate, recogn
 from plate_utils import normalize_plate, plate_key, is_valid_plate_format
 import parking_invoices
 import parking_customers
+import parking_employees
 import support_chat
 
 TMP_FOLDER = TMP_DIR   # ảnh tạm (cache/tmp) giữa bước "Nhận diện" và bước "Xác nhận"
@@ -223,10 +224,19 @@ ROLE_LABELS = {'admin': 'Quản trị viên', 'manager': 'Nhân viên', 'user': 
 
 @app.context_processor
 def inject_user():
+    uid = session.get('user_id')
+    role = session.get('role')
+    open_shift = None
+    if uid and role in ('admin', 'manager'):
+        try:
+            open_shift = database.get_open_attendance(uid)
+        except Exception:
+            open_shift = None
     return {
         'current_user_fullname': session.get('fullname'),
-        'current_user_role': session.get('role'),
-        'role_label': ROLE_LABELS.get(session.get('role'), 'Người dùng'),
+        'current_user_role': role,
+        'role_label': ROLE_LABELS.get(role, 'Người dùng'),
+        'open_shift': open_shift,
     }
 
 
@@ -562,7 +572,7 @@ def gate_context(direction, token='', plate='', note='', form=None):
             slots_by_area = database.get_available_slots_by_area()
             ctx.update(
                 mode='entry',
-                entry_mode=database.get_user_setting(session['user_id'], 'entry_mode', 'manual'),
+                entry_mode=database.get_user_setting(session['user_id'], 'entry_mode', 'auto'),
                 slots_by_area=slots_by_area,
                 no_slots=not any(slots_by_area.values()),
                 type_options=[{'id': t['id'], 'name': t['name'],
@@ -861,7 +871,7 @@ def gate_confirm(direction, token, plate, note):
 
     # ---------- XE VÀO ----------
     form = request.form
-    entry_mode = database.get_user_setting(session['user_id'], 'entry_mode', 'manual')
+    entry_mode = database.get_user_setting(session['user_id'], 'entry_mode', 'auto')
 
     all_types = database.get_vehicle_types()
     registered = database.get_registered_vehicle(plate_key(plate))
@@ -1154,17 +1164,37 @@ def get_device_settings():
     }
 
 
+STORE_SETTING_DEFAULTS = {
+    'store_name': 'Smart Parking Trung Tâm',
+    'store_phone': '0901 234 567',
+    'store_email': 'hotro@smartparking.vn',
+    'store_type': 'Bãi xe thông minh 24/7',
+    'store_address': '',
+    'store_province': '',
+    'store_district': '',
+    'store_ward': '',
+    'store_note': '',
+}
+
+ZONE_TYPE_LABELS = {
+    'gate_inout': 'Cổng vào / ra',
+    'gate_in': 'Cổng vào',
+    'gate_out': 'Cổng ra',
+    'area': 'Khu vực đỗ xe',
+}
+
+
+def get_store_settings():
+    return {key: database.get_setting(key, default) for key, default in STORE_SETTING_DEFAULTS.items()}
+
+
 @app.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings():
-    actor = database.get_user_by_id(session['user_id'])
-    ai_admin = bool(actor and actor['role'] == 'admin' and actor['status'] == 'active')
-    section_param = request.args.get('section', 'entry')
+    section_param = request.args.get('section', 'devices')
     settings_section = (
-        section_param if section_param in ('ai', 'payment', 'devices') else 'entry'
+        section_param if section_param in ('payment', 'devices', 'store') else 'devices'
     )
-    if settings_section == 'ai' and not ai_admin:
-        abort(403)
     if session.get('role') == 'user':      # người dùng: trang cài đặt tài khoản riêng
         return render_user_settings()
 
@@ -1203,25 +1233,28 @@ def settings():
             flash('Đã lưu cấu hình tài khoản nhận tiền VietQR thành công.', 'success')
             return redirect(url_for('settings', section='payment'))
 
-        mode = request.form.get('entry_mode')
-        if mode not in ('auto', 'manual'):
-            flash('Lựa chọn không hợp lệ.', 'error')
-            return redirect(url_for('settings'))
-        database.set_user_setting(session['user_id'], 'entry_mode', mode)
-        flash('Đã lưu cài đặt của bạn.', 'success')
+        if setting_type == 'store':
+            if session.get('role') not in ('admin', 'manager'):
+                abort(403)
+            store_name = request.form.get('store_name', '').strip()[:160]
+            if not store_name:
+                flash('Vui lòng nhập tên bãi xe.', 'error')
+                return redirect(url_for('settings', section='store'))
+            for key in STORE_SETTING_DEFAULTS:
+                val = request.form.get(key, '').strip()[:255]
+                database.set_setting(key, val)
+            flash('Đã cập nhật thông tin bãi xe.', 'success')
+            return redirect(url_for('settings', section='store'))
+
         return redirect(url_for('settings'))
 
-    entry_mode = database.get_user_setting(session['user_id'], 'entry_mode', 'manual')
     vietqr_bank_bin = database.get_setting('vietqr_bank_bin', '970407')
     vietqr_bank_name = database.get_setting('vietqr_bank_name', 'Techcombank')
     vietqr_account_number = database.get_setting('vietqr_account_number', '19036888888')
     vietqr_account_name = database.get_setting('vietqr_account_name', 'SMART PARKING')
     vietqr_template = database.get_setting('vietqr_template', 'compact2')
-
     return render_template(
         'settings.html',
-        entry_mode=entry_mode,
-        ai_admin=ai_admin,
         settings_section=settings_section,
         banks=VIETNAM_BANKS,
         vietqr_bank_bin=vietqr_bank_bin,
@@ -1230,7 +1263,55 @@ def settings():
         vietqr_account_name=vietqr_account_name,
         vietqr_template=vietqr_template,
         device_settings=get_device_settings(),
+        store_settings=get_store_settings(),
     )
+
+
+@app.route('/settings/zones/save', methods=['POST'])
+@login_required
+@staff_required
+def save_zone():
+    zone_id = _to_int(request.form.get('zone_id'))
+    name = request.form.get('name', '').strip()[:80]
+    zone_type = request.form.get('zone_type', 'gate_inout')
+    if zone_type not in ZONE_TYPE_LABELS:
+        zone_type = 'gate_inout'
+    location = request.form.get('location', '').strip()[:160]
+    vehicle_type_id = _to_int(request.form.get('vehicle_type_id')) or None
+    try:
+        capacity = max(0, int(request.form.get('capacity') or 0))
+    except ValueError:
+        capacity = 0
+    status = 'inactive' if request.form.get('status') == 'inactive' else 'active'
+    note = request.form.get('note', '').strip()[:255]
+
+    if not name:
+        flash('Vui lòng nhập tên khu vực / cổng.', 'error')
+        return redirect(url_for('settings', section='zones'))
+    try:
+        database.save_parking_zone(zone_id, name, zone_type, location, vehicle_type_id, capacity, status, note)
+        flash('Đã lưu thông tin khu vực / cổng.', 'success')
+    except Exception:
+        flash(f'Tên khu vực "{name}" đã tồn tại.', 'error')
+    return redirect(url_for('settings', section='zones'))
+
+
+@app.route('/settings/zones/<int:zone_id>/toggle', methods=['POST'])
+@login_required
+@staff_required
+def toggle_zone(zone_id):
+    database.toggle_parking_zone(zone_id)
+    flash('Đã cập nhật trạng thái khu vực.', 'success')
+    return redirect(url_for('settings', section='zones'))
+
+
+@app.route('/settings/zones/<int:zone_id>/delete', methods=['POST'])
+@login_required
+@staff_required
+def delete_zone(zone_id):
+    database.delete_parking_zone(zone_id)
+    flash('Đã xóa khu vực.', 'success')
+    return redirect(url_for('settings', section='zones'))
 
 
 # ============================================================
@@ -1538,13 +1619,24 @@ def render_customers(**extra):
 def render_accounts(**extra):
     staff_users = database.get_staff_users()
     customers = database.get_customer_users()
-    return render_template('accounts.html', staff_users=staff_users,
-                           staff_count=len(staff_users),
-                           customer_count=len(customers),
-                           today=date.today().isoformat(),
-                           active_tab='accounts',
-                           form=None,
-                           **extra)
+    context = parking_employees.employee_context(staff_users, request.args)
+    parking_employees.attach_attendance(context['employees'], database.get_employee_attendance(limit=300))
+    context.update({
+        'staff_users': staff_users,
+        'customer_count': len(customers),
+        'zones': database.get_parking_zones(status='active'),
+        'today': date.today().isoformat(),
+        'active_tab': 'accounts',
+        'form': None,
+        'form_errors': [],
+        'edit_form': None,
+        'edit_errors': [],
+        'open_modal': False,
+        'open_edit_modal': False,
+        'min_password_len': MIN_PASSWORD_LEN,
+    })
+    context.update(extra)
+    return render_template('accounts.html', **context)
 
 
 def render_users(**extra):
@@ -1608,6 +1700,93 @@ def customer_profile_save(user_id):
 @admin_required
 def accounts():
     return render_accounts()
+
+
+@app.route('/accounts/export')
+@login_required
+@admin_required
+def accounts_export():
+    from io import BytesIO
+    staff_users = database.get_staff_users()
+    context = parking_employees.employee_context(staff_users, request.args)
+    rows = context['filtered_employees']
+    if request.args.get('ids'):
+        try:
+            selected = {int(value) for value in request.args['ids'].split(',')}
+        except ValueError:
+            abort(400)
+        rows = [emp for emp in rows if emp['id'] in selected]
+    return send_file(BytesIO(parking_employees.export_employees(rows)), as_attachment=True,
+                     mimetype='text/csv; charset=utf-8', download_name=f'nhan-vien_{date.today().isoformat()}.csv')
+
+
+@app.route('/accounts/<int:user_id>/profile', methods=['POST'])
+@login_required
+@admin_required
+def employee_profile_save(user_id):
+    target = database.get_user_by_id(user_id)
+    if target is None or target['role'] not in ('admin', 'manager'):
+        abort(403)
+    emp_data = parking_employees.parse_employee_form(request.form)
+    if target['username'] == 'admin':
+        emp_data['role'] = 'admin'
+    if not emp_data['fullname']:
+        flash('Vui lòng nhập tên nhân viên.', 'error')
+        return render_accounts(
+            open_edit_modal=True,
+            edit_form=dict(emp_data, id=user_id, username=target['username']),
+            edit_errors=['Vui lòng nhập tên nhân viên.'],
+        )
+    database.update_employee_profile(user_id, **emp_data)
+    flash('Đã cập nhật hồ sơ & thiết lập lương nhân viên.', 'success')
+    return redirect(url_for('accounts', open=user_id))
+
+
+@app.route('/attendance/check-in', methods=['POST'])
+@login_required
+@staff_required
+def attendance_check_in():
+    shift_name = request.form.get('shift_name', 'Ca ngày').strip()[:60] or 'Ca ngày'
+    zone_name = request.form.get('zone_name', '').strip()[:80]
+    note = request.form.get('note', '').strip()[:255]
+    database.clock_in_employee(session['user_id'], shift_name=shift_name, zone_name=zone_name, note=note)
+    flash(f'Đã chấm công vào {shift_name}.', 'success')
+    return redirect(request.referrer or url_for('index'))
+
+
+@app.route('/attendance/check-out', methods=['POST'])
+@login_required
+@staff_required
+def attendance_check_out():
+    note = request.form.get('note', '').strip()[:255]
+    if database.clock_out_employee(session['user_id'], note=note):
+        flash('Đã chấm công tan ca.', 'success')
+    else:
+        flash('Bạn chưa chấm công vào ca.', 'error')
+    return redirect(request.referrer or url_for('index'))
+
+
+@app.route('/accounts/<int:user_id>/attendance', methods=['POST'])
+@login_required
+@admin_required
+def employee_add_attendance(user_id):
+    target = database.get_user_by_id(user_id)
+    if target is None or target['role'] not in ('admin', 'manager'):
+        abort(403)
+    work_date = request.form.get('work_date', '').strip() or date.today().isoformat()
+    shift_name = request.form.get('shift_name', 'Ca ngày').strip()[:60] or 'Ca ngày'
+    zone_name = request.form.get('zone_name', '').strip()[:80]
+    status = request.form.get('status', 'completed')
+    if status not in ('completed', 'late', 'leave', 'working'):
+        status = 'completed'
+    note = request.form.get('note', '').strip()[:255]
+    check_in_time = request.form.get('check_in_time', '').strip()
+    check_out_time = request.form.get('check_out_time', '').strip()
+    ci = f"{work_date}T{check_in_time}:00" if check_in_time else ''
+    co = f"{work_date}T{check_out_time}:00" if check_out_time else ''
+    database.add_manual_attendance(user_id, work_date, shift_name, status, ci, co, zone_name, note)
+    flash(f'Đã ghi nhận chấm công cho {target["fullname"]}.', 'success')
+    return redirect(url_for('accounts', open=user_id))
 
 
 @app.route('/users')
@@ -1689,11 +1868,10 @@ def add_customer():
 @admin_required
 def add_account():
     username = request.form.get('username', '').strip()
-    fullname = request.form.get('fullname', '').strip()
     password = request.form.get('password', '')
-    role = request.form.get('role', 'manager')
-    if role not in ('manager', 'admin'):
-        role = 'manager'
+    emp_data = parking_employees.parse_employee_form(request.form)
+    fullname = emp_data['fullname']
+    role = emp_data['role']
 
     errors = []
     if not username or not fullname or not password:
@@ -1707,12 +1885,14 @@ def add_account():
         for e in errors:
             flash(e, 'error')
         return render_accounts(open_modal=True,
-                               form={'username': username, 'fullname': fullname, 'role': role})
+                               form=dict(emp_data, username=username),
+                               form_errors=errors)
 
-    database.add_user(username, fullname, password, role)
+    new_id = database.add_user(username, fullname, password, role)
+    database.update_employee_profile(new_id, **emp_data)
     role_name = 'Quản trị viên' if role == 'admin' else 'Nhân viên vận hành'
     flash(f'Đã tạo tài khoản {role_name} "{username}".', 'success')
-    return redirect(url_for('accounts'))
+    return redirect(url_for('accounts', open=new_id))
 
 
 @app.route('/users/add', methods=['POST'])

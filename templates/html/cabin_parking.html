@@ -57,12 +57,6 @@
   </div>
   <footer class="cabin-ticket-footer">
     <div class="cabin-ticket-meta">
-      <div class="cabin-ticket-tools">
-        <span class="cabin-staff" title="{{ current_user_fullname or session.get('username') }}"><span>test</span>{{ icon('caret-down', 10) }}</span>
-        <button type="button" class="cabin-round cabin-meta-btn" id="cabin-note-btn" aria-label="Ghi chú phiếu xe" title="Ghi chú">{{ icon('edit', 14) }}</button>
-        <a href="{{ url_for('history') }}" target="_blank" rel="noopener" class="cabin-round cabin-meta-btn" aria-label="Xem lịch sử gửi xe" title="Lịch sử gửi xe">{{ icon('history', 14) }}</a>
-        <a href="{{ url_for('invoices') }}" target="_blank" rel="noopener" class="cabin-round cabin-meta-btn is-muted" aria-label="Hóa đơn" title="Hóa đơn thu phí">{{ icon('ticket-doc', 14) }}</a>
-      </div>
       <span class="cabin-total">
         <span id="cabin-total-label">Tổng tiền</span>
         <span class="cabin-count-badge" id="cabin-total-count">0</span>

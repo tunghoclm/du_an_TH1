@@ -76,7 +76,30 @@ def init_db():
                     "ALTER TABLE users ADD COLUMN address TEXT",
                     "ALTER TABLE users ADD COLUMN customer_note TEXT",
                     "ALTER TABLE users ADD COLUMN created_at TEXT",
-                    "ALTER TABLE users ADD COLUMN plate_changes INTEGER NOT NULL DEFAULT 0"):
+                    "ALTER TABLE users ADD COLUMN plate_changes INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN employee_code TEXT",
+                    "ALTER TABLE users ADD COLUMN attendance_code TEXT",
+                    "ALTER TABLE users ADD COLUMN department TEXT",
+                    "ALTER TABLE users ADD COLUMN position TEXT",
+                    "ALTER TABLE users ADD COLUMN work_branch TEXT",
+                    "ALTER TABLE users ADD COLUMN pay_branch TEXT",
+                    "ALTER TABLE users ADD COLUMN start_date TEXT",
+                    "ALTER TABLE users ADD COLUMN id_card TEXT",
+                    "ALTER TABLE users ADD COLUMN gender TEXT",
+                    "ALTER TABLE users ADD COLUMN dob TEXT",
+                    "ALTER TABLE users ADD COLUMN bank_account TEXT",
+                    "ALTER TABLE users ADD COLUMN bank_name TEXT",
+                    "ALTER TABLE users ADD COLUMN bank_holder TEXT",
+                    "ALTER TABLE users ADD COLUMN salary_type TEXT",
+                    "ALTER TABLE users ADD COLUMN salary_amount INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN salary_template TEXT",
+                    "ALTER TABLE users ADD COLUMN bonus_enabled INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN commission_enabled INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN allowance_enabled INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN allowance_amount INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN deduction_enabled INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN deduction_amount INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE users ADD COLUMN deduction_note TEXT"):
         try:
             conn.execute(col_sql)
         except sqlite3.OperationalError:
@@ -617,6 +640,25 @@ def update_customer_profile(user_id, fullname, phone='', email='', address='', c
           (fullname, phone, email, address, customer_note, user_id))
 
 
+def update_employee_profile(user_id, **fields):
+    """Cập nhật thông tin hồ sơ & thiết lập lương cho nhân viên (admin/manager)."""
+    allowed = (
+        'fullname', 'role', 'phone', 'email', 'address', 'customer_note',
+        'employee_code', 'attendance_code', 'department', 'position',
+        'work_branch', 'pay_branch', 'start_date', 'id_card', 'gender', 'dob',
+        'bank_account', 'bank_name', 'bank_holder',
+        'salary_type', 'salary_amount', 'salary_template',
+        'bonus_enabled', 'commission_enabled', 'allowance_enabled',
+        'allowance_amount', 'deduction_enabled', 'deduction_amount', 'deduction_note',
+    )
+    updates = [(k, fields[k]) for k in allowed if k in fields]
+    if not updates:
+        return
+    set_clause = ', '.join(f"{col} = ?" for col, _ in updates)
+    params = [val for _, val in updates] + [user_id]
+    _exec(f"UPDATE users SET {set_clause} WHERE id = ? AND role IN ('admin', 'manager')", tuple(params))
+
+
 def set_user_password(user_id: int, new_password: str):
     conn = get_connection()
     conn.execute("UPDATE users SET password = ? WHERE id = ?", (new_password, user_id))
@@ -878,6 +920,142 @@ def set_setting(key: str, value: str):
     )
     conn.commit()
     conn.close()
+
+
+def get_parking_zones(status: str = '', q: str = ''):
+    conn = get_connection()
+    sql = """
+        SELECT z.*, vt.name AS vehicle_type_name
+        FROM parking_zones z
+        LEFT JOIN vehicle_types vt ON vt.id = z.vehicle_type_id
+        WHERE 1=1
+    """
+    params = []
+    if status in ('active', 'inactive'):
+        sql += " AND z.status = ?"
+        params.append(status)
+    if q:
+        sql += " AND (LOWER(z.name) LIKE ? OR LOWER(COALESCE(z.location, '')) LIKE ?)"
+        like = f"%{q.lower()}%"
+        params.extend([like, like])
+    sql += " ORDER BY z.id ASC"
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return rows
+
+
+def save_parking_zone(zone_id, name: str, zone_type: str = 'gate_inout', location: str = '',
+                      vehicle_type_id=None, capacity: int = 0, status: str = 'active', note: str = ''):
+    conn = get_connection()
+    if zone_id:
+        conn.execute(
+            """UPDATE parking_zones
+               SET name = ?, zone_type = ?, location = ?, vehicle_type_id = ?,
+                   capacity = ?, status = ?, note = ?
+               WHERE id = ?""",
+            (name, zone_type, location, vehicle_type_id, capacity, status, note, zone_id)
+        )
+    else:
+        conn.execute(
+            """INSERT INTO parking_zones
+                   (name, zone_type, location, vehicle_type_id, capacity, status, note, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (name, zone_type, location, vehicle_type_id, capacity, status, note,
+             datetime.now().isoformat(timespec='seconds'))
+        )
+    conn.commit()
+    conn.close()
+
+
+def toggle_parking_zone(zone_id: int):
+    conn = get_connection()
+    row = conn.execute("SELECT status FROM parking_zones WHERE id = ?", (zone_id,)).fetchone()
+    if row:
+        new_status = 'inactive' if row['status'] == 'active' else 'active'
+        conn.execute("UPDATE parking_zones SET status = ? WHERE id = ?", (new_status, zone_id))
+        conn.commit()
+    conn.close()
+
+
+def delete_parking_zone(zone_id: int):
+    _exec("DELETE FROM parking_zones WHERE id = ?", (zone_id,))
+
+
+# ============================================================
+# CHẤM CÔNG NHÂN VIÊN (VÀO CA / TAN CA)
+# ============================================================
+
+def get_open_attendance(user_id: int):
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM employee_attendance WHERE user_id = ? AND check_out IS NULL AND status = 'working' ORDER BY id DESC LIMIT 1",
+        (user_id,)
+    ).fetchone()
+    conn.close()
+    return row
+
+
+def clock_in_employee(user_id: int, shift_name: str = 'Ca ngày', zone_name: str = '', note: str = ''):
+    existing = get_open_attendance(user_id)
+    if existing:
+        return existing['id']
+    now = datetime.now()
+    conn = get_connection()
+    cur = conn.execute(
+        """INSERT INTO employee_attendance (user_id, work_date, shift_name, zone_name, check_in, status, note)
+           VALUES (?, ?, ?, ?, ?, 'working', ?)""",
+        (user_id, now.date().isoformat(), shift_name or 'Ca ngày', zone_name or '',
+         now.isoformat(timespec='seconds'), note or '')
+    )
+    new_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def clock_out_employee(user_id: int, note: str = ''):
+    existing = get_open_attendance(user_id)
+    if not existing:
+        return False
+    now_iso = datetime.now().isoformat(timespec='seconds')
+    final_note = note or (existing['note'] or '')
+    _exec(
+        "UPDATE employee_attendance SET check_out = ?, status = 'completed', note = ? WHERE id = ?",
+        (now_iso, final_note, existing['id'])
+    )
+    return True
+
+
+def add_manual_attendance(user_id: int, work_date: str, shift_name: str = 'Ca ngày',
+                          status: str = 'completed', check_in: str = '', check_out: str = '',
+                          zone_name: str = '', note: str = ''):
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO employee_attendance (user_id, work_date, shift_name, zone_name, check_in, check_out, status, note)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (user_id, work_date, shift_name or 'Ca ngày', zone_name or '',
+         check_in or None, check_out or None, status or 'completed', note or '')
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_employee_attendance(user_id: int = None, limit: int = 100):
+    conn = get_connection()
+    sql = """
+        SELECT a.*, u.fullname, u.username, u.employee_code, u.attendance_code
+        FROM employee_attendance a
+        JOIN users u ON u.id = a.user_id
+    """
+    params = []
+    if user_id is not None:
+        sql += " WHERE a.user_id = ?"
+        params.append(user_id)
+    sql += " ORDER BY a.work_date DESC, a.id DESC LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return rows
 
 
 # ----- Cài đặt riêng của từng người dùng -----

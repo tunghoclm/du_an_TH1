@@ -1,0 +1,134 @@
+/* KiotViet-inspired Employee (Nhân viên) page & 2-tab setup modal */
+.employee-screen .invoice-toolbar { grid-template-columns: 236px minmax(220px, 480px) minmax(290px, 1fr); }
+.employee-table { min-width: 1020px; }
+.employee-table th { height: 52px; }
+.employee-avatar-cell { width: 48px; text-align: center; }
+.employee-row-avatar {
+  display: inline-grid; place-items: center;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: #e6f1fe; color: #0070f4;
+  font-size: 12px; font-weight: 600;
+}
+.employee-name-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.employee-warn-badge {
+  display: inline-grid; place-items: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff7e6; color: #d97706;
+  font-size: 11px; font-weight: 700;
+}
+
+.employee-role-pill {
+  display: inline-block; padding: 3px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 500; white-space: nowrap;
+}
+.employee-role-pill.admin { background: #fff7e6; color: #b45309; }
+.employee-role-pill.manager { background: #edf4fe; color: #0066da; }
+
+/* Modal 2-tab bar (Thông tin | Thiết lập lương) */
+.employee-modal-tabs {
+  display: flex; align-items: center; gap: 28px;
+  padding: 0 24px; border-bottom: 1px solid #eceef1;
+  background: #fff; flex: 0 0 auto;
+}
+.employee-modal-tab {
+  position: relative; padding: 10px 0 12px;
+  border: 0; border-bottom: 2px solid transparent;
+  background: transparent; color: #6e7886;
+  font-size: 14px; font-weight: 500; cursor: pointer;
+}
+.employee-modal-tab[aria-selected="true"] {
+  border-bottom-color: #0070f4; color: #0070f4; font-weight: 600;
+}
+.employee-modal-panel[hidden] { display: none; }
+
+/* Radio gender inline */
+.employee-radio-group {
+  display: flex; align-items: center; gap: 20px; min-height: 32px;
+}
+.employee-radio-group label {
+  display: inline-flex; align-items: center; gap: 7px;
+  color: #15171a; font-size: 14px; cursor: pointer;
+}
+.employee-radio-group input[type="radio"] {
+  width: 16px; height: 16px; margin: 0; accent-color: #0070f4;
+}
+
+/* Salary Setup Cards (Tab 2: Thiết lập lương) */
+.salary-cards { display: grid; gap: 12px; }
+.salary-card {
+  border: 1px solid #eceef1; border-radius: 16px;
+  padding: 14px 16px; background: #fff;
+}
+.salary-card-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.salary-card-title { font-size: 14px; font-weight: 600; color: #15171a; }
+.salary-card-desc { margin-top: 3px; font-size: 12px; color: #7b8594; }
+.salary-card-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px; margin-top: 12px;
+}
+.salary-card-extra { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f2f5; }
+
+/* KiotViet-style toggle switch */
+.kv-switch {
+  position: relative; display: inline-flex; align-items: center;
+  width: 40px; height: 22px; flex: 0 0 40px; cursor: pointer;
+}
+.kv-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.kv-switch-slider {
+  position: absolute; inset: 0; border-radius: 999px;
+  background: #d1d5db; transition: background .18s ease;
+}
+.kv-switch-slider::before {
+  content: ''; position: absolute; left: 3px; top: 3px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px #00000026;
+  transition: transform .18s ease;
+}
+.kv-switch input:checked + .kv-switch-slider { background: #0070f4; }
+.kv-switch input:checked + .kv-switch-slider::before { transform: translateX(18px); }
+
+/* Salary summary pills in inline detail tab */
+.salary-summary-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px; margin-bottom: 18px;
+}
+.salary-summary-box {
+  padding: 12px 14px; border: 1px solid #e9edf2; border-radius: 12px; background: #fafbfc;
+}
+.salary-summary-box small { display: block; color: #687587; font-size: 12px; margin-bottom: 4px; }
+.salary-summary-box strong { color: #15171a; font-size: 15px; font-weight: 600; }
+.salary-feature-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.salary-feature-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border: 1px solid #e9edf2; border-radius: 10px; font-size: 13px;
+}
+.salary-feature-state { font-size: 11px; padding: 3px 8px; border-radius: 999px; font-weight: 500; }
+.salary-feature-state.on { background: #edf8f2; color: #29865e; }
+.salary-feature-state.off { background: #f0f3f7; color: #7c899a; }
+
+@media (max-width: 1100px) {
+  .employee-screen .invoice-toolbar { grid-template-columns: 220px minmax(0, 1fr); }
+}
+@media (max-width: 800px) {
+  .employee-screen .invoice-toolbar { grid-template-columns: 1fr auto; }
+  .salary-card-grid, .salary-summary-grid, .salary-feature-list { grid-template-columns: 1fr; }
+}
+
+.attendance-quick-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  align-items: end;
+  padding: 14px;
+  margin-bottom: 16px;
+  border: 1px solid #e9edf2;
+  border-radius: 12px;
+  background: #fafbfc;
+}
+.attendance-quick-form .form-field { gap: 4px; }
+.attendance-quick-form label { font-size: 11px; color: #687587; }
+.attendance-quick-form input, .attendance-quick-form select {
+  min-height: 32px; padding: 4px 10px; border: 1px solid #d9dce1; border-radius: 8px; font-size: 13px; background: #fff;
+}

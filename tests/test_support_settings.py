@@ -49,10 +49,11 @@ class SupportSettingsTests(unittest.TestCase):
                 self.assertEqual(actor.get('/api/support' + path).status_code, 403)
             for path in ('/ai/settings', '/ai/knowledge', '/ai/train', '/ai/test', '/ai/knowledge/import', '/ai/knowledge/1/delete'):
                 self.assertEqual(self.post(path, {}, actor).status_code, 403)
-            self.assertEqual(actor.get('/settings?section=ai').status_code, 403)
         self.assertEqual(self.app.test_client().get('/api/support/ai/settings').status_code, 401)
         page = self.client.get('/settings?section=ai').text
-        self.assertIn('id="ai-knowledge-form"', page)
+        self.assertNotIn('id="ai-knowledge-form"', page)
+        self.assertNotIn('id="ai-settings"', page)
+        self.assertNotIn('section=ai', page)
         self.assertNotIn('ai-api-key', page)
         self.assertNotIn('name="entry_mode"', page)
         database.toggle_user_status(1)

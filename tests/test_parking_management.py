@@ -96,6 +96,7 @@ class ParkingManagementTests(unittest.TestCase):
         self.assertEqual(self.slot('A01')['status'], 'occupied')
 
     def test_manual_and_automatic_entry_enforce_area_vehicle_type(self):
+        database.set_user_setting(1, 'entry_mode', 'manual')
         other_type = next(t['id'] for t in database.get_vehicle_types() if t['id'] != self.type_id)
         database.save_area(self.area('A')['id'], 'A', other_type)
         _, token = self.recognize()
@@ -108,6 +109,7 @@ class ParkingManagementTests(unittest.TestCase):
         self.assertEqual(self.slot('A01')['status'], 'available')
 
     def test_new_area_works_in_gate_when_no_abc_slots_remain(self):
+        database.set_user_setting(1, 'entry_mode', 'manual')
         database._exec('DELETE FROM parking_slots')
         area_id = database.save_area(None, 'D', self.type_id)
         database.add_slot(area_id, 'D01')

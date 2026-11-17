@@ -288,7 +288,7 @@
   cursor: default;
 }
 .cabin-operator {
-  max-width: 64px;
+  max-width: 160px;
   padding: 0 4px 0 6px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -643,7 +643,7 @@
 .cabin-ticket-meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   padding: 11px 16px;
 }

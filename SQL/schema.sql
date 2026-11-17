@@ -52,6 +52,29 @@ CREATE TABLE IF NOT EXISTS users (
     email     TEXT,
     address   TEXT,
     customer_note TEXT,
+    employee_code TEXT,
+    attendance_code TEXT,
+    department TEXT,
+    position TEXT,
+    work_branch TEXT,
+    pay_branch TEXT,
+    start_date TEXT,
+    id_card TEXT,
+    gender TEXT,
+    dob TEXT,
+    bank_account TEXT,
+    bank_name TEXT,
+    bank_holder TEXT,
+    salary_type TEXT,
+    salary_amount INTEGER NOT NULL DEFAULT 0,
+    salary_template TEXT,
+    bonus_enabled INTEGER NOT NULL DEFAULT 0,
+    commission_enabled INTEGER NOT NULL DEFAULT 0,
+    allowance_enabled INTEGER NOT NULL DEFAULT 0,
+    allowance_amount INTEGER NOT NULL DEFAULT 0,
+    deduction_enabled INTEGER NOT NULL DEFAULT 0,
+    deduction_amount INTEGER NOT NULL DEFAULT 0,
+    deduction_note TEXT,
     created_at TEXT,
     password_changes INTEGER NOT NULL DEFAULT 0, -- số lần người dùng tự đổi mật khẩu (tối đa 3)
     plate_changes    INTEGER NOT NULL DEFAULT 0  -- số lần người dùng tự đổi biển số (tối đa 3)
@@ -163,3 +186,31 @@ CREATE TABLE IF NOT EXISTS support_ai_turns (
     UNIQUE(user_id, client_id)
 );
 CREATE INDEX IF NOT EXISTS idx_support_ai_user ON support_ai_turns(user_id, id);
+
+-- Khu vực / Cổng ra vào bãi xe (VD: Cổng A, Cổng B, Cổng 1, Cổng 2...)
+CREATE TABLE IF NOT EXISTS parking_zones (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    zone_type       TEXT NOT NULL DEFAULT 'gate_inout', -- gate_inout | gate_in | gate_out | area
+    location        TEXT,
+    vehicle_type_id INTEGER,
+    capacity        INTEGER NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'active',     -- active | inactive
+    note            TEXT,
+    created_at      TEXT
+);
+
+-- Bảng chấm công nhân viên theo ca trực
+CREATE TABLE IF NOT EXISTS employee_attendance (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    work_date  TEXT NOT NULL,                          -- YYYY-MM-DD
+    shift_name TEXT NOT NULL DEFAULT 'Ca ngày',
+    zone_name  TEXT,
+    check_in   TEXT,
+    check_out  TEXT,
+    status     TEXT NOT NULL DEFAULT 'working',        -- working | completed | late | leave
+    note       TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_emp_attendance_user ON employee_attendance(user_id, work_date);

@@ -1,244 +1,713 @@
-{% extends "_layout.html" %}
+{% extends '_layout.html' %}
+{% from '_management_icons.html' import icon %}
 {% set active_page = 'accounts' %}
 {% set is_admin = (current_user_role == 'admin') %}
-{% set admin_count = staff_users|selectattr('role', 'equalto', 'admin')|list|length %}
-{% set manager_count = staff_users|selectattr('role', 'equalto', 'manager')|list|length %}
-{% set active_staff = staff_users|selectattr('status', 'equalto', 'active')|list|length %}
 
-{% block title %}Tài khoản Nhân viên & Quản trị — Smart Parking{% endblock %}
-{% block breadcrumb %}Tài khoản nhân viên{% endblock %}
+{% block title %}Tài khoản Nhân viên — Smart Parking{% endblock %}
+{% block breadcrumb %}Nhân viên{% endblock %}
+{% block body_class %}invoice-screen customer-screen employee-screen{% endblock %}
 {% block extra_css %}
+<link rel="stylesheet" href="/css/invoices.css">
 <link rel="stylesheet" href="/css/users.css">
+<link rel="stylesheet" href="/css/customers.css">
+<link rel="stylesheet" href="/css/employees.css">
 {% endblock %}
 
+{% macro sort_link(field, label) -%}
+<a href="{{ url_for('accounts') }}?{{ query_string(sort=field, direction='asc' if filters.sort == field and filters.direction == 'desc' else 'desc', page=1) }}" class="invoice-sort" title="Sắp xếp theo {{ label|lower }}">{{ label }} {{ icon('sort', 13) }}</a>
+{%- endmacro %}
+
+{% macro employee_form_fields(prefix, values, creating=false) -%}
+<div class="employee-modal-panel" data-modal-panel="info">
+  <div class="customer-form-top">
+    <div class="customer-form-grid">
+      <div class="form-field">
+        <label for="{{ prefix }}-emp-code">Mã nhân viên</label>
+        <input id="{{ prefix }}-emp-code" name="employee_code" value="{{ values.employee_code or '' }}" placeholder="Mã nhân viên tự động" maxlength="32">
+      </div>
+      <div class="form-field">
+        <label for="{{ prefix }}-fullname">Tên nhân viên <span class="required">*</span></label>
+        <input id="{{ prefix }}-fullname" name="fullname" value="{{ values.fullname or '' }}" placeholder="Bắt buộc" maxlength="160" required data-employee-name autofocus>
+      </div>
+      <div class="form-field">
+        <label for="{{ prefix }}-phone">Số điện thoại</label>
+        <input id="{{ prefix }}-phone" type="tel" name="phone" value="{{ values.phone or '' }}" placeholder="Nhập số điện thoại" maxlength="32">
+      </div>
+    </div>
+    <div class="customer-form-avatar" aria-hidden="true">
+      <span data-employee-avatar>NV</span>
+      <small>Ảnh đại diện</small>
+    </div>
+  </div>
+
+  <details class="customer-form-section" open>
+    <summary>Thông tin công việc &amp; Tài khoản</summary>
+    <div class="customer-form-section-body">
+      <div class="customer-form-grid">
+        <div class="form-field">
+          <label for="{{ prefix }}-start-date">Ngày bắt đầu làm việc</label>
+          <input id="{{ prefix }}-start-date" type="date" name="start_date" value="{{ values.start_date or '' }}">
+        </div>
+        <div class="form-field">
+          <label for="{{ prefix }}-department">Phòng ban</label>
+          <input id="{{ prefix }}-department" name="department" list="employee-dept-list" value="{{ values.department or '' }}" placeholder="Chọn hoặc nhập phòng ban" maxlength="120">
+        </div>
+        <div class="form-field">
+          <label for="{{ prefix }}-position">Chức danh</label>
+          <input id="{{ prefix }}-position" name="position" list="employee-pos-list" value="{{ values.position or '' }}" placeholder="Chọn hoặc nhập chức danh" maxlength="120">
+        </div>
+        <div class="form-field">
+          <label for="{{ prefix }}-attendance-code">Mã chấm công</label>
+          <input id="{{ prefix }}-attendance-code" name="attendance_code" value="{{ values.attendance_code or '' }}" placeholder="VD: CC001" maxlength="32">
+        </div>
+        <div class="form-field">
+          <label for="{{ prefix }}-username">Tên đăng nhập{% if creating %} <span class="required">*</span>{% endif %}</label>
+          <input id="{{ prefix }}-username" {% if creating %}name="username" required placeholder="VD: nhanvien02"{% else %}name="username" readonly{% endif %} value="{{ values.username or '' }}">
+        </div>
+        {% if creating %}
+        <div class="form-field">
+          <label for="{{ prefix }}-password">Mật khẩu khởi tạo <span class="required">*</span></label>
+          <input id="{{ prefix }}-password" type="password" name="password" minlength="{{ min_password_len }}" placeholder="Tối thiểu {{ min_password_len }} ký tự" required>
+        </div>
+        {% endif %}
+        <div class="form-field">
+          <label for="{{ prefix }}-role">Vai trò hệ thống <span class="required">*</span></label>
+          <select id="{{ prefix }}-role" name="role" required>
+            <option value="manager" {% if not values or values.role == 'manager' %}selected{% endif %}>Nhân viên vận hành (Manager)</option>
+            <option value="admin" {% if values and values.role == 'admin' %}selected{% endif %}>Quản trị viên (Admin)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="{{ prefix }}-note">Ghi chú</label>
+          <input id="{{ prefix }}-note" name="customer_note" value="{{ values.customer_note or '' }}" placeholder="Ghi chú nội bộ" maxlength="500">
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="customer-form-section">
+    <summary>Thông tin ngân hàng</summary>
+    <div class="customer-form-section-body">
+      <div class="customer-form-grid">
+        <div class="form-field">
+          <label for="{{ prefix }}-bank-account">Số tài khoản</label>
+          <input id="{{ prefix }}-bank-account" name="bank_account" value="{{ values.bank_account or '' }}" placeholder="Nhập số tài khoản" maxlength="64">
+        </div>
+        <div class="form-field">
+          <label for="{{ prefix }}-bank-name">Ngân hàng</label>
+          <input id="{{ prefix }}-bank-name" name="bank_name" list="employee-bank-list" value="{{ values.bank_name or '' }}" placeholder="Chọn ngân hàng" maxlength="120">
+        </div>
+        <div class="form-field">
+          <label for="{{ prefix }}-bank-holder">Chủ tài khoản</label>
+          <input id="{{ prefix }}-bank-holder" name="bank_holder" value="{{ values.bank_holder or '' }}" placeholder="Tên chủ tài khoản" maxlength="160">
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="customer-form-section">
+    <summary>Thông tin cá nhân</summary>
+    <div class="customer-form-section-body">
+      <div class="customer-form-grid">
+        <div class="form-field">
+          <label for="{{ prefix }}-id-card">Số CMND/CCCD</label>
+          <input id="{{ prefix }}-id-card" name="id_card" value="{{ values.id_card or '' }}" placeholder="Nhập số CCCD" maxlength="32">
+        </div>
+        <div class="form-field">
+          <label>Giới tính</label>
+          <div class="employee-radio-group">
+            <label><input type="radio" name="gender" value="Nam" {% if values and values.gender == 'Nam' %}checked{% endif %}> Nam</label>
+            <label><input type="radio" name="gender" value="Nữ" {% if values and values.gender == 'Nữ' %}checked{% endif %}> Nữ</label>
+          </div>
+        </div>
+        <div class="form-field">
+          <label for="{{ prefix }}-dob">Ngày sinh</label>
+          <input id="{{ prefix }}-dob" type="date" name="dob" value="{{ values.dob or '' }}">
+        </div>
+        <div class="form-field">
+          <label for="{{ prefix }}-email">Email</label>
+          <input id="{{ prefix }}-email" type="email" name="email" value="{{ values.email or '' }}" placeholder="Nhập email" maxlength="254">
+        </div>
+        <div class="form-field" style="grid-column: 1 / -1;">
+          <label for="{{ prefix }}-address">Địa chỉ</label>
+          <input id="{{ prefix }}-address" name="address" value="{{ values.address or '' }}" placeholder="Nhập địa chỉ liên hệ" maxlength="500">
+        </div>
+      </div>
+    </div>
+  </details>
+</div>
+
+<div class="employee-modal-panel" data-modal-panel="salary" hidden>
+  <div class="salary-cards">
+    <div class="salary-card">
+      <div class="salary-card-head">
+        <div>
+          <div class="salary-card-title">Lương chính</div>
+          <div class="salary-card-desc">Chọn hình thức trả lương và mức lương cơ bản cho nhân viên</div>
+        </div>
+      </div>
+      <div class="salary-card-grid">
+        <div class="form-field">
+          <label for="{{ prefix }}-salary-type">Loại lương</label>
+          <select id="{{ prefix }}-salary-type" name="salary_type">
+            <option value="">Chọn loại lương</option>
+            {% for code, label in salary_types %}
+              <option value="{{ code }}" {% if values and values.salary_type == code %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="{{ prefix }}-salary-amount">Mức lương (VNĐ)</label>
+          <input id="{{ prefix }}-salary-amount" type="number" min="0" step="10000" name="salary_amount" value="{{ values.salary_amount if values and values.salary_amount else '' }}" placeholder="VD: 7000000">
+        </div>
+      </div>
+    </div>
+
+    <div class="salary-card">
+      <div class="salary-card-head">
+        <div>
+          <div class="salary-card-title">Mẫu lương</div>
+          <div class="salary-card-desc">Áp dụng nhanh mẫu lương có sẵn theo ca trực hoặc vị trí</div>
+        </div>
+      </div>
+      <div class="salary-card-grid" style="grid-template-columns: 1fr;">
+        <div class="form-field">
+          <label for="{{ prefix }}-salary-template">Mẫu lương</label>
+          <select id="{{ prefix }}-salary-template" name="salary_template">
+            <option value="">Chọn mẫu lương có sẵn</option>
+            {% for tpl in salary_templates %}
+              <option value="{{ tpl }}" {% if values and values.salary_template == tpl %}selected{% endif %}>{{ tpl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="salary-card">
+      <div class="salary-card-head">
+        <div>
+          <div class="salary-card-title">Phụ cấp</div>
+          <div class="salary-card-desc">Thiết lập khoản hỗ trợ làm việc như ăn trưa, đi lại, điện thoại, ...</div>
+        </div>
+        <label class="kv-switch" aria-label="Bật phụ cấp">
+          <input type="checkbox" name="allowance_enabled" value="1" data-allowance-toggle {% if values and values.allowance_enabled %}checked{% endif %}>
+          <span class="kv-switch-slider"></span>
+        </label>
+      </div>
+      <div class="salary-card-extra" data-allowance-extra {% if not (values and values.allowance_enabled) %}hidden{% endif %}>
+        <div class="form-field">
+          <label for="{{ prefix }}-allowance-amount">Mức phụ cấp hàng tháng (VNĐ)</label>
+          <input id="{{ prefix }}-allowance-amount" type="number" min="0" step="10000" name="allowance_amount" value="{{ values.allowance_amount if values and values.allowance_amount else '' }}" placeholder="VD: 500000">
+        </div>
+      </div>
+    </div>
+
+    <div class="salary-card">
+      <div class="salary-card-head">
+        <div>
+          <div class="salary-card-title">Giảm trừ</div>
+          <div class="salary-card-desc">Thiết lập khoản giảm trừ như đi muộn, về sớm, vi phạm nội quy, ...</div>
+        </div>
+        <label class="kv-switch" aria-label="Bật giảm trừ">
+          <input type="checkbox" name="deduction_enabled" value="1" data-deduction-toggle {% if values and values.deduction_enabled %}checked{% endif %}>
+          <span class="kv-switch-slider"></span>
+        </label>
+      </div>
+      <div class="salary-card-extra" data-deduction-extra {% if not (values and values.deduction_enabled) %}hidden{% endif %}>
+        <div class="salary-card-grid" style="margin-top: 0;">
+          <div class="form-field">
+            <label for="{{ prefix }}-deduction-note">Lý do / Loại giảm trừ</label>
+            <input id="{{ prefix }}-deduction-note" name="deduction_note" list="employee-deduction-list" value="{{ values.deduction_note or '' }}" placeholder="VD: Đi muộn / Về sớm" maxlength="255">
+          </div>
+          <div class="form-field">
+            <label for="{{ prefix }}-deduction-amount">Mức giảm trừ (VNĐ)</label>
+            <input id="{{ prefix }}-deduction-amount" type="number" min="0" step="10000" name="deduction_amount" value="{{ values.deduction_amount if values and values.deduction_amount else '' }}" placeholder="VD: 200000">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{%- endmacro %}
+
 {% block content %}
-<div class="page-heading">
-  <div>
-    <h1>Tài khoản Nhân viên &amp; Quản trị</h1>
-    <p>Quản lý danh sách tài khoản quản trị viên và nhân viên trực vận hành hệ thống bãi xe</p>
-  </div>
-  <div class="heading-actions">
-    <button type="button" class="btn btn-primary" id="open-add-account">+ Thêm tài khoản nhân viên</button>
-  </div>
-</div>
+<datalist id="employee-dept-list">
+  {% for dept in departments %}<option value="{{ dept }}">{% endfor %}
+</datalist>
+<datalist id="employee-pos-list">
+  {% for pos in positions %}<option value="{{ pos }}">{% endfor %}
+</datalist>
+<datalist id="employee-bank-list">
+  <option value="Vietcombank"><option value="BIDV"><option value="VietinBank">
+  <option value="Techcombank"><option value="MBBank"><option value="ACB">
+  <option value="VPBank"><option value="TPBank"><option value="Agribank"><option value="Sacombank">
+</datalist>
+<datalist id="employee-deduction-list">
+  <option value="Đi muộn / Về sớm">
+  <option value="Nghỉ không phép">
+  <option value="Vi phạm nội quy">
+  <option value="Sai sót thu phí / Mất thẻ">
+</datalist>
+<datalist id="employee-zone-list">
+  {% for z in zones %}<option value="{{ z.name }}">{% endfor %}
+</datalist>
 
-<div class="chip-list" style="margin-bottom: 20px;">
-  <a href="{{ url_for('customers') }}" class="chip">
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-    Khách hàng ({{ customer_count }})
-  </a>
-  <a href="{{ url_for('accounts') }}" class="chip active">
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
-    Tài khoản nhân viên &amp; Quản trị ({{ staff_count }})
-  </a>
-</div>
-
-<div class="stats-grid four">
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Tổng số nhân sự</span>
-      <span class="stat-icon blue">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
-      </span>
+<section class="invoice-page customer-page employee-page" aria-label="Danh sách nhân viên" {% if open_employee_id %}data-open-employee="{{ open_employee_id }}"{% endif %}>
+  <div class="invoice-toolbar">
+    <h1>Danh sách nhân viên <span>{{ staff_count }}</span></h1>
+    <div class="invoice-search">
+      {{ icon('search') }}
+      <input type="search" name="q" form="employee-filters" value="{{ filters.q }}" placeholder="Tìm theo mã, tên nhân viên, SĐT" aria-label="Tìm nhân viên">
+      <button type="submit" form="employee-filters" aria-label="Tìm kiếm nhân viên">{{ icon('filter') }}</button>
     </div>
-    <strong>{{ staff_users|length }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Tài khoản nội bộ
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Quản trị viên</span>
-      <span class="stat-icon amber">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
-      </span>
-    </div>
-    <strong>{{ admin_count }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Toàn quyền quản trị
+    <div class="invoice-actions">
+      <button type="button" class="invoice-action invoice-mobile-filter" id="employee-filter-toggle" aria-controls="employee-filter-sidebar" aria-expanded="false">{{ icon('filter') }} Bộ lọc</button>
+      <button type="button" class="invoice-action invoice-action-primary" id="open-add-account" aria-label="Thêm nhân viên">{{ icon('plus') }} <span>Nhân viên</span></button>
+      <a class="invoice-action" id="employee-export" href="{{ url_for('accounts_export') }}?{{ query_string() }}" aria-label="Xuất file nhân viên">{{ icon('export') }} <span>Xuất file</span></a>
+      <details class="invoice-column-picker customer-column-picker">
+        <summary class="invoice-action invoice-action-square" aria-label="Cài đặt cột nhân viên" title="Cài đặt cột">{{ icon('columns') }}</summary>
+        <div>
+          <b>Cột hiển thị</b>
+          {% for code, label in [('attendance','Mã chấm công'),('phone','Số điện thoại'),('id_card','Số CMND/CCCD'),('department','Phòng ban'),('role','Vai trò'),('note','Ghi chú')] %}
+            <label><input type="checkbox" data-employee-column="{{ code }}" checked> {{ label }}</label>
+          {% endfor %}
+        </div>
+      </details>
     </div>
   </div>
 
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Nhân viên vận hành</span>
-      <span class="stat-icon blue">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
-      </span>
-    </div>
-    <strong>{{ manager_count }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Trực cổng &amp; điều phối
-    </div>
-  </div>
+  <div class="invoice-workspace">
+    <aside class="invoice-filters" id="employee-filter-sidebar" aria-label="Bộ lọc nhân viên">
+      <form id="employee-filters" method="get" action="{{ url_for('accounts') }}">
+        <input type="hidden" name="sort" value="{{ filters.sort }}">
+        <input type="hidden" name="direction" value="{{ filters.direction }}">
 
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Đang hoạt động</span>
-      <span class="stat-icon green">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
-      </span>
-    </div>
-    <strong>{{ active_staff }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Được phép đăng nhập
-    </div>
-  </div>
-</div>
+        <fieldset class="customer-status-filter">
+          <legend>Trạng thái</legend>
+          {% for value, label in [('', 'Tất cả'), ('active', 'Đang làm việc'), ('locked', 'Đã nghỉ')] %}
+            <label>
+              <input type="radio" name="status" value="{{ value }}" {% if filters.status == value %}checked{% endif %} data-employee-auto-submit>
+              {{ label }}
+            </label>
+          {% endfor %}
+        </fieldset>
 
-<section class="panel data-panel">
-  <div class="panel-heading">
-    <h2>Danh sách tài khoản nhân viên &amp; quản trị <span class="count-pill">{{ staff_users|length }}</span></h2>
-  </div>
+        <div class="invoice-filter-group">
+          <label for="employee-dept-filter">Phòng ban</label>
+          <select id="employee-dept-filter" name="department" data-employee-auto-submit>
+            <option value="">Chọn phòng ban</option>
+            {% for dept in departments %}
+              <option value="{{ dept }}" {% if filters.department == dept %}selected{% endif %}>{{ dept }}</option>
+            {% endfor %}
+          </select>
+        </div>
 
-  <div class="table-toolbar">
-    <div class="search-input">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <input type="text" placeholder="Tìm theo họ tên nhân viên, tên tài khoản, vai trò..." data-table-search>
-    </div>
-  </div>
+        <div class="invoice-filter-group">
+          <label for="employee-pos-filter">Chức danh</label>
+          <select id="employee-pos-filter" name="position" data-employee-auto-submit>
+            <option value="">Chọn chức danh</option>
+            {% for pos in positions %}
+              <option value="{{ pos }}" {% if filters.position == pos %}selected{% endif %}>{{ pos }}</option>
+            {% endfor %}
+          </select>
+        </div>
 
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Họ và tên</th>
-          <th>Tên đăng nhập</th>
-          <th>Vai trò hệ thống</th>
-          <th>Trạng thái</th>
-          <th class="right">Thao tác</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if staff_users %}
-          {% for u in staff_users %}
+        <div class="invoice-filter-group">
+          <label for="employee-role-filter">Vai trò hệ thống</label>
+          <select id="employee-role-filter" name="role" data-employee-auto-submit>
+            <option value="">Tất cả vai trò</option>
+            <option value="manager" {% if filters.role == 'manager' %}selected{% endif %}>Nhân viên vận hành</option>
+            <option value="admin" {% if filters.role == 'admin' %}selected{% endif %}>Quản trị viên</option>
+          </select>
+        </div>
+
+        <button type="submit" class="invoice-action invoice-action-primary invoice-apply">Áp dụng bộ lọc</button>
+        <a class="invoice-reset" href="{{ url_for('accounts') }}">Đặt lại bộ lọc</a>
+      </form>
+    </aside>
+
+    <div class="invoice-results customer-results">
+      <div class="invoice-selection" id="employee-selection" hidden>
+        <span>Đã chọn <b id="employee-selected-count">0</b> nhân viên</span>
+        <a id="employee-export-selected" href="#">{{ icon('export', 16) }} Xuất file đã chọn</a>
+      </div>
+
+      <div class="invoice-table-scroll">
+        <table class="invoice-table customer-table employee-table" aria-label="Danh sách nhân viên">
+          <thead>
             <tr>
+              <th class="invoice-check"><input id="employee-select-all" type="checkbox" aria-label="Chọn tất cả nhân viên trên trang"></th>
+              <th class="employee-avatar-cell" aria-label="Ảnh"></th>
+              <th>{{ sort_link('code', 'Mã nhân viên') }}</th>
+              <th data-employee-cell="attendance">Mã chấm công</th>
+              <th>{{ sort_link('name', 'Tên nhân viên') }}</th>
+              <th data-employee-cell="phone">Số điện thoại</th>
+              <th data-employee-cell="id_card">Số CMND/CCCD</th>
+              <th data-employee-cell="department">Phòng ban</th>
+              <th data-employee-cell="role">{{ sort_link('role', 'Vai trò') }}</th>
+              <th data-employee-cell="note">Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for emp in employees %}
+            <tr class="customer-row" data-employee-row="{{ emp.id }}">
+              <td class="invoice-check"><input type="checkbox" data-select-employee="{{ emp.id }}" aria-label="Chọn nhân viên {{ emp.code }}"></td>
+              <td class="employee-avatar-cell"><span class="employee-row-avatar">{{ emp.initials }}</span></td>
               <td>
-                <div class="person-cell">
-                  <div class="mini-avatar">{{ (u.fullname or u.username)[:2]|upper }}</div>
-                  <div>
-                    <b>{{ u.fullname }}</b>
-                    <small>ID: #{{ u.id }}</small>
-                  </div>
-                </div>
+                <button type="button" class="invoice-code" data-toggle-employee="{{ emp.id }}" aria-expanded="false" aria-controls="employee-detail-{{ emp.id }}">{{ emp.code }}</button>
               </td>
-              <td><b>{{ u.username }}</b></td>
-              <td>
-                {% if u.role == 'admin' %}
-                  <span class="badge badge-amber"><span></span>Quản trị viên (Admin)</span>
-                {% elif u.role == 'manager' %}
-                  <span class="badge badge-blue"><span></span>Nhân viên vận hành (Manager)</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if u.status == 'active' %}
-                  <span class="badge badge-green"><span></span>Hoạt động</span>
-                {% else %}
-                  <span class="badge badge-red"><span></span>Đã khóa</span>
-                {% endif %}
-              </td>
-              <td class="right">
-                <div class="row-actions">
-                  <a href="{{ url_for('edit_user', user_id=u.id) }}" class="btn btn-outline">Chi tiết / Sửa</a>
-                  {% if is_admin and u.username != 'admin' %}
-                    <form method="POST" action="{{ url_for('toggle_user', user_id=u.id) }}">
-                      <button type="submit" class="btn btn-outline">
-                        {{ 'Khóa' if u.status == 'active' else 'Mở khóa' }}
-                      </button>
-                    </form>
-                    <form method="POST" action="{{ url_for('remove_user', user_id=u.id) }}" onsubmit="return confirm('Xóa tài khoản nhân viên {{ u.username }}?');">
-                      <button type="submit" class="btn btn-danger">Xóa</button>
-                    </form>
+              <td data-employee-cell="attendance">{{ emp.attendance_code or '—' }}</td>
+              <td class="customer-name-cell">
+                <span class="employee-name-wrap">
+                  <span>{{ emp.fullname }}</span>
+                  {% if emp.missing_setup %}
+                    <span class="employee-warn-badge" title="Chưa hoàn tất thông tin SĐT hoặc thiết lập lương">!</span>
                   {% endif %}
-                </div>
+                </span>
+              </td>
+              <td data-employee-cell="phone">{{ emp.phone or '—' }}</td>
+              <td data-employee-cell="id_card">{{ emp.id_card or '—' }}</td>
+              <td data-employee-cell="department">{{ emp.department or '—' }}</td>
+              <td data-employee-cell="role">
+                <span class="employee-role-pill {{ emp.role }}">
+                  {{ 'Quản trị viên' if emp.role == 'admin' else 'Nhân viên' }}
+                </span>
+              </td>
+              <td data-employee-cell="note">{{ emp.customer_note or '—' }}</td>
+            </tr>
+
+            <tr class="customer-detail-row" id="employee-detail-{{ emp.id }}" hidden>
+              <td colspan="10" data-employee-colspan>
+                <section class="customer-detail" aria-label="Hồ sơ {{ emp.fullname }}">
+                  <div class="customer-tabs" role="tablist" aria-label="Chi tiết {{ emp.code }}">
+                    <button type="button" role="tab" aria-selected="true" tabindex="0" data-employee-tab="info">Thông tin</button>
+                    <button type="button" role="tab" aria-selected="false" tabindex="-1" data-employee-tab="salary">Thiết lập lương</button>
+                    <button type="button" role="tab" aria-selected="false" tabindex="-1" data-employee-tab="attendance">Chấm công ({{ emp.shift_count }})</button>
+                    <button type="button" role="tab" aria-selected="false" tabindex="-1" data-employee-tab="account">Tài khoản &amp; Phân quyền</button>
+                    <button type="button" class="customer-detail-close" data-close-employee="{{ emp.id }}" aria-label="Đóng hồ sơ {{ emp.code }}">{{ icon('close') }}</button>
+                  </div>
+
+                  <div class="customer-tab-panel" role="tabpanel" data-employee-panel="info">
+                    <div class="customer-profile-heading">
+                      <div class="customer-profile-avatar">{{ emp.initials }}</div>
+                      <div>
+                        <h2>{{ emp.fullname }} <small>{{ emp.code }}</small></h2>
+                        <p>
+                          Tài khoản: <b>{{ emp.username }}</b>
+                          <span class="customer-state {{ 'active' if emp.status == 'active' else 'locked' }}">{{ 'Đang làm việc' if emp.status == 'active' else 'Đã nghỉ' }}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <dl class="customer-profile-grid">
+                      <div><dt>Mã chấm công</dt><dd>{{ emp.attendance_code or 'Chưa thiết lập' }}</dd></div>
+                      <div><dt>Phòng ban</dt><dd>{{ emp.department or 'Chưa cập nhật' }}</dd></div>
+                      <div><dt>Chức danh</dt><dd>{{ emp.position or 'Chưa cập nhật' }}</dd></div>
+                      <div><dt>Số điện thoại</dt><dd>{{ emp.phone or 'Chưa cập nhật' }}</dd></div>
+                      <div><dt>Số CMND/CCCD</dt><dd>{{ emp.id_card or 'Chưa cập nhật' }}</dd></div>
+                      <div><dt>Ngày bắt đầu</dt><dd>{{ emp.start_date or 'Chưa cập nhật' }}</dd></div>
+                      <div><dt>Giới tính / Ngày sinh</dt><dd>{{ emp.gender or '—' }}{% if emp.dob %} · {{ emp.dob }}{% endif %}</dd></div>
+                      <div><dt>Email</dt><dd>{{ emp.email or 'Chưa cập nhật' }}</dd></div>
+                      <div><dt>Ngân hàng</dt><dd>{{ emp.bank_name or '—' }}{% if emp.bank_account %} · {{ emp.bank_account }}{% endif %}</dd></div>
+                      <div class="customer-address"><dt>Địa chỉ</dt><dd>{{ emp.address or 'Chưa cập nhật' }}</dd></div>
+                    </dl>
+
+                    <p class="customer-profile-note">{{ emp.customer_note or 'Chưa có ghi chú' }}</p>
+
+                    <div class="customer-detail-actions">
+                      <a class="invoice-action" href="{{ url_for('edit_user', user_id=emp.id) }}">Đổi mật khẩu / Chi tiết</a>
+                      {% if is_admin and emp.username != 'admin' %}
+                        <form method="post" action="{{ url_for('remove_user', user_id=emp.id) }}" onsubmit="return confirm('Xóa tài khoản nhân viên {{ emp.username }}?');">
+                          <button type="submit" class="invoice-action customer-danger">Xóa</button>
+                        </form>
+                        <form method="post" action="{{ url_for('toggle_user', user_id=emp.id) }}">
+                          <button type="submit" class="invoice-action">{{ 'Ngừng làm việc' if emp.status == 'active' else 'Kích hoạt lại' }}</button>
+                        </form>
+                      {% endif %}
+                      <button type="button" class="invoice-action invoice-action-primary"
+                        data-edit-employee
+                        data-initial-tab="info"
+                        data-action="{{ url_for('employee_profile_save', user_id=emp.id) }}"
+                        data-employee_code="{{ emp.employee_code or '' }}"
+                        data-fullname="{{ emp.fullname or '' }}"
+                        data-phone="{{ emp.phone or '' }}"
+                        data-start_date="{{ emp.start_date or '' }}"
+                        data-department="{{ emp.department or '' }}"
+                        data-position="{{ emp.position or '' }}"
+                        data-username="{{ emp.username or '' }}"
+                        data-role="{{ emp.role }}"
+                        data-attendance_code="{{ emp.attendance_code or '' }}"
+                        data-customer_note="{{ emp.customer_note or '' }}"
+                        data-bank_account="{{ emp.bank_account or '' }}"
+                        data-bank_name="{{ emp.bank_name or '' }}"
+                        data-bank_holder="{{ emp.bank_holder or '' }}"
+                        data-id_card="{{ emp.id_card or '' }}"
+                        data-gender="{{ emp.gender or '' }}"
+                        data-dob="{{ emp.dob or '' }}"
+                        data-email="{{ emp.email or '' }}"
+                        data-address="{{ emp.address or '' }}"
+                        data-salary_type="{{ emp.salary_type or '' }}"
+                        data-salary_amount="{{ emp.salary_amount or '' }}"
+                        data-salary_template="{{ emp.salary_template or '' }}"
+                        data-allowance_enabled="{{ emp.allowance_enabled or 0 }}"
+                        data-allowance_amount="{{ emp.allowance_amount or '' }}"
+                        data-deduction_enabled="{{ emp.deduction_enabled or 0 }}"
+                        data-deduction_amount="{{ emp.deduction_amount or '' }}"
+                        data-deduction_note="{{ emp.deduction_note or '' }}">
+                        {{ icon('edit') }} Cập nhật
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="customer-tab-panel" role="tabpanel" data-employee-panel="salary" hidden>
+                    <div class="customer-panel-heading">
+                      <h2>Thiết lập lương — {{ emp.fullname }}</h2>
+                      <button type="button" class="invoice-action invoice-action-primary"
+                        data-edit-employee
+                        data-initial-tab="salary"
+                        data-action="{{ url_for('employee_profile_save', user_id=emp.id) }}"
+                        data-employee_code="{{ emp.employee_code or '' }}"
+                        data-fullname="{{ emp.fullname or '' }}"
+                        data-phone="{{ emp.phone or '' }}"
+                        data-start_date="{{ emp.start_date or '' }}"
+                        data-department="{{ emp.department or '' }}"
+                        data-position="{{ emp.position or '' }}"
+                        data-username="{{ emp.username or '' }}"
+                        data-role="{{ emp.role }}"
+                        data-attendance_code="{{ emp.attendance_code or '' }}"
+                        data-customer_note="{{ emp.customer_note or '' }}"
+                        data-bank_account="{{ emp.bank_account or '' }}"
+                        data-bank_name="{{ emp.bank_name or '' }}"
+                        data-bank_holder="{{ emp.bank_holder or '' }}"
+                        data-id_card="{{ emp.id_card or '' }}"
+                        data-gender="{{ emp.gender or '' }}"
+                        data-dob="{{ emp.dob or '' }}"
+                        data-email="{{ emp.email or '' }}"
+                        data-address="{{ emp.address or '' }}"
+                        data-salary_type="{{ emp.salary_type or '' }}"
+                        data-salary_amount="{{ emp.salary_amount or '' }}"
+                        data-salary_template="{{ emp.salary_template or '' }}"
+                        data-allowance_enabled="{{ emp.allowance_enabled or 0 }}"
+                        data-allowance_amount="{{ emp.allowance_amount or '' }}"
+                        data-deduction_enabled="{{ emp.deduction_enabled or 0 }}"
+                        data-deduction_amount="{{ emp.deduction_amount or '' }}"
+                        data-deduction_note="{{ emp.deduction_note or '' }}">
+                        {{ icon('edit') }} Thiết lập lương
+                      </button>
+                    </div>
+                    <div class="salary-summary-grid">
+                      <div class="salary-summary-box">
+                        <small>Loại lương</small>
+                        <strong>{{ emp.salary_type_label }}</strong>
+                      </div>
+                      <div class="salary-summary-box">
+                        <small>Mức lương cơ bản</small>
+                        <strong>{{ emp.salary_amount|vnd if emp.salary_amount else 'Chưa thiết lập' }}</strong>
+                      </div>
+                      <div class="salary-summary-box">
+                        <small>Mẫu lương áp dụng</small>
+                        <strong>{{ emp.salary_template or 'Chưa chọn' }}</strong>
+                      </div>
+                      <div class="salary-summary-box">
+                        <small>Thực nhận dự kiến</small>
+                        <strong>{{ emp.net_salary|vnd if (emp.salary_amount or emp.allowance_enabled or emp.deduction_enabled) else 'Chưa thiết lập' }}</strong>
+                      </div>
+                    </div>
+                    <div class="salary-feature-list">
+                      <div class="salary-feature-item">
+                        <span>Phụ cấp {% if emp.allowance_enabled and emp.allowance_amount %}(+{{ emp.allowance_amount|vnd }}){% endif %}</span>
+                        <span class="salary-feature-state {{ 'on' if emp.allowance_enabled else 'off' }}">{{ 'Đang áp dụng' if emp.allowance_enabled else 'Chưa bật' }}</span>
+                      </div>
+                      <div class="salary-feature-item">
+                        <span>Giảm trừ {% if emp.deduction_enabled and (emp.deduction_note or emp.deduction_amount) %}({{ emp.deduction_note or 'Khoản trừ' }}{% if emp.deduction_amount %}: -{{ emp.deduction_amount|vnd }}{% endif %}){% endif %}</span>
+                        <span class="salary-feature-state {{ 'on' if emp.deduction_enabled else 'off' }}">{{ 'Đang áp dụng' if emp.deduction_enabled else 'Chưa bật' }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="customer-tab-panel" role="tabpanel" data-employee-panel="attendance" hidden>
+                    <div class="customer-panel-heading">
+                      <h2>Bảng chấm công — {{ emp.fullname }} <span>{{ emp.shift_count }}</span></h2>
+                    </div>
+
+                    <form method="post" action="{{ url_for('employee_add_attendance', user_id=emp.id) }}" class="attendance-quick-form">
+                      <div class="form-field">
+                        <label>Ngày làm</label>
+                        <input type="date" name="work_date" value="{{ today }}" required>
+                      </div>
+                      <div class="form-field">
+                        <label>Ca trực</label>
+                        <select name="shift_name">
+                          <option value="Ca sáng">Ca sáng</option>
+                          <option value="Ca chiều">Ca chiều</option>
+                          <option value="Ca đêm">Ca đêm</option>
+                          <option value="Ca hành chính">Ca hành chính</option>
+                        </select>
+                      </div>
+                      <div class="form-field">
+                        <label>Cổng / Khu vực</label>
+                        <input type="text" name="zone_name" list="employee-zone-list" placeholder="VD: Cổng A">
+                      </div>
+                      <div class="form-field">
+                        <label>Giờ vào</label>
+                        <input type="time" name="check_in_time" value="07:00">
+                      </div>
+                      <div class="form-field">
+                        <label>Giờ ra</label>
+                        <input type="time" name="check_out_time" value="15:00">
+                      </div>
+                      <div class="form-field">
+                        <label>Trạng thái</label>
+                        <select name="status">
+                          <option value="completed">Hoàn thành</option>
+                          <option value="late">Đi muộn</option>
+                          <option value="leave">Nghỉ phép</option>
+                        </select>
+                      </div>
+                      <div class="form-field">
+                        <label>Ghi chú</label>
+                        <input type="text" name="note" placeholder="Ghi chú ca">
+                      </div>
+                      <button type="submit" class="invoice-action invoice-action-primary">+ Chấm công</button>
+                    </form>
+
+                    {% if emp.attendance %}
+                      <table class="customer-subtable">
+                        <thead>
+                          <tr>
+                            <th>Ngày</th>
+                            <th>Ca trực</th>
+                            <th>Cổng / Khu vực</th>
+                            <th>Giờ vào</th>
+                            <th>Giờ ra</th>
+                            <th>Thời lượng</th>
+                            <th>Trạng thái</th>
+                            <th>Ghi chú</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for a in emp.attendance %}
+                            <tr>
+                              <td><b>{{ a.work_date }}</b></td>
+                              <td>{{ a.shift_name }}</td>
+                              <td>{{ a.zone_name or '—' }}</td>
+                              <td>{{ a.check_in_label }}</td>
+                              <td>{{ a.check_out_label }}</td>
+                              <td>{{ a.duration_label }}</td>
+                              <td><span class="customer-state {{ 'active' if a.status in ('completed', 'working') else 'locked' }}">{{ a.status_label }}</span></td>
+                              <td>{{ a.note or '—' }}</td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    {% else %}
+                      <p class="customer-panel-empty">Chưa có dữ liệu chấm công. Nhân viên có thể bấm "Vào ca ngay" ở menu tài khoản hoặc Admin chấm công nhanh ở trên.</p>
+                    {% endif %}
+                  </div>
+
+                  <div class="customer-tab-panel" role="tabpanel" data-employee-panel="account" hidden>
+                    <dl class="customer-profile-grid">
+                      <div><dt>Tên đăng nhập</dt><dd><b>{{ emp.username }}</b></dd></div>
+                      <div><dt>Vai trò hệ thống</dt><dd>{{ 'Quản trị viên (Admin)' if emp.role == 'admin' else 'Nhân viên vận hành (Manager)' }}</dd></div>
+                      <div><dt>Trạng thái tài khoản</dt><dd>{{ 'Đang hoạt động' if emp.status == 'active' else 'Đã khóa' }}</dd></div>
+                      <div><dt>Ngày tạo</dt><dd>{{ emp.created_at or 'Hệ thống mặc định' }}</dd></div>
+                    </dl>
+                  </div>
+                </section>
               </td>
             </tr>
-          {% endfor %}
-        {% else %}
-          <tr>
-            <td colspan="5" class="empty-cell">Chưa có tài khoản nhân viên nào.</td>
-          </tr>
-        {% endif %}
-      </tbody>
-    </table>
-  </div>
+            {% else %}
+            <tr>
+              <td colspan="10" class="invoice-empty" data-employee-colspan>
+                {{ icon('users', 42) }}
+                <h2>Không tìm thấy nhân viên</h2>
+                <p>Thay đổi bộ lọc hoặc bấm "+ Nhân viên" để thêm nhân sự mới.</p>
+                <a href="{{ url_for('accounts') }}">Đặt lại bộ lọc</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
 
-  <div class="pagination">
-    <span>Hiển thị <b>{{ 1 if staff_users else 0 }}-{{ staff_users|length }}</b> trên <b>{{ staff_users|length }}</b> tài khoản</span>
-    <div>
-      <span class="current-page">1 / 1</span>
+      <div class="invoice-pagination">
+        <div>
+          <span>Hiển thị {{ first_item }}–{{ last_item }} / {{ staff_count }} nhân viên</span>
+          <label>Số dòng
+            <select name="per_page" form="employee-filters" data-employee-auto-submit aria-label="Số nhân viên mỗi trang">
+              {% for size in [20, 50, 100] %}
+                <option value="{{ size }}" {% if per_page == size %}selected{% endif %}>{{ size }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <nav aria-label="Phân trang nhân viên">
+          {% if page > 1 %}
+            <a aria-label="Trang trước" href="{{ url_for('accounts') }}?{{ query_string(page=page-1) }}">{{ icon('left', 16) }}</a>
+          {% else %}
+            <span aria-disabled="true">{{ icon('left', 16) }}</span>
+          {% endif %}
+          <span class="invoice-page-number">{{ page }} / {{ pages }}</span>
+          {% if page < pages %}
+            <a aria-label="Trang sau" href="{{ url_for('accounts') }}?{{ query_string(page=page+1) }}">{{ icon('right', 16) }}</a>
+          {% else %}
+            <span aria-disabled="true">{{ icon('right', 16) }}</span>
+          {% endif %}
+        </nav>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- DIALOG THÊM TÀI KHOẢN NHÂN VIÊN MỚI -->
-<dialog id="add-account-dialog" {% if open_modal %}open{% endif %}>
-  <form method="POST" action="{{ url_for('add_account') }}" class="dialog-content">
-    <div class="dialog-header">
-      <div>
-        <h3>Thêm tài khoản nhân sự mới</h3>
-        <p>Cấp quyền nhân viên vận hành hoặc quản trị viên hệ thống</p>
-      </div>
-      <button type="button" class="dialog-close" id="close-add-account">×</button>
+<!-- Modal Thêm mới nhân viên (2 tab: Thông tin | Thiết lập lương) -->
+<dialog id="add-employee-dialog" class="customer-dialog" {% if open_modal %}data-open-on-load{% endif %} aria-labelledby="add-employee-title">
+  <form method="post" action="{{ url_for('add_account') }}">
+    <div class="customer-dialog-heading">
+      <h2 id="add-employee-title">Thêm mới nhân viên</h2>
+      <button type="button" data-close-dialog aria-label="Đóng form thêm nhân viên">{{ icon('close', 20) }}</button>
     </div>
-
-    <div class="form-grid" style="grid-template-columns: 1fr;">
-      <div class="form-field">
-        <label for="acc-fullname">Họ và tên nhân sự *</label>
-        <input type="text" id="acc-fullname" name="fullname" value="{{ form.fullname if form else '' }}" required placeholder="VD: Trần Văn B">
-      </div>
-      <div class="form-field">
-        <label for="acc-username">Tên đăng nhập *</label>
-        <input type="text" id="acc-username" name="username" value="{{ form.username if form else '' }}" required placeholder="VD: nhanvien02">
-      </div>
-      <div class="form-field">
-        <label for="acc-password">Mật khẩu khởi tạo *</label>
-        <input type="password" id="acc-password" name="password" required placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)">
-      </div>
-      <div class="form-field">
-        <label for="acc-role">Vai trò phân quyền *</label>
-        <select id="acc-role" name="role" required>
-          <option value="manager" {% if not form or form.role == 'manager' %}selected{% endif %}>Nhân viên vận hành (Quản lý bãi, giám sát xe, khách hàng)</option>
-          <option value="admin" {% if form and form.role == 'admin' %}selected{% endif %}>Quản trị viên (Toàn quyền quản trị hệ thống)</option>
-        </select>
-      </div>
+    <div class="employee-modal-tabs" role="tablist">
+      <button type="button" class="employee-modal-tab" role="tab" aria-selected="true" data-modal-tab="info">Thông tin</button>
+      <button type="button" class="employee-modal-tab" role="tab" aria-selected="false" data-modal-tab="salary">Thiết lập lương</button>
     </div>
+    <div class="customer-dialog-body">
+      {% if form_errors %}
+        <div class="error-banner" role="alert">{% for error in form_errors %}<p>{{ error }}</p>{% endfor %}</div>
+      {% endif %}
+      {{ employee_form_fields('new', form or {}, true) }}
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-dialog>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>
 
-    <div class="dialog-actions">
-      <button type="button" class="btn btn-outline" id="cancel-add-account">Hủy</button>
-      <button type="submit" class="btn btn-primary">Tạo tài khoản</button>
+<!-- Modal Cập nhật nhân viên -->
+<dialog id="edit-employee-dialog" class="customer-dialog" {% if open_edit_modal %}data-open-on-load{% endif %} aria-labelledby="edit-employee-title">
+  <form method="post" {% if edit_form %}action="{{ url_for('employee_profile_save', user_id=edit_form.id) }}"{% endif %}>
+    <div class="customer-dialog-heading">
+      <h2 id="edit-employee-title">Cập nhật nhân viên</h2>
+      <button type="button" data-close-dialog aria-label="Đóng form cập nhật nhân viên">{{ icon('close', 20) }}</button>
+    </div>
+    <div class="employee-modal-tabs" role="tablist">
+      <button type="button" class="employee-modal-tab" role="tab" aria-selected="true" data-modal-tab="info">Thông tin</button>
+      <button type="button" class="employee-modal-tab" role="tab" aria-selected="false" data-modal-tab="salary">Thiết lập lương</button>
+    </div>
+    <div class="customer-dialog-body">
+      {% if edit_errors %}
+        <div class="error-banner" role="alert">{% for error in edit_errors %}<p>{{ error }}</p>{% endfor %}</div>
+      {% endif %}
+      {{ employee_form_fields('edit', edit_form or {}, false) }}
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-dialog>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
     </div>
   </form>
 </dialog>
 {% endblock %}
 
 {% block extra_js %}
-<script>
-  (function () {
-    var dlg = document.getElementById('add-account-dialog');
-    var openBtn = document.getElementById('open-add-account');
-    var closeBtn = document.getElementById('close-add-account');
-    var cancelBtn = document.getElementById('cancel-add-account');
-
-    if (openBtn && dlg) {
-      openBtn.addEventListener('click', function () {
-        if (typeof dlg.showModal === 'function') dlg.showModal();
-        else dlg.setAttribute('open', '');
-      });
-    }
-    function close() {
-      if (!dlg) return;
-      if (typeof dlg.close === 'function') dlg.close();
-      else dlg.removeAttribute('open');
-    }
-    if (closeBtn) closeBtn.addEventListener('click', close);
-    if (cancelBtn) cancelBtn.addEventListener('click', close);
-  })();
-</script>
+<script src="/static/js/employees.js" defer></script>
 {% endblock %}
-

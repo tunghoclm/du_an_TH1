@@ -459,6 +459,7 @@ class GateTests(unittest.TestCase):
                 if tag == 'select':
                     self.select = None
 
+        database.set_user_setting(1, 'entry_mode', 'manual')
         data = self.live_frame().json
         response = self.client.post('/entry', data={
             'source': 'camera', 'action': 'recognize', 'token': data['token'], 'plate': data['plate'],
@@ -593,6 +594,49 @@ class GateTests(unittest.TestCase):
         lanes = self.client.get('/gate/lanes')
         self.assertIn('data-default-device="cam-in-plate-01"', lanes.text)
         self.assertIn('data-default-device="cam-out-view-01"', lanes.text)
+
+    def test_settings_store_info_and_zones_management(self):
+        store_page = self.client.get('/settings?section=store')
+        self.assertEqual(store_page.status_code, 200)
+        self.assertIn('Thông tin bãi xe', store_page.text)
+
+        res_store = self.client.post('/settings?section=store', data={
+            'setting_type': 'store',
+            'store_name': 'Bãi Xe Số 1',
+            'store_phone': '0988777666',
+            'store_email': 'baixe1@example.com',
+            'store_type': 'Bãi xe ô tô & xe máy',
+            'store_address': '100 Lê Lợi',
+            'store_province': 'TP. Hồ Chí Minh',
+            'store_district': 'Quận 1',
+            'store_ward': 'Phường Bến Thành',
+        }, follow_redirects=True)
+        self.assertEqual(res_store.status_code, 200)
+        self.assertIn('Bãi Xe Số 1', res_store.text)
+        self.assertIn('0988777666', res_store.text)
+
+        zones_page = self.client.get('/settings?section=zones')
+        self.assertEqual(zones_page.status_code, 200)
+        self.assertNotIn('section=zones', zones_page.text)
+        self.assertNotIn('id="kv-sec-zones"', zones_page.text)
+
+        res_add = self.client.post('/settings/zones/save', data={
+            'name': 'Cổng 3',
+            'zone_type': 'gate_in',
+            'location': 'Bãi xe trung tâm',
+            'capacity': '60',
+            'status': 'active',
+            'note': 'Làn xe máy giờ cao điểm',
+        }, follow_redirects=True)
+        self.assertEqual(res_add.status_code, 200)
+        zone = [z for z in database.get_parking_zones() if z['name'] == 'Cổng 3'][0]
+        self.assertEqual(zone['location'], 'Bãi xe trung tâm')
+        self.client.post(f"/settings/zones/{zone['id']}/toggle", follow_redirects=True)
+        toggled = [z for z in database.get_parking_zones() if z['id'] == zone['id']][0]
+        self.assertEqual(toggled['status'], 'inactive')
+
+        self.client.post(f"/settings/zones/{zone['id']}/delete", follow_redirects=True)
+        self.assertFalse(any(z['id'] == zone['id'] for z in database.get_parking_zones()))
 
 
 if __name__ == '__main__':

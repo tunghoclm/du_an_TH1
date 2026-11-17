@@ -103,6 +103,18 @@
       </button>
       <div class="popover topbar-popover user-menu" id="user-menu-popover" hidden>
         <div class="topbar-user-info"><span class="avatar">{{ _initials }}</span><span><b>{{ _fullname }}</b><small>{{ role_label }}</small></span></div>
+        {% if _is_staff %}
+          {% if open_shift %}
+            <form method="post" action="{{ url_for('attendance_check_out') }}" style="padding: 8px 12px; border-bottom: 1px solid #eceef1; margin: 0;">
+              <div style="font-size: 11px; color: #29865e; margin-bottom: 6px; font-weight: 600;">● Đang trực {{ open_shift.shift_name }} (từ {{ open_shift.check_in[11:16] if open_shift.check_in else '' }})</div>
+              <button type="submit" style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid #d13b47; background: #fff1f1; color: #c75d65; font-size: 12px; font-weight: 600; cursor: pointer;">Tan ca</button>
+            </form>
+          {% else %}
+            <form method="post" action="{{ url_for('attendance_check_in') }}" style="padding: 8px 12px; border-bottom: 1px solid #eceef1; margin: 0;">
+              <button type="submit" style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid #0070f4; background: #e8f2ff; color: #0070f4; font-size: 12px; font-weight: 600; cursor: pointer;">Vào ca ngay</button>
+            </form>
+          {% endif %}
+        {% endif %}
         <a href="{{ url_for('settings') }}">Cài đặt tài khoản</a>
         <a href="{{ url_for('logout') }}" class="danger-text">Đăng xuất</a>
       </div>

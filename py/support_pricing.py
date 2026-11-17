@@ -74,8 +74,9 @@ def _fee_question(text):
     explicit_price = any(contains(text, word) for word in ('phi', 'tien', 'gia', 'het bao nhieu', 'ton bao nhieu'))
     if is_availability_question(text) and not explicit_price:
         return False
-    parking = any(contains(text, word) for word in ('gui xe', 'giu xe', 'do xe', 'phi gui', 'tinh phi', 'xe may', 'o to', 'oto'))
-    return parking and (explicit_price or contains(text, 'bao nhieu') or has_interval)
+    parking = any(contains(text, word) for word in ('gui xe', 'giu xe', 'do xe', 'phi gui', 'tinh phi', 'xe may', 'o to', 'oto', 'xe dap', 'xe dien'))
+    vehicle_keyword = any(contains(text, word) for word in ('xe may', 'o to', 'oto', 'xe dap', 'xe dien', 'xe hoi'))
+    return (parking and (explicit_price or contains(text, 'bao nhieu') or has_interval)) or (vehicle_keyword and explicit_price)
 
 
 def _read_pricing():
@@ -97,14 +98,17 @@ def answer(text, history=()):
     original = text
     pricing = None
     previous = history[-1] if history else None
-    if not _fee_question(original) and previous and previous['answer'].startswith((ASK_TYPE, ASK_TIME, QUOTE_PREFIX)):
+    if not _fee_question(original) and previous and (
+        previous['answer'].startswith((ASK_TYPE, ASK_TIME, QUOTE_PREFIX))
+        or ASK_TIME in previous['answer'] or ASK_TYPE in previous['answer']
+    ):
         # Only a short vehicle/time reply can continue the immediately preceding fee question.
         pricing = _read_pricing()
         reply_types = _types_in_question(normalize(original), pricing[0])
         remaining = normalize(original)
         for item in reply_types:
             remaining = remaining.replace(normalize(item['name']), '').replace('oto', '').replace('xe hoi', '')
-        short_reply = reply_types and set(remaining.split()) <= {'toi', 'minh', 'gui', 'di', 'loai', 'xe', 'nhe', 'nha', 'a', 'thi', 'sao', 'con', 'va', 'o', 'to'}
+        short_reply = reply_types and set(remaining.split()) <= {'toi', 'minh', 'gui', 'di', 'loai', 'xe', 'nhe', 'nha', 'a', 'thi', 'sao', 'con', 'the', 'va', 'o', 'to'}
         time_reply = RANGE.search(fold(text))
         if len(normalize(text).split()) <= 12 and short_reply:
             context = []
@@ -114,7 +118,7 @@ def answer(text, history=()):
                     if RANGE.search(fold(' '.join(context))):
                         text = ' '.join(context + [original])
                     break
-        elif previous['answer'].startswith(ASK_TIME) and time_reply:
+        elif (previous['answer'].startswith(ASK_TIME) or ASK_TIME in previous['answer']) and time_reply:
             remainder = normalize(fold(original)[:time_reply.start()] + ' ' + fold(original)[time_reply.end():])
             if set(remainder.split()) <= {'tu', 'toi', 'gui', 'xe', 'nhe', 'a', 'cung', 'ngay', 'hom', 'sau'}:
                 text = previous['user_text'] + ' ' + original
@@ -129,9 +133,23 @@ def answer(text, history=()):
     except ValueError:
         return dict(base, answer='Tôi chưa xác định được giờ hợp lệ. Hãy ghi theo dạng 24 giờ, ví dụ: gửi xe máy từ 01:00 đến 22:00 hết bao nhiêu?')
     if interval is None:
-        if re.search(r'\d|\b(tinh phi|phi gui|tien gui|gui xe)\b', normalize(text)):
-            return dict(base, answer=ASK_TIME + ' Ví dụ: gửi xe máy từ 01:00 đến 22:00 hết bao nhiêu?')
-        return None
+        types, rates = pricing or _read_pricing()
+        selected = _types_in_question(normalize(original), types) or _types_in_question(normalize(text), types)
+        if len(selected) == 1:
+            vehicle = selected[0]
+            v_rates = rates.get(vehicle['id'], [])
+            period_order = {'Sáng': 1, 'Chiều': 2, 'Tối': 3, 'Đêm': 4}
+            sorted_rates = sorted(v_rates, key=lambda r: period_order.get(r['period_name'], 99))
+            price_details = []
+            for r in sorted_rates:
+                amt = f"{r['amount']:,}đ".replace(',', '.')
+                price_details.append(f"{r['period_name']} ({r['start']}–{r['end']}): {amt}")
+            detail_str = '; '.join(price_details) if price_details else 'chưa có cấu hình giá'
+            msg = (f"Bảng giá lượt cho {vehicle['name']}: {detail_str}.\n"
+                   f"{ASK_TIME} Ví dụ: gửi {vehicle['name']} từ 08:00 đến 17:00 hết bao nhiêu tiền?")
+            return dict(base, answer=msg)
+        choices = ', '.join(item['name'] for item in types)
+        return dict(base, answer=f"{ASK_TYPE} Các loại xe hiện có: {choices}. Hoặc hãy cho biết khoảng giờ gửi (ví dụ: từ 08:00 đến 17:00) để tôi ước tính phí chính xác.")
     if re.search(r'\d{1,2}/\d{1,2}|\d{4}-\d{1,2}-\d{1,2}|\b\d+\s*(?:ngay|tuan|thang|nam)\b', fold(text)):
         return dict(base, answer='Ước tính này hỗ trợ khoảng giờ trong cùng ngày hoặc qua một đêm. Với ngày cụ thể hoặc nhiều ngày, hãy đối chiếu tại Xe ra hoặc liên hệ đội ngũ hỗ trợ.')
     types, rates = pricing or _read_pricing()
