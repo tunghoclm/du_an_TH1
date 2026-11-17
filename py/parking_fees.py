@@ -2,6 +2,8 @@
 from datetime import datetime, timedelta
 import math
 
+DEFAULT_HOURLY_FALLBACK = 5000
+
 
 def _minutes(hhmm):
     hour, minute = map(int, hhmm.split(':'))

@@ -179,97 +179,78 @@ Tài khoản demo mặc định (đăng nhập tại `/login`):
 | `/customers`   | Danh sách khách hàng với bộ lọc, hồ sơ liên hệ, phương tiện, vé tháng, lịch sử gửi xe và xuất CSV |
 | `/accounts`    | Quản lý tài khoản nhân viên & quản trị viên: cấp tài khoản, phân quyền, khóa/mở khóa |
 | `/pricing`     | Bảng giá xe — 3 bảng: **khung thời gian** (tự đặt giờ/ngày bắt đầu–kết thúc), **loại xe** (tự tạo tên), **giá theo loại xe + thời gian** (lượt/tháng). Ai cũng xem, admin/nhân viên thêm-sửa-xóa |
-| `/settings`    | Cài đặt chế độ gửi xe; tab **Trợ lý AI** riêng dành cho quản trị viên để cấu hình nhà cung cấp, model và khóa API |
+| `/settings`    | Cài đặt chế độ gửi xe; tab **Trợ lý AI** riêng dành cho quản trị viên để quản lý kiến thức, huấn luyện và thử chatbot nội bộ |
 
-### Hỗ trợ: trợ lý AI và chat với đội ngũ
+### Hỗ trợ: chatbot nội bộ và chat với đội ngũ
 
-Nút **Hỗ trợ** ở góc phải dưới xuất hiện trên các trang sau đăng nhập. Cửa sổ mở/thu
-gọn bằng hiệu ứng trượt và mờ; có trợ lý AI, hộp thư riêng và câu hỏi thường gặp.
+Nút **Hỗ trợ** ở góc phải dưới xuất hiện trên các trang sau đăng nhập.
 
-- **Trợ lý AI:** gọi API của nhà cung cấp được quản trị viên cấu hình từ máy chủ. Khóa API đã lưu không trả về trình duyệt;
-  khóa được mã hóa trước khi lưu trong database. Chỉ nội dung hội thoại AI được gửi tới nhà cung cấp; tin nhắn
-  với nhân viên, dữ liệu xe, hóa đơn và hồ sơ khách hàng không tự động đưa vào AI.
-- **Chat với đội ngũ:** chọn một quản trị viên/nhân viên còn hoạt động. Người đó mở
-  **Hỗ trợ → Chat với đội ngũ → Hộp thư của bạn** để xem và trả lời. Chỉ hai người
-  tham gia đọc/gửi được trong hội thoại; quản trị viên khác không tự xem được.
-- Lưu lịch sử, tải tin cũ, số tin chưa đọc và tự cập nhật khoảng 3 giây khi mở,
-  15 giây khi thu gọn. Để hai người chat với nhau, họ phải mở **cùng một máy chủ
-  Smart Parking**; các bản `localhost` với database riêng không dùng chung hộp thư.
+- **Trợ lý AI nội bộ:** xử lý ngay trong Python trên máy chủ Smart Parking, không gọi
+  API AI bên ngoài, không cần khóa API hay tải model ngôn ngữ. Bộ hỏi–đáp mặc định
+  có 20 chủ đề: xe vào/ra, vé tháng, bảng giá, hóa đơn, camera, tài khoản và hỗ trợ.
+- **Chat với đội ngũ:** chọn quản trị viên/nhân viên đang hoạt động. Chỉ hai người tham
+  gia đọc/gửi được qua giao diện; các quản trị viên khác không tự xem hộp thư đó.
+  Hai người cần truy cập cùng một máy chủ Smart Parking để dùng chung hội thoại.
+- Lịch sử AI thuộc từng tài khoản; tin nhắn nhân viên và hồ sơ/xe/hóa đơn không được
+  đưa vào mô hình. Hội thoại không tự động trở thành dữ liệu huấn luyện.
 
-Quản trị viên mở tab riêng **Cài đặt → Trợ lý AI** (`/settings?section=ai`),
-chọn nhà cung cấp, nhập model và khóa API rồi bấm **Lưu cấu hình → Kiểm tra kết nối**.
-Tab này tách khỏi Cấu hình cổng vào. Cấu hình áp dụng ngay, không cần khởi động lại.
-Khi vừa nhập khóa/model mới, nút **Lưu & kiểm tra** lưu thay đổi trước khi gọi API;
-không cần bấm Lưu cấu hình riêng. Kiểm tra dùng yêu cầu ngắn, không gửi lịch sử chat.
-Gemini mặc định dùng `gemini-3.5-flash-lite`; có thể điền mã model khác phù hợp với
-tài khoản. Các cấu hình model đã lưu được giữ nguyên khi ứng dụng khởi động lại.
-Yêu cầu AI chờ tối đa 60 giây trên mỗi lần đọc mạng; trình duyệt chờ tối đa 90 giây.
-Lỗi trả về phân biệt thời gian chờ, DNS/chứng chỉ, khóa, quyền, model và hạn mức;
-không trả nội dung lỗi gốc có thể chứa khóa API. Kiểm tra metadata/model thành công
-chưa đủ xác nhận dự án được quyền tạo câu trả lời; cần kiểm tra sinh nội dung thực tế.
+Quản trị viên mở **Cài đặt → Trợ lý AI** tại `/settings?section=ai`:
 
-| Nhà cung cấp | Chuẩn API | Base URL |
-| --- | --- | --- |
-| Google Gemini | Generate Content | `https://generativelanguage.googleapis.com/v1beta` |
-| OpenAI | Chat Completions | `https://api.openai.com/v1` |
-| Anthropic · Claude | Messages | `https://api.anthropic.com/v1` |
-| DeepSeek | Chat Completions | `https://api.deepseek.com` |
-| Tùy chỉnh · tương thích OpenAI | Chat Completions | Quản trị viên nhập URL HTTPS công khai |
+1. Đặt tên, bật/tắt trợ lý, chọn ngưỡng nhận diện và câu trả lời khi chưa biết.
+2. Thêm/sửa kho kiến thức: tiêu đề, tối đa 12 cách hỏi (mỗi dòng một cách) và câu trả lời.
+   Chỉ đưa vào đây nội dung được phép chia sẻ cho mọi tài khoản.
+3. Bấm **Lưu kiến thức → Huấn luyện**. Bản biên soạn mới, kể cả mục đã tắt/xóa,
+   chỉ áp dụng cho chat khi huấn luyện thành công. Khi huấn luyện lỗi, bản cũ tiếp tục chạy.
+4. Dùng **Thử câu hỏi** để kiểm tra câu trả lời, chủ đề khớp, độ tương đồng và phiên bản.
+   Thử nghiệm này không ghi vào lịch sử chat. Độ tương đồng không phải xác suất đúng.
+5. **Xuất kho JSON** để sao lưu kiến thức hoặc **Nhập thêm JSON** để bổ sung. Nhập
+   thêm từ chối tiêu đề trùng và không thay thế dữ liệu hiện có. Tối đa 300 mục và 8 MB/tệp.
+   Tệp dùng định dạng `{"documents":[{"title":"...","questions":["..."],"answer":"...","enabled":true}]}`.
 
-Với API tùy chỉnh, hệ thống thêm `/chat/completions` vào Base URL. Không hỗ trợ
-các dịch vụ có định dạng yêu cầu riêng ngoài ba chuẩn trên. Các địa chỉ nội bộ,
-URL chứa mật khẩu/tham số và chuyển hướng HTTP bị chặn; kết nối tùy chỉnh kiểm tra
-địa chỉ DNS công khai và xác minh chứng chỉ TLS. Không dùng proxy môi trường cho
-kết nối tùy chỉnh. Dùng đúng mã model khả dụng của tài khoản; OpenAI/Claude không
-tự chọn model để tránh dùng nhầm model hoặc quyền truy cập.
+Chatbot dùng TF-IDF với đặc trưng từ, cặp từ và ký tự để so khớp cách hỏi tiếng Việt
+(có/không dấu). Nó trả lại câu trả lời đã kiểm duyệt; khi điểm thấp hoặc hai chủ đề
+quá gần nhau, nó dùng lời nhắc làm rõ/liên hệ đội ngũ. Đây là **chatbot theo kho kiến
+thức**, chưa phải mô hình ngôn ngữ lớn có khả năng trò chuyện tổng quát hay suy luận
+như ChatGPT. Thêm nhiều cách hỏi thực tế và thử lại sau mỗi lần huấn luyện để cải thiện.
+Các yêu cầu như “nói rõ hơn” có thể dùng lại câu hỏi trước của chính người dùng.
 
-Để trống ô khóa khi chỉ đổi model để giữ khóa hiện tại. Đổi nhà cung cấp hoặc
-Base URL phải nhập khóa tương ứng. Cấu hình Gemini từ bản trước vẫn được đọc;
-lần lưu tiếp theo chuyển sang cấu hình chung mà không làm mất khóa.
-**Ngắt kết nối** bỏ khóa đã lưu và tắt AI, kể cả khi máy chủ vẫn có khóa trong biến
-môi trường. Chat với đội ngũ tiếp tục hoạt động. Chỉ quản trị viên còn hoạt động được
-đọc trạng thái, lưu cấu hình hoặc kiểm tra kết nối; khóa đã lưu không được hiển thị lại.
+**Tra cứu chỗ trống hiện tại:** các câu như “bãi xe còn đang trống bao nhiêu”,
+“còn mấy chỗ đỗ”, “bãi còn chỗ không” hoặc “khu A còn bao nhiêu chỗ” được nhận diện
+trực tiếp và đọc số liệu tổng hợp mới từ SQLite mỗi lần hỏi. Không cần thêm từng
+cách hỏi vào JSON hoặc huấn luyện lại cho số liệu thay đổi. Có thể hỏi theo một khu
+hoặc loại xe đã cấu hình; ô bảo trì và ô có lượt gửi đang mở không được tính là trống.
+Câu trả lời ghi thời điểm kiểm tra (UTC+7) và phản ánh dữ liệu quản lý, không khẳng
+định trạng thái từ camera. Câu hỏi dự báo ngày mai hoặc khu chưa xác định sẽ được
+yêu cầu làm rõ. Dữ liệu cá nhân và thao tác thay đổi bãi không được cấp cho chatbot.
 
-Khóa được mã hóa bằng Fernet; tệp khóa mã hóa nằm tại `cache/secrets/gemini.key`,
-bên ngoài thư mục web và được Git bỏ qua. Khi sao lưu/chuyển máy chủ, cần giữ cả
-database và tệp khóa này, chỉ cấp quyền truy cập cho người vận hành máy chủ.
-Nếu mất tệp khóa, nhập lại khóa API. Cài thư viện mới bằng
-`python -m pip install -r requirements.txt` trong môi trường chạy ứng dụng.
+**Ước tính phí theo giờ:** hỏi “gửi xe từ 1h sáng đến 10h đêm hết bao nhiêu”, chatbot
+hiểu là 01:00–22:00 (21 giờ) và hỏi loại xe. Trong chat, trả lời “xe máy” hoặc tên loại
+xe đã cấu hình để tiếp tục, không cần nhập lại giờ. Có thể hỏi đủ thông tin ngay:
+“gửi xe máy từ 01:00 đến 22:00 hết bao nhiêu”. Hỗ trợ giờ có phút, sáng/chiều/tối/đêm,
+AM/PM và qua nửa đêm. Nếu thiếu giờ hoặc giờ không hợp lệ, chatbot hỏi làm rõ.
+Phí được tính bằng cùng hàm với màn hình Xe ra, gồm các khung giờ, block đầu/giờ tiếp,
+miễn phí ban đầu, ân hạn và giá trần. Nếu thiếu giá, câu trả lời ghi rõ đơn giá dự phòng.
+Đây là ước tính vé lượt theo bảng giá hiện hành; chatbot không đọc vé tháng riêng hoặc
+tạo giao dịch thu tiền. Kiểm tra vé còn hạn và xác nhận phí thực tế tại Xe ra.
 
-Nếu chưa lưu cấu hình trong Cài đặt, ứng dụng vẫn hỗ trợ biến môi trường
-**đặt trước khi khởi động Flask**. Ví dụ PowerShell:
+Dữ liệu biên soạn và mô hình JSON nằm trong SQLite (`cache/parking.db`); giữ 5 phiên
+bản huấn luyện gần nhất. Phiên bản mới được áp dụng bằng giao dịch nguyên tử. Khi
+khởi động lần đầu, ứng dụng tự khởi tạo và huấn luyện dữ liệu mẫu; lần sau giữ các
+chỉnh sửa của quản trị viên. Cấu hình/khóa nhà cung cấp AI cũ được gỡ khỏi bảng settings;
+biến môi trường API AI cũ không còn được đọc. Có thể tự xóa biến cũ và tệp khóa mã hóa
+`cache/secrets/gemini.key` nếu không còn dùng cho bản triển khai trước đó.
 
-```powershell
-$env:GEMINI_API_KEY = 'khoa-api-cua-ban'
-$env:GEMINI_MODEL = 'gemini-3.5-flash-lite'
-.\run.bat
-```
+Chatbot chỉ được đọc số liệu ô đỗ tổng hợp và bảng giá bằng truy vấn cố định trên kết nối chỉ đọc;
+không có công cụ truy cập thông tin riêng của xe, hồ sơ, doanh thu hoặc thay đổi dữ liệu vận hành.
+Phân quyền được kiểm tra lại từ database, các thao tác quản trị yêu cầu CSRF và cùng
+nguồn truy cập. Giới hạn 5 câu hỏi/phút/tài khoản và một câu đang xử lý vẫn được áp dụng.
+Khi chạy cho nhiều người, đặt `FLASK_SECRET_KEY` thành chuỗi bí mật ổn định và bảo vệ
+quyền truy cập máy chủ/database. SQLite lưu dữ liệu chat dạng văn bản; chạy nội bộ
+không đồng nghĩa mã hóa dữ liệu hoặc ngăn người quản lý máy chủ đọc dữ liệu.
 
-Trên macOS/Linux, dùng `export GEMINI_API_KEY='khoa-api-cua-ban'`,
-`export GEMINI_MODEL='gemini-3.5-flash-lite'` rồi `./run.sh`.
-`.env.example` liệt kê các biến tham khảo; ứng dụng đọc biến môi trường của tiến trình,
-không tự nạp tệp `.env`. Có thể dùng `GOOGLE_API_KEY` nếu chưa đặt `GEMINI_API_KEY`.
-Biến `SUPPORT_AI_PROVIDER` chọn `gemini`, `openai`, `anthropic`, `deepseek` hoặc
-`compatible`; `SUPPORT_AI_API_KEY`, `SUPPORT_AI_MODEL`, `SUPPORT_AI_BASE_URL` đặt
-thông tin tương ứng. Khóa riêng `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
-`DEEPSEEK_API_KEY` cũng được hỗ trợ khi chọn đúng nhà cung cấp. Chỉ khi chưa có
-cấu hình đã lưu thì các biến này mới được dùng.
-
-Tài liệu chuẩn API: [Gemini](https://ai.google.dev/api/generate-content),
-[OpenAI](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create),
-[Claude](https://platform.claude.com/docs/en/api/messages/create),
-[DeepSeek](https://api-docs.deepseek.com/).
-
-Khi chưa có khóa, cửa sổ thông báo AI chưa kết nối và vẫn cho chat với đội ngũ.
-Khi lỗi mạng/hết hạn mức, không sinh câu trả lời giả; nội dung nhập được giữ để thử lại.
-AI giới hạn 5 câu hỏi/phút/tài khoản và một câu đang xử lý để tránh gửi trùng.
-Hạn mức và phí thực tế phụ thuộc tài khoản của nhà cung cấp.
-
-Khi chạy cho nhiều người truy cập, đặt `FLASK_SECRET_KEY` thành một chuỗi ngẫu nhiên,
-ổn định trên máy chủ. Không commit khóa thật, tệp `.env`, `cache/secrets/`, database hoặc nội dung chat.
-Các bảng `support_threads`, `support_messages`, `support_ai_turns` được tạo tự động
-khi khởi động. Kiểm thử tại `tests/test_support_chat.py`, `tests/test_support_settings.py`
-và `tests/test_support_providers.py` dùng SQLite tạm và giả lập API, không gửi nội dung ra nhà cung cấp.
+Các bảng được tạo tự động khi khởi động. Kiểm thử hỗ trợ và huấn luyện dùng SQLite
+riêng, bao gồm kiểm tra chặn kết nối mạng; chạy `python -m unittest discover -s tests -p "test_support*.py" -v`.
+Việc bỏ API AI áp dụng cho chatbot; cấu hình API nhận diện biển số là chức năng riêng.
 
 **Nhận diện bằng camera (admin / nhân viên):**
 Giao diện gồm hai cột: bên trái hiển thị camera / ảnh cùng nút bật tắt, chọn thiết bị và tải ảnh; bên phải có hai nút **Camera / Tải ảnh**, ghi chú, biển số, loại xe, vị trí và xác nhận. Trên màn hình nhỏ, hai cột xếp dọc.

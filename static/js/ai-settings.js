@@ -2,128 +2,165 @@
   'use strict';
   const section = document.getElementById('ai-settings');
   if (!section) return;
-  const form = document.getElementById('ai-settings-form');
-  const key = document.getElementById('ai-api-key');
-  const model = document.getElementById('ai-model');
-  const provider = document.getElementById('ai-provider');
-  const base = document.getElementById('ai-base-url');
-  const save = document.getElementById('ai-save');
-  const test = document.getElementById('ai-test');
-  const disconnect = document.getElementById('ai-disconnect');
-  const toggle = document.getElementById('ai-key-toggle');
-  const status = document.getElementById('ai-config-status');
-  const feedback = document.getElementById('ai-settings-feedback');
-  const retry = document.getElementById('ai-settings-retry');
-  let config = null, busy = false;
-
-  function tell(message, error=false) {
-    feedback.textContent = message; feedback.hidden = !message; feedback.classList.toggle('is-error',error);
+  const el = id => document.getElementById('ai-' + id);
+  let config = null, documents = [], selected = null, busy = false, edited = false;
+  function tell(message, error = false) {
+    el('settings-feedback').textContent = message;
+    el('settings-feedback').hidden = !message;
+    el('settings-feedback').classList.toggle('is-error', error);
   }
-  function sameConnection() { return config && provider.value === config.provider && base.value.trim().replace(/\/+$/,'') === config.base_url; }
-  function dirty() { return config && (!sameConnection() || key.value.trim() || model.value.trim() !== config.model); }
   function controls() {
-    [key,model,provider,base,toggle,save].forEach(control => { control.disabled = busy || !config; });
-    const canTest = config && model.value.trim() && base.value.trim() && (key.value.trim() || (config.configured && sameConnection()));
-    test.disabled = busy || !canTest;
-    test.title = dirty() ? 'Lưu cấu hình vừa nhập rồi kiểm tra kết nối.' : 'Kiểm tra cấu hình đã lưu';
-    if (!busy) test.textContent = dirty() ? 'Lưu & kiểm tra' : 'Kiểm tra kết nối';
-    disconnect.disabled = busy || !config || (!config.configured && !config.error);
-    key.required = !config || !config.configured || !sameConnection();
-    key.placeholder = config && config.configured && sameConnection() ? 'Để trống để giữ khóa hiện tại' : 'Nhập khóa API của nhà cung cấp này';
-    document.getElementById('ai-key-hint').textContent = config && !sameConnection() ?
-      'Nhập khóa mới khi đổi nhà cung cấp hoặc địa chỉ API. Khóa cũ không được tự động dùng lại.' :
-      'Khóa được lưu mã hóa và không hiển thị lại sau khi lưu.';
-    form.setAttribute('aria-busy',String(busy));
-  }
-  function providerInfo() {
-    const item = config.providers.find(item => item.id === provider.value);
-    base.readOnly = item.id !== 'compatible';
-    document.getElementById('ai-base-hint').textContent = item.id === 'compatible' ?
-      'Nhập Base URL HTTPS công khai, ví dụ https://api.example.com/v1. Hệ thống gọi /chat/completions.' :
-      'Địa chỉ chính thức của ' + item.label + '. Chọn Tùy chỉnh nếu bạn dùng cổng API khác.';
-    document.getElementById('ai-provider-hint').textContent = item.protocol === 'gemini' ? 'Kết nối trực tiếp Google AI Studio.' :
-      item.protocol === 'anthropic' ? 'Kết nối theo chuẩn Anthropic Messages.' : 'Kết nối theo chuẩn OpenAI Chat Completions.';
-    const link = document.getElementById('ai-key-link');
-    link.hidden = !item.docs_url;
-    if (item.docs_url) link.href = item.docs_url; else link.removeAttribute('href');
-    model.placeholder = item.default_model || 'Nhập mã model từ nhà cung cấp';
+    section.querySelectorAll('input,textarea,select,button').forEach(item => {
+      if (item !== el('settings-retry')) item.disabled = busy || !config;
+    });
+    el('delete').disabled = busy || selected === null;
+    el('train').disabled = busy || !config || !config.enabled_count || edited;
+    el('test').disabled = busy || !config || !config.configured;
+    section.setAttribute('aria-busy', String(busy));
   }
   function render(data) {
     config = data;
-    provider.replaceChildren(...data.providers.map(item => { const option=document.createElement('option'); option.value=item.id; option.textContent=item.label; return option; }));
-    provider.value = data.provider; model.value = data.model; base.value = data.base_url;
-    key.value = ''; key.type = 'password'; toggle.textContent = 'Hiện';
-    toggle.setAttribute('aria-pressed','false'); toggle.setAttribute('aria-label','Hiện khóa vừa nhập');
-    providerInfo();
-    status.textContent = data.error ? 'Cần kiểm tra cấu hình' : data.configured ? 'Đã có khóa API' : data.source === 'disabled' ? 'Đã ngắt kết nối' : 'Chưa kết nối';
-    status.className = 'badge ' + (data.configured ? 'badge-green' : 'badge-amber');
-    document.getElementById('ai-config-source').textContent = data.error || (data.source === 'environment' ?
-      'Đang dùng cấu hình từ biến môi trường máy chủ. Lưu tại đây để thay thế.' : data.configured ?
-      'Để trống ô khóa nếu chỉ đổi model. Bấm Kiểm tra kết nối để xác nhận cấu hình đã lưu.' :
-      'Lưu cấu hình để bật trợ lý AI cho các tài khoản trong hệ thống.');
-    const selected = data.providers.find(item => item.id === data.provider);
-    document.getElementById('ai-summary-provider').textContent = data.configured ? selected.label : 'Chưa có kết nối hoạt động';
-    document.getElementById('ai-summary-model').textContent = data.configured ? data.model : '—';
-    document.getElementById('ai-summary-host').textContent = data.configured ? new URL(data.base_url).host : '—';
-    retry.hidden = true; controls();
+    el('name').value = data.name; el('enabled').checked = data.enabled;
+    el('threshold').value = data.threshold; el('fallback').value = data.fallback;
+    el('config-status').textContent = data.configured ? 'Đang chạy nội bộ' : 'Đang tắt';
+    el('config-status').className = 'badge ' + (data.configured ? 'badge-green' : 'badge-amber');
+    el('summary-name').textContent = data.name;
+    el('summary-documents').textContent = data.knowledge_count + ' mục · ' + data.enabled_count + ' đang bật';
+    el('summary-version').textContent = data.model ? 'v' + data.model.id + ' · ' + data.model.document_count + ' mục' : 'Chưa huấn luyện';
+    el('summary-samples').textContent = data.model ? data.model.sample_count : '—';
+    el('summary-trained').textContent = data.model ? new Date(data.model.trained_at).toLocaleString('vi-VN') : '—';
+    el('training-note').textContent = data.needs_training ? 'Có thay đổi chưa huấn luyện. Chat vẫn dùng phiên bản trước.' : 'Phiên bản hiện tại đã học toàn bộ thay đổi đã lưu.';
+    el('test-result').hidden = true;
+    controls();
+  }
+  function renderList() {
+    const query = el('knowledge-search').value.toLocaleLowerCase('vi-VN').trim();
+    const items = documents.filter(item => (item.title + ' ' + item.questions.join(' ')).toLocaleLowerCase('vi-VN').includes(query));
+    el('knowledge-select').replaceChildren(...items.map(item => {
+      const option = document.createElement('option'); option.value = item.id;
+      option.textContent = item.title + (item.enabled ? '' : ' · Đã tắt'); return option;
+    }));
+    el('knowledge-select').value = selected === null ? '' : String(selected);
+  }
+  function edit(item = null) {
+    selected = item ? item.id : null; edited = false;
+    el('editor-heading').textContent = item ? 'Chỉnh sửa kiến thức' : 'Thêm kiến thức mới';
+    el('knowledge-title').value = item ? item.title : '';
+    el('questions').value = item ? item.questions.join('\n') : '';
+    el('answer').value = item ? item.answer : '';
+    el('knowledge-enabled').checked = item ? item.enabled : true;
+    renderList(); controls();
   }
   async function request(path, body) {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(),path === '/ai/test' ? 90000 : 12000);
+    const timer = window.setTimeout(() => controller.abort(), path === '/ai/train' ? 60000 : 15000);
     try {
-      const response = await fetch('/api/support' + path,{method:body === undefined ? 'GET' : 'POST', credentials:'same-origin',
-        signal:controller.signal, headers:body === undefined ? {} : {'Content-Type':'application/json','X-Support-CSRF':section.dataset.csrf},
-        body:body === undefined ? undefined : JSON.stringify(body)});
+      const response = await fetch('/api/support' + path, {
+        method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', signal: controller.signal,
+        headers: body === undefined ? {} : {'Content-Type': 'application/json', 'X-Support-CSRF': section.dataset.csrf},
+        body: body === undefined ? undefined : JSON.stringify(body)
+      });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Chưa hoàn tất yêu cầu. Vui lòng thử lại.');
       return data;
     } catch (error) {
-      if (error.name === 'AbortError') throw new Error('Máy chủ chưa hoàn tất kiểm tra. Vui lòng thử lại sau.');
-      if (error instanceof TypeError) throw new Error('Chưa kết nối được với máy chủ. Vui lòng thử lại.');
+      if (error.name === 'AbortError') throw new Error('Máy chủ chưa phản hồi. Tải lại trạng thái trước khi thử lại.');
+      if (error instanceof TypeError) throw new Error('Chưa kết nối được với máy chủ.');
       throw error;
-    } finally { window.clearTimeout(timeout); }
+    } finally { window.clearTimeout(timer); }
   }
-  async function perform(action) {
-    const needsSave = action === 'test' && Boolean(dirty());
-    const settingsBody = {action:'save',api_key:key.value,model:model.value,provider:provider.value,base_url:base.value};
+  async function run(action) {
+    if (busy) return;
     busy = true; controls(); tell('');
-    const label = action === 'test' ? test : action === 'disconnect' ? disconnect : save;
-    const oldLabel = label.textContent;
-    label.textContent = action === 'test' && !needsSave ? 'Đang kiểm tra…' : 'Đang lưu…';
-    try {
-      if (action === 'test') {
-        if (needsSave) {
-          render(await request('/ai/settings',settingsBody));
-          document.dispatchEvent(new Event('support-config-changed'));
-          label.textContent = 'Đang kiểm tra…';
-        }
-        const data = await request('/ai/test',{}); tell(data.message);
-      } else {
-        const data = await request('/ai/settings',action === 'disconnect' ? {action:'disconnect'} :
-          settingsBody);
-        render(data);
-        tell(action === 'disconnect' ? 'Đã ngắt kết nối AI. Chat với đội ngũ vẫn hoạt động.' : 'Đã lưu cấu hình AI. Bấm Kiểm tra kết nối để xác nhận khóa, model và địa chỉ API.');
-        document.dispatchEvent(new Event('support-config-changed'));
-      }
-    } catch (error) { tell(error.message,true); }
-    finally { busy = false; label.textContent = oldLabel; controls(); }
+    try { await action(); }
+    catch (error) { tell(error.message, true); }
+    finally { busy = false; controls(); }
   }
-  provider.addEventListener('change',() => {
-    const item = config.providers.find(item => item.id === provider.value);
-    base.value = item.base_url; model.value = item.default_model; key.value = ''; key.type = 'password';
-    toggle.textContent = 'Hiện'; toggle.setAttribute('aria-pressed','false'); toggle.setAttribute('aria-label','Hiện khóa vừa nhập');
-    tell(''); providerInfo(); controls();
+  async function reloadDocuments(id = null) {
+    documents = (await request('/ai/knowledge')).documents;
+    edit(documents.find(item => item.id === id) || null);
+  }
+  function changed() { document.dispatchEvent(new Event('support-config-changed')); }
+  el('settings-form').addEventListener('submit', event => {
+    event.preventDefault();
+    if (!config || !event.target.reportValidity()) return;
+    const data = {action: 'save', name: el('name').value, enabled: el('enabled').checked,
+      threshold: Number(el('threshold').value), fallback: el('fallback').value};
+    run(async () => { render(await request('/ai/settings', data)); tell('Đã lưu cấu hình trợ lý nội bộ.'); changed(); });
   });
-  [key,model,base].forEach(input => input.addEventListener('input',controls));
-  toggle.addEventListener('click',() => {
-    const show = key.type === 'password'; key.type = show ? 'text' : 'password';
-    toggle.textContent = show ? 'Ẩn' : 'Hiện'; toggle.setAttribute('aria-pressed',String(show));
-    toggle.setAttribute('aria-label',show ? 'Ẩn khóa vừa nhập' : 'Hiện khóa vừa nhập'); key.focus();
+  el('knowledge-form').addEventListener('submit', event => {
+    event.preventDefault();
+    if (!config || !event.target.reportValidity()) return;
+    const data = {title: el('knowledge-title').value, questions: el('questions').value.split(/\r?\n/).map(item => item.trim()).filter(Boolean),
+      answer: el('answer').value, enabled: el('knowledge-enabled').checked};
+    if (selected !== null) data.id = selected;
+    run(async () => {
+      const result = await request('/ai/knowledge', data);
+      render(result.settings); await reloadDocuments(result.id);
+      tell('Đã lưu kiến thức. Bấm Huấn luyện để áp dụng cho chat.');
+    });
   });
-  form.addEventListener('submit',event => { event.preventDefault(); if (!busy && config && form.reportValidity()) perform('save'); });
-  test.addEventListener('click',() => { if (!test.disabled && form.reportValidity()) perform('test'); });
-  disconnect.addEventListener('click',() => { if (!disconnect.disabled) perform('disconnect'); });
-  function load() { tell(''); retry.hidden=true; request('/ai/settings').then(render).catch(error => { status.textContent='Chưa tải được cấu hình'; tell(error.message,true); retry.hidden=false; }); }
-  retry.addEventListener('click',load);
+  el('knowledge-form').addEventListener('input', () => { edited = true; controls(); });
+  el('knowledge-select').addEventListener('change', () => {
+    if (edited) { el('knowledge-select').value = selected === null ? '' : String(selected); tell('Lưu kiến thức hoặc bấm Hủy sửa trước khi chọn mục khác.', true); return; }
+    edit(documents.find(item => item.id === Number(el('knowledge-select').value)) || null);
+  });
+  el('knowledge-search').addEventListener('input', renderList);
+  el('new').addEventListener('click', () => {
+    if (edited) { tell('Lưu kiến thức hoặc bấm Hủy sửa trước khi thêm mục mới.', true); return; }
+    edit(); el('knowledge-title').focus();
+  });
+  el('cancel').addEventListener('click', () => { edit(documents.find(item => item.id === selected) || null); tell(''); });
+  el('delete').addEventListener('click', () => {
+    if (selected === null) return;
+    run(async () => {
+      const result = await request('/ai/knowledge/' + selected + '/delete', {});
+      render(result.settings); await reloadDocuments(); tell('Đã xóa khỏi kho biên soạn. Bấm Huấn luyện để áp dụng.');
+    });
+  });
+  el('train').addEventListener('click', () => run(async () => {
+    const button = el('train'); button.textContent = 'Đang huấn luyện…';
+    try { render(await request('/ai/train', {})); tell('Huấn luyện thành công. Chat đã dùng phiên bản mới.'); changed(); }
+    finally { button.textContent = 'Huấn luyện'; }
+  }));
+  el('test-form').addEventListener('submit', event => {
+    event.preventDefault();
+    if (!config || !event.target.reportValidity()) return;
+    const text = el('test-question').value;
+    run(async () => {
+      el('test-result').hidden = true;
+      const result = await request('/ai/test', {text});
+      el('test-answer').textContent = result.answer;
+      el('test-meta').textContent = result.source === 'parking_data' ?
+        result.title + ' · ' + (result.matched ? 'Dữ liệu hệ thống vừa tra cứu' : 'Cần làm rõ câu hỏi') :
+        'v' + result.model_version + ' · ' + (result.matched ? result.title : 'Chưa nhận diện chắc chắn') + ' · Độ tương đồng ' + Math.round(result.confidence * 100) + '%';
+      el('test-result').hidden = false;
+    });
+  });
+  el('import').addEventListener('click', () => {
+    if (edited) { tell('Lưu kiến thức hoặc bấm Hủy sửa trước khi nhập tệp.', true); return; }
+    el('import-file').click();
+  });
+  el('import-file').addEventListener('change', event => {
+    const file = event.target.files[0]; event.target.value = '';
+    if (!file) return;
+    run(async () => {
+      if (file.size > 8 * 1024 * 1024) throw new Error('Tệp JSON có kích thước tối đa 8 MB.');
+      let body;
+      try { body = JSON.parse(await file.text()); } catch (_) { throw new Error('Tệp JSON chưa hợp lệ.'); }
+      const result = await request('/ai/knowledge/import', body);
+      render(result.settings); await reloadDocuments(); tell('Đã nhập ' + result.imported + ' mục. Bấm Huấn luyện để áp dụng.');
+    });
+  });
+  async function load() {
+    el('settings-retry').hidden = true;
+    await run(async () => {
+      try {
+        const [data, corpus] = await Promise.all([request('/ai/settings'), request('/ai/knowledge')]);
+        documents = corpus.documents; render(data); edit();
+      } catch (error) { el('settings-retry').hidden = false; throw error; }
+    });
+  }
+  el('settings-retry').addEventListener('click', load);
   load();
 })();

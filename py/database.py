@@ -134,6 +134,9 @@ def init_db():
 
     conn.close()
     seed_pricing()
+    # Seed and train the small offline assistant once; later starts retain admin edits.
+    import support_knowledge
+    support_knowledge.initialize()
 
 
 # ============================================================

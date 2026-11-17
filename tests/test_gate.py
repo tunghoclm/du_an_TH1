@@ -547,6 +547,53 @@ class GateTests(unittest.TestCase):
         self.assertIn('PHIẾU THU PHÍ GỬI XE', print_page.text)
         self.assertIn('window.print()', print_page.text)
 
+    def test_gate_lanes_renders_kpi_lanes_and_active_vehicles(self):
+        database.create_parking_entry('51F-88888', 'in_test.jpg', 'A01', 1, 'Ô tô')
+        res = self.client.get('/gate/lanes')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('LÀN VÀO', res.text)
+        self.assertIn('LÀN RA', res.text)
+        self.assertIn('data-lane-form="entry"', res.text)
+        self.assertIn('data-lane-form="exit"', res.text)
+        self.assertIn('51F-88888', res.text)
+        self.assertIn('lanes-kpi-bar', res.text)
+        self.assertIn('lanes-activity', res.text)
+
+        # Inline confirm without token returns JSON error without redirecting away
+        inline_err = self.client.post('/entry', data={'inline': '1', 'action': 'confirm'})
+        self.assertEqual(inline_err.status_code, 200)
+        payload = inline_err.get_json()
+        self.assertFalse(payload['ok'])
+        self.assertIn('Chưa có ảnh', payload['message'])
+
+    def test_settings_devices_section_saves_cameras_and_ports(self):
+        page = self.client.get('/settings?section=devices')
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('Cổng kết nối &amp; Camera', page.text)
+        self.assertIn('entry_barrier_port', page.text)
+
+        res = self.client.post('/settings?section=devices', data={
+            'setting_type': 'devices',
+            'entry_plate_camera': 'cam-in-plate-01',
+            'entry_overview_camera': 'cam-in-view-01',
+            'exit_plate_camera': 'cam-out-plate-01',
+            'exit_overview_camera': 'cam-out-view-01',
+            'entry_barrier_port': 'COM8',
+            'exit_barrier_port': 'COM9',
+            'barrier_baudrate': '115200',
+            'card_reader_port': 'USB-HID',
+            'led_display_port': '192.168.1.88:5005',
+            'printer_port': 'USB 80mm',
+            'auto_open_barrier': '1',
+        }, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('COM8', res.text)
+        self.assertIn('cam-in-plate-01', res.text)
+
+        lanes = self.client.get('/gate/lanes')
+        self.assertIn('data-default-device="cam-in-plate-01"', lanes.text)
+        self.assertIn('data-default-device="cam-out-view-01"', lanes.text)
+
 
 if __name__ == '__main__':
     unittest.main()

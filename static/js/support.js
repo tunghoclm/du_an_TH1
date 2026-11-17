@@ -18,7 +18,7 @@
   const avatar = document.getElementById('support-chat-avatar');
   const aiIcon = avatar.firstElementChild.cloneNode(true);
   const state = {open:false, view:'home', kind:null, thread:null, messages:[], aiMessages:[], aiPending:false,
-    aiConfigured:false, aiLabel:'dịch vụ AI đã cấu hình', loaded:false, csrf:widget.dataset.csrf, bootstrap:null, epoch:0, authExpired:false,
+    aiConfigured:false, aiLabel:'Smart Parking AI nội bộ', loaded:false, csrf:widget.dataset.csrf, bootstrap:null, epoch:0, authExpired:false,
     posting:new Set(), drafts:new Map(), retries:new Map(), read:new Map(), reading:new Set(), hasOlder:false};
   let timer, polling = false, bootstrapPending = null, directorySignature = '', interactionVersion = 0;
 
@@ -136,7 +136,7 @@
     document.getElementById('support-ai-description').textContent = state.aiConfigured ? 'Giải đáp nhanh cùng ' + state.aiLabel : 'Giải đáp thắc mắc về Smart Parking';
     if (state.view === 'chat' && state.kind === 'ai') {
       document.getElementById('support-chat-subtitle').textContent = state.aiConfigured ? 'Được hỗ trợ bởi ' + state.aiLabel : 'Hỗ trợ Smart Parking';
-      document.getElementById('support-chat-footnote').textContent = 'Nội dung chat AI được gửi tới ' + state.aiLabel + ' · Shift + Enter để xuống dòng';
+      document.getElementById('support-chat-footnote').textContent = 'Xử lý nội bộ · Không gửi tới API AI bên ngoài · Shift + Enter để xuống dòng';
     }
   }
 
@@ -153,14 +153,14 @@
     input.disabled = !available || busy;
     sendButton.disabled = input.disabled || !input.value.trim();
     document.getElementById('support-typing').hidden = !(state.kind === 'ai' && busy);
-    const text = state.kind === 'ai' ? (!state.aiConfigured ? 'Trợ lý AI chưa được kết nối. Bạn có thể chọn Chat với đội ngũ.' : '') :
+    const text = state.kind === 'ai' ? (!state.aiConfigured ? 'Trợ lý nội bộ đang tắt hoặc chưa được huấn luyện. Bạn có thể chọn Chat với đội ngũ.' : '') :
       (state.thread && !state.thread.can_send ? 'Người nhận hiện không sẵn sàng. Bạn vẫn có thể xem lịch sử trò chuyện.' : '');
     notice.textContent = text; notice.hidden = !text;
   }
   function chatHeader(title, subtitle) {
     document.getElementById('support-chat-title').textContent = title;
     document.getElementById('support-chat-subtitle').textContent = subtitle;
-    document.getElementById('support-chat-footnote').textContent = state.kind === 'ai' ? 'Nội dung chat AI được gửi tới ' + state.aiLabel + ' · Shift + Enter để xuống dòng' : 'Tin nhắn riêng với người hỗ trợ · Shift + Enter để xuống dòng';
+    document.getElementById('support-chat-footnote').textContent = state.kind === 'ai' ? 'Xử lý nội bộ · Không gửi tới API AI bên ngoài · Shift + Enter để xuống dòng' : 'Tin nhắn riêng với người hỗ trợ · Shift + Enter để xuống dòng';
     if (state.kind === 'ai') avatar.replaceChildren(aiIcon.cloneNode(true)); else avatar.textContent = initials(title);
     input.value = state.drafts.get(key()) || ''; growInput(); updateCompose();
   }

@@ -1,18 +1,15 @@
-"""Support uses isolated SQLite fixtures and mocked Gemini; never contacts Google."""
+"""Support uses isolated SQLite fixtures, local inference and private inboxes."""
 from datetime import datetime
-from io import BytesIO
-import json
-import os
 import threading
 import unittest
-from unittest.mock import MagicMock, patch
-from urllib.error import HTTPError, URLError
+from unittest.mock import patch
 from uuid import uuid4
 
 import test_gate
 import database
 import support_chat
 import support_ai
+import support_knowledge
 
 
 class SupportTests(unittest.TestCase):
@@ -142,8 +139,9 @@ class SupportTests(unittest.TestCase):
         self.assertEqual(self.post(self.customer, f'/threads/{thread}/read', {'last_id':foreign}).status_code, 404)
         self.assertEqual(self.customer.get(f'/api/support/threads/{thread}/messages?after=0').status_code, 400)
 
-    def test_missing_gemini_key_is_explicit_and_never_uses_a_fake_ai_reply(self):
-        with patch.dict(os.environ, {'GEMINI_API_KEY':'','GOOGLE_API_KEY':''}), patch.object(support_ai,'generate_reply') as call:
+    def test_disabled_local_assistant_rejects_questions_without_writing_history(self):
+        support_knowledge.settings(dict(support_knowledge.status(), enabled=False))
+        with patch.object(support_ai,'generate_reply') as call:
             self.assertFalse(self.customer.get('/api/support/ai/history').json['configured'])
             response = self.post(self.customer, '/ai/messages', {'text':'Xin chào','client_id':str(uuid4())})
         self.assertEqual(response.status_code, 503)
@@ -151,10 +149,10 @@ class SupportTests(unittest.TestCase):
         with support_chat.connection() as conn:
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM support_ai_turns').fetchone()[0], 0)
 
-    def test_gemini_history_is_private_and_idempotent_and_excludes_human_messages(self):
+    def test_local_history_is_private_and_idempotent_and_excludes_human_messages(self):
         thread = self.thread()
         self.send(self.customer, thread, 'Nội dung riêng chỉ gửi nhân viên')
-        with patch.dict(os.environ, {'GEMINI_API_KEY':'test-key'}), patch.object(support_ai,'generate_reply',return_value='Mở Cabin > Xe vào.') as call:
+        with patch.object(support_ai,'generate_reply',return_value='Mở Cabin > Xe vào.') as call:
             nonce = str(uuid4())
             data = {'text':'Hướng dẫn xe vào','client_id':nonce}
             self.assertEqual(self.post(self.customer, '/ai/messages', data).status_code, 200)
@@ -167,8 +165,8 @@ class SupportTests(unittest.TestCase):
             self.assertEqual(self.other.get('/api/support/ai/history').json['messages'], [])
             self.assertEqual(len(self.customer.get('/api/support/ai/history').json['messages']), 4)
 
-    def test_gemini_errors_release_pending_and_requests_are_rate_limited(self):
-        with patch.dict(os.environ, {'GEMINI_API_KEY':'test-key'}), patch.object(support_ai,'generate_reply',side_effect=support_ai.AIError('Đang bận',429)):
+    def test_local_errors_release_pending_and_requests_are_rate_limited(self):
+        with patch.object(support_ai,'generate_reply',side_effect=support_ai.AIError('Đang bận',429)):
             for _ in range(5):
                 self.assertEqual(self.post(self.customer, '/ai/messages', {'text':'Xin chào','client_id':str(uuid4())}).status_code, 429)
             self.assertFalse(self.customer.get('/api/support/ai/history').json['pending'])
@@ -176,7 +174,7 @@ class SupportTests(unittest.TestCase):
             self.assertEqual(response.status_code, 429)
             self.assertIn('một phút', response.json['error'])
 
-    def test_only_one_pending_gemini_request_per_user_and_no_double_charge(self):
+    def test_only_one_pending_local_request_per_user_and_no_duplicate_inference(self):
         actor = self.actor(self.customer_id)
         token = actor.get('/api/support/bootstrap').json['csrf_token']
         entered, release = threading.Event(), threading.Event()
@@ -187,7 +185,7 @@ class SupportTests(unittest.TestCase):
             return 'Câu trả lời thử nghiệm'
         def first():
             responses.append(actor.post('/api/support/ai/messages', json={'text':'Câu đầu','client_id':str(uuid4())}, headers={'X-Support-CSRF':token}))
-        with patch.dict(os.environ, {'GEMINI_API_KEY':'test-key'}), patch.object(support_ai,'generate_reply',side_effect=reply) as call:
+        with patch.object(support_ai,'generate_reply',side_effect=reply) as call:
             worker = threading.Thread(target=first)
             worker.start()
             try:
@@ -199,30 +197,7 @@ class SupportTests(unittest.TestCase):
             self.assertEqual(responses[0].status_code, 200)
             self.assertEqual(call.call_count, 1)
 
-    def test_provider_payload_uses_fixed_host_header_key_and_filters_thoughts(self):
-        response = MagicMock()
-        response.__enter__.return_value = response
-        response.read.return_value = json.dumps({'candidates':[{'content':{'parts':[{'text':'hidden','thought':True},{'text':'Câu trả lời'}]}}]}).encode()
-        opener = MagicMock(); opener.open.return_value = response
-        with patch.dict(os.environ, {'GEMINI_API_KEY':'private-api-key','GEMINI_MODEL':'gemini-3.8-flash'}), patch.object(support_ai,'build_opener',return_value=opener):
-            answer = support_ai.generate_reply([{'user_text':'Câu trước','answer':'Trả lời trước'}], 'Câu hiện tại')
-        self.assertEqual(answer, 'Câu trả lời')
-        request = opener.open.call_args.args[0]
-        self.assertTrue(request.full_url.startswith('https://generativelanguage.googleapis.com/v1beta/models/'))
-        self.assertNotIn('private-api-key', request.full_url)
-        self.assertEqual(dict((k.lower(),v) for k,v in request.header_items())['x-goog-api-key'], 'private-api-key')
-        payload = json.loads(request.data)
-        self.assertEqual([m['role'] for m in payload['contents']], ['user','model','user'])
-        self.assertIn('systemInstruction', payload)
-        self.assertEqual(opener.open.call_args.kwargs['timeout'], 60)
 
-    def test_provider_failure_messages_never_return_secret_or_untrusted_error_body(self):
-        for error in (HTTPError('https://example.test',403,'private-api-key',{},BytesIO(b'private-api-key')), URLError('private-api-key'), TimeoutError('private-api-key')):
-            with self.subTest(error=type(error).__name__), patch.dict(os.environ, {'GEMINI_API_KEY':'private-api-key'}), patch.object(support_ai,'build_opener') as opener:
-                opener.return_value.open.side_effect = error
-                with self.assertRaises(support_ai.AIError) as raised:
-                    support_ai.generate_reply([], 'Xin chào')
-                self.assertNotIn('private-api-key', str(raised.exception))
 
     def test_message_rate_limit_does_not_block_retrieving_a_previously_sent_nonce(self):
         thread = self.thread()
@@ -241,12 +216,12 @@ class SupportTests(unittest.TestCase):
         with support_chat.connection(write=True) as conn:
             conn.execute("INSERT INTO support_ai_turns(user_id,client_id,user_text,state,created_at) VALUES (?,?,?,'pending',?)",
                          (self.customer_id,str(uuid4()),'Câu cũ','2020-01-01T00:00:00'))
-        with patch.dict(os.environ, {'GEMINI_API_KEY':'test-key'}), patch.object(support_ai,'generate_reply',side_effect=RuntimeError('private-api-key')):
+        with patch.object(support_ai,'generate_reply',side_effect=RuntimeError('private-internal-detail')):
             response = self.post(self.customer, '/ai/messages', {'text':'Câu mới','client_id':str(uuid4())})
             self.assertEqual(response.status_code, 503)
-            self.assertNotIn('private-api-key', response.text)
+            self.assertNotIn('private-internal-detail', response.text)
             self.assertFalse(self.customer.get('/api/support/ai/history').json['pending'])
-        with patch.dict(os.environ, {'GEMINI_API_KEY':'test-key'}), patch.object(support_ai,'generate_reply',return_value='Đã hoạt động'):
+        with patch.object(support_ai,'generate_reply',return_value='Đã hoạt động'):
             response = self.post(self.customer, '/ai/messages', {'text':'Thử lại','client_id':str(uuid4())})
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json['messages'][-1]['text'], 'Đã hoạt động')
@@ -264,15 +239,6 @@ class SupportTests(unittest.TestCase):
             session['user_id'] = {'invalid':'identity'}
         self.assertEqual(self.customer.get('/api/support/bootstrap').status_code, 401)
 
-    def test_blocked_or_empty_gemini_answers_are_not_saved_as_successful_replies(self):
-        for data, status in (({'promptFeedback':{'blockReason':'SAFETY'}},422), ({'candidates':[]},503), ([],503)):
-            response = MagicMock(); response.__enter__.return_value = response
-            response.read.return_value = json.dumps(data).encode()
-            opener = MagicMock(); opener.open.return_value = response
-            with self.subTest(data=data), patch.dict(os.environ, {'GEMINI_API_KEY':'test-key'}), patch.object(support_ai,'build_opener',return_value=opener):
-                with self.assertRaises(support_ai.AIError) as raised:
-                    support_ai.generate_reply([], 'Xin chào')
-                self.assertEqual(raised.exception.status, status)
 
 
 if __name__ == '__main__':

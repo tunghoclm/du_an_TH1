@@ -2,6 +2,26 @@
 .settings-tabs > a:hover { color:#0070f4; background:#f0f6ff; }
 .settings-tabs > a.active { border-bottom-color:#0070f4; color:#0070f4; }
 .ai-settings-layout { display:grid; grid-template-columns:minmax(0,1fr) 310px; align-items:start; gap:22px; }
+.ai-settings-main { display:grid; gap:22px; min-width:0; }
+.ai-settings textarea,.ai-test-panel textarea { width:100%; min-width:0; padding:11px 12px; border:1px solid #dbe4ef; border-radius:7px; background:#fff; color:#435774; font:inherit; font-size:13px; line-height:1.65; resize:vertical; }
+.ai-check { display:flex; align-items:center; gap:9px; color:#435774; font-size:13px; line-height:1.6; }
+.ai-check.full { grid-column:1/-1; padding-bottom:20px; }
+.ai-check input { width:16px; height:16px; }
+.ai-settings-heading > button { margin-left:auto; flex-shrink:0; }
+.ai-settings > .ai-settings-feedback { margin-top:18px; }
+.ai-settings > .form-field input { width:100%; }
+.ai-knowledge-list { width:100%; margin:12px 0 20px; border:1px solid #dbe4ef; border-radius:7px; padding:5px; color:#435774; background:#f8faff; font:inherit; font-size:13px; }
+.ai-knowledge-list option { padding:8px 10px; border-radius:4px; overflow:hidden; text-overflow:ellipsis; }
+#ai-knowledge-form h3 { margin:0; font-size:15px; color:#334d70; }
+.ai-transfer { display:flex; flex-wrap:wrap; gap:10px; padding:0 0 24px; }
+.ai-transfer small { flex-basis:100%; color:#7b8fa8; font-size:11px; line-height:1.7; }
+.ai-train { margin-top:16px; width:100%; }
+.ai-test-panel h3 { margin:0 0 10px; font-size:15px; }
+.ai-test-panel > p { color:#7b8fa8; font-size:12px; line-height:1.7; }
+.ai-test-panel form button { margin-top:12px; }
+.ai-test-result { margin-top:18px; padding-top:15px; border-top:1px solid #edf1f7; }
+.ai-test-result small { color:#0875f9; font-size:11px; line-height:1.6; }
+.ai-test-result p { white-space:pre-wrap; overflow-wrap:anywhere; color:#435774; font-size:13px; line-height:1.8; }
 .ai-settings { min-width:0; padding:0 26px; }
 .ai-settings-heading { display:flex; align-items:center; gap:13px; padding:24px 0; border-bottom:1px solid #edf1f7; }
 .ai-settings-icon { display:grid; place-items:center; flex:0 0 46px; height:46px; border:1px solid #dceaff; border-radius:13px; background:#edf5ff; color:#0875f9; }
@@ -12,17 +32,9 @@
 .ai-settings .form-field { min-width:0; }
 .ai-settings .form-field.full { grid-column:1/-1; }
 .ai-settings .form-field input,.ai-settings .form-field select { width:100%; min-width:0; height:43px; font-size:14px; }
-.ai-settings input[readonly] { background:#f6f8fb; color:#7f8da1; }
 .ai-settings .form-field label { color:#435774; font-size:13px; font-weight:500; }
 .ai-settings .form-field small { color:#8b9bb0; font-size:11px; line-height:1.65; }
 .ai-settings a { color:#0875f9; }
-.ai-field-optional { margin-left:5px; color:#96a3b5; font-size:11px; font-weight:400; }
-.ai-key-label { display:flex; justify-content:space-between; align-items:center; gap:12px; }
-.ai-key-label a { font-size:12px; }
-.ai-key-field { position:relative; }
-.ai-key-field input { padding-right:62px; }
-.ai-key-toggle { position:absolute; top:50%; right:10px; transform:translateY(-50%); padding:5px 7px; border-radius:5px; color:#547598; font-size:12px; }
-.ai-key-toggle:hover { background:#edf5ff; color:#0875f9; }
 .ai-settings-source { margin:19px 0; color:#7b8fa8; font-size:12px; line-height:1.65; }
 .ai-settings-feedback { margin:0 0 18px; padding:11px 14px; border:1px solid #cce8dc; border-radius:8px; background:#f0faf5; color:#297756; font-size:13px; line-height:1.6; }
 .ai-settings-feedback.is-error { border-color:#f0d8dc; background:#fff4f4; color:#ad4c5a; }

@@ -11,6 +11,7 @@ from flask import Blueprint, g, jsonify, request, session
 import database
 import support_config
 import support_ai
+import support_knowledge
 
 
 STAFF_ROLES = ('admin', 'manager')
@@ -134,7 +135,7 @@ def ai_history(conn, user_id):
         messages.extend([dict(id=f"{turn['id']}-user", text=turn['user_text'], mine=True, client_id=turn['client_id'], created_at=turn['created_at']),
                          dict(id=f"{turn['id']}-ai", text=turn['answer'], mine=False, created_at=turn['finished_at'])])
     pending = conn.execute("SELECT 1 FROM support_ai_turns WHERE user_id=? AND state='pending'", (user_id,)).fetchone()
-    return dict(messages=messages, pending=bool(pending), configured=bool(support_ai.credentials()), ai=support_config.identity())
+    return dict(messages=messages, pending=bool(pending), configured=support_ai.available(), ai=support_config.identity())
 
 
 def register_support(app):
@@ -155,7 +156,8 @@ def register_support(app):
         if g.support_user is None or g.support_user['status'] != 'active':
             raise SupportError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 401)
         if request.method == 'POST':
-            if request.content_length is None or request.content_length > 16384:
+            limit = 8 * 1024 * 1024 if request.path.endswith('/ai/knowledge/import') else 65536 if request.path.endswith('/ai/knowledge') else 16384
+            if request.content_length is None or request.content_length > limit:
                 raise SupportError('Dữ liệu gửi quá lớn.', 413)
             expected = session.get('support_csrf', '')
             supplied = request.headers.get('X-Support-CSRF', '')
@@ -181,6 +183,10 @@ def register_support(app):
     def busy_database(error):
         return jsonify(error='Hộp thư đang bận. Vui lòng thử lại sau.'), 503
 
+    @bp.errorhandler(support_knowledge.KnowledgeError)
+    def knowledge_error(error):
+        return jsonify(error=str(error)), 400
+
     @bp.get('/bootstrap')
     def bootstrap():
         actor = g.support_user
@@ -191,7 +197,7 @@ def register_support(app):
         return jsonify(me=dict(id=actor['id'], name=actor['fullname'], role=actor['role']),
                        staff=[dict(id=p['id'], name=p['fullname'], role=ROLE_LABELS[p['role']]) for p in staff],
                        threads=threads, unread_total=sum(t['unread'] for t in threads),
-                       ai_configured=bool(support_ai.credentials()), ai=support_config.identity(), csrf_token=csrf_token())
+                       ai_configured=support_ai.available(), ai=support_config.identity(), csrf_token=csrf_token())
 
     def require_admin():
         if g.support_user['role'] != 'admin':
@@ -207,10 +213,8 @@ def register_support(app):
         require_admin()
         data = json_body()
         try:
-            if data.get('action') == 'disconnect':
-                result = support_config.disconnect()
-            elif data.get('action') == 'save':
-                result = support_config.save(data.get('api_key', ''), data.get('model'), data.get('provider', 'gemini'), data.get('base_url', ''))
+            if data.get('action') == 'save':
+                result = support_config.save(data)
             else:
                 raise SupportError('Thao tác cấu hình chưa hợp lệ.')
         except support_config.ConfigError as error:
@@ -220,16 +224,46 @@ def register_support(app):
     @bp.post('/ai/test')
     def test_ai_settings():
         require_admin()
+        text = support_knowledge.clean_text(json_body().get('text'), 'Câu hỏi thử', 2000)
+        return jsonify(support_knowledge.answer(text))
+
+    @bp.get('/ai/knowledge')
+    def ai_knowledge():
+        require_admin()
+        return jsonify(documents=support_knowledge.list_documents())
+
+    @bp.post('/ai/knowledge')
+    def save_ai_knowledge():
+        require_admin()
+        item_id = support_knowledge.save_document(json_body(), g.support_user['id'])
+        return jsonify(id=item_id, settings=support_config.public_settings())
+
+    @bp.post('/ai/knowledge/<int:item_id>/delete')
+    def delete_ai_knowledge(item_id):
+        require_admin()
+        support_knowledge.delete_document(positive_id(item_id))
+        return jsonify(settings=support_config.public_settings())
+
+    @bp.post('/ai/train')
+    def train_ai():
+        require_admin()
         json_body()
-        if not support_ai.credentials():
-            raise SupportError('Hãy lưu khóa API trước khi kiểm tra kết nối.')
-        try:
-            support_ai.generate_reply([], 'Reply OK.', connection_test=True)
-        except support_ai.AIError as error:
-            raise SupportError(str(error), error.status, error.code) from None
-        except Exception:
-            raise SupportError('Chưa kiểm tra được kết nối AI. Vui lòng thử lại sau.', 503) from None
-        return jsonify(ok=True, message='Kết nối ' + support_config.identity()['label'] + ' thành công.')
+        return jsonify(support_knowledge.train(g.support_user['id']))
+
+    @bp.get('/ai/knowledge/export')
+    def export_ai_knowledge():
+        require_admin()
+        documents = [{key: item[key] for key in ('title', 'questions', 'answer', 'enabled')}
+                     for item in support_knowledge.list_documents()]
+        response = jsonify(format='smart-parking-knowledge-v1', documents=documents)
+        response.headers['Content-Disposition'] = 'attachment; filename="smart-parking-knowledge.json"'
+        return response
+
+    @bp.post('/ai/knowledge/import')
+    def import_ai_knowledge():
+        require_admin()
+        count = support_knowledge.import_documents(json_body(), g.support_user['id'])
+        return jsonify(imported=count, settings=support_config.public_settings())
 
     @bp.post('/threads')
     def start_thread():
@@ -322,8 +356,8 @@ def register_support(app):
     def ai_message():
         actor = g.support_user
         text, client_id = message_body(json_body())
-        if not support_ai.credentials():
-            raise SupportError('Trợ lý AI chưa được kết nối. Bạn có thể chat với đội ngũ hỗ trợ.', 503)
+        if not support_ai.available():
+            raise SupportError('Trợ lý AI nội bộ đang tắt hoặc chưa được huấn luyện. Bạn có thể chat với đội ngũ hỗ trợ.', 503)
         with connection(write=True) as conn:
             expire_ai(conn)
             existing = conn.execute('SELECT * FROM support_ai_turns WHERE user_id=? AND client_id=?', (actor['id'], client_id)).fetchone()

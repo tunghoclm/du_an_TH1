@@ -57,7 +57,7 @@ from markupsafe import Markup
 from config import TMP_DIR, IN_DIR, OUT_DIR, TEMPLATES_HTML_DIR, TEMPLATES_CSS_DIR
 import database
 import export_stats
-from parking_fees import calculate_turn_fee
+from parking_fees import calculate_turn_fee, DEFAULT_HOURLY_FALLBACK
 from plate_recognition import recognize_plate_annotated, recognize_plate, recognize_plate_live
 from plate_utils import normalize_plate, plate_key, is_valid_plate_format
 import parking_invoices
@@ -86,7 +86,7 @@ VIETNAM_BANKS = [
     {'bin': '970440', 'short_name': 'SeABank', 'name': 'SeABank - Ngân hàng Đông Nam Á'},
 ]
 
-FEE_PER_HOUR = 5000  # đơn giá DỰ PHÒNG (5.000 VNĐ/giờ) — chỉ dùng cho xe cũ chưa có loại xe / không còn giá
+FEE_PER_HOUR = DEFAULT_HOURLY_FALLBACK  # dùng chung với ước tính phí của chatbot
 MIN_PASSWORD_LEN = 4
 
 app = Flask(__name__, template_folder=TEMPLATES_HTML_DIR)
@@ -621,15 +621,20 @@ def gate_lanes():
     today = date.today().isoformat()
     records = [dict(record) for record in database.get_all_records()
                if record['status'] in ('IN', 'OUT')]
-    entry_record = records[0] if records else None
-    exit_record = max((record for record in records if record['status'] == 'OUT'),
-                      key=lambda record: record['exit_time'] or '', default=None)
+    open_list = [r for r in records if r['status'] == 'IN']
+    exit_list = sorted((r for r in records if r['status'] == 'OUT'),
+                       key=lambda r: r['exit_time'] or '', reverse=True)
+    entry_record = open_list[0] if open_list else (records[0] if records else None)
+    exit_record = exit_list[0] if exit_list else None
     now = datetime.now()
+    for record in open_list[:12]:
+        record['preview_fee'], record['preview_duration'], _ = calc_fee(record, now)
     for record in (entry_record, exit_record):
         if record is None:
             continue
         if record.get('status') == 'IN':
-            record['preview_fee'], record['preview_duration'], _ = calc_fee(record, now)
+            if 'preview_fee' not in record:
+                record['preview_fee'], record['preview_duration'], _ = calc_fee(record, now)
         else:
             record['preview_fee'] = record.get('fee') or 0
             record['preview_duration'] = ''
@@ -642,7 +647,9 @@ def gate_lanes():
     return render_template('gate_menu.html',
                            counts=database.slot_counts(),
                            stats=database.get_statistics(today, today),
-                           entry_record=entry_record, exit_record=exit_record)
+                           entry_record=entry_record, exit_record=exit_record,
+                           open_records=open_list[:12], recent_exits=exit_list[:8],
+                           device_settings=get_device_settings())
 
 
 @app.route('/gate/<direction>/camera', methods=['POST'])
@@ -719,8 +726,26 @@ def handle_gate(direction):
     return gate_recognize(direction, token, plate, note)
 
 
+def _gate_inline_json(direction, ok, message='', token='', plate='', note='', form=None, extra=None):
+    ctx = gate_context(direction, token, plate, note, form)
+    payload = {
+        'ok': ok,
+        'message': message,
+        'token': ctx['token'],
+        'plate': ctx['plate'],
+        'checked_plate': ctx['plate'] if ctx['mode'] else '',
+        'preview_url': ctx['preview_url'] or '',
+        'can_confirm': bool(ctx['mode'] and not (ctx['mode'] == 'entry' and ctx['no_slots'])),
+        'html': render_template('_gate_result.html', **ctx),
+    }
+    if extra:
+        payload.update(extra)
+    return jsonify(payload)
+
+
 def gate_recognize(direction, token, plate, note):
     """Bước 1: nhận diện biển số từ ảnh mới; hoặc (không chọn ảnh mới) làm mới thông tin theo biển số vừa sửa."""
+    inline = request.form.get('inline') == '1'
     file = request.files.get('image')
     has_file = bool(file and file.filename)
 
@@ -737,45 +762,64 @@ def gate_recognize(direction, token, plate, note):
             cv2.imwrite(os.path.join(TMP_FOLDER, f'{token}_ann.jpg'), annotated)
         except Exception as e:
             drop_tmp(token)
-            flash(f'Lỗi khi nhận diện biển số: {e}', 'error')
+            msg = f'Lỗi khi nhận diện biển số: {e}'
+            if inline:
+                return _gate_inline_json(direction, False, msg, note=note)
+            flash(msg, 'error')
             return render_gate(direction, note=note)
         if len(plate_key(plate)) < 4:
-            flash('Không nhận diện được biển số rõ ràng. Bạn có thể nhập biển số vào ô bên dưới '
-                  'rồi bấm "Cập nhật biển số" để tiếp tục, hoặc chọn / chụp ảnh khác (đủ sáng, ít góc nghiêng).', 'error')
+            msg = ('Không nhận diện được biển số rõ ràng. Bạn có thể nhập biển số vào ô bên dưới '
+                   'rồi bấm "Cập nhật biển số" để tiếp tục, hoặc chọn / chụp ảnh khác (đủ sáng, ít góc nghiêng).')
+            if inline:
+                return _gate_inline_json(direction, False, msg, token, plate, note)
+            flash(msg, 'error')
+        if inline:
+            return _gate_inline_json(direction, True, '', token, plate, note)
         return render_gate(direction, token, plate, note)
 
     if token:
         if len(plate_key(plate)) < 4:
-            flash('Biển số quá ngắn, vui lòng nhập lại (tối thiểu 4 ký tự).', 'error')
+            msg = 'Biển số quá ngắn, vui lòng nhập lại (tối thiểu 4 ký tự).'
+            if inline:
+                return _gate_inline_json(direction, False, msg, token, plate, note)
+            flash(msg, 'error')
+        if inline:
+            return _gate_inline_json(direction, True, '', token, plate, note)
         return render_gate(direction, token, plate, note)
 
-    flash('Vui lòng chọn ảnh hoặc bật camera rồi chụp ảnh biển số.', 'error')
+    msg = 'Vui lòng chọn ảnh hoặc bật camera rồi chụp ảnh biển số.'
+    if inline:
+        return _gate_inline_json(direction, False, msg, note=note)
+    flash(msg, 'error')
     return render_gate(direction, note=note)
 
 
 def gate_confirm(direction, token, plate, note):
     """Bước 2: kiểm tra trạng thái xe và xác nhận đúng chiều vào / ra đã chọn."""
+    inline = request.form.get('inline') == '1'
+
+    def fail(msg, tok=token, pl=plate, frm=None):
+        if inline:
+            return _gate_inline_json(direction, False, msg, tok, pl, note, frm)
+        flash(msg, 'error')
+        return render_gate(direction, tok, pl, note, frm)
+
     if not token:
-        flash('Chưa có ảnh đã nhận diện (hoặc ảnh đã hết hạn). Vui lòng nhận diện từ ảnh tải lên hoặc chụp từ camera.', 'error')
-        return render_gate(direction, note=note)
+        return fail('Chưa có ảnh đã nhận diện (hoặc ảnh đã hết hạn). Vui lòng nhận diện từ ảnh tải lên hoặc chụp từ camera.', tok='', pl='')
 
     if len(plate_key(plate)) < 4:
-        flash('Biển số quá ngắn, vui lòng nhập lại (tối thiểu 4 ký tự).', 'error')
-        return render_gate(direction, token, plate, note)
+        return fail('Biển số quá ngắn, vui lòng nhập lại (tối thiểu 4 ký tự).')
 
     # Người dùng vừa sửa biển số sau khi nhận diện -> phải xem lại thông tin theo biển số mới
     checked = clean_plate_input(request.form.get('checked_plate'))
     if plate_key(plate) != plate_key(checked):
-        flash('Biển số đã thay đổi — vui lòng xem lại thông tin bên dưới rồi bấm "Xác nhận" lần nữa.', 'error')
-        return render_gate(direction, token, plate, note)
+        return fail('Biển số đã thay đổi — vui lòng xem lại thông tin bên dưới rồi bấm "Xác nhận" lần nữa.')
 
     record = database.find_open_record(plate)
     if direction == 'entry' and record is not None:
-        flash(f'Xe {plate} đang gửi trong bãi, không thể ghi nhận xe vào lần nữa.', 'error')
-        return render_gate(direction, token, plate, note)
+        return fail(f'Xe {plate} đang gửi trong bãi, không thể ghi nhận xe vào lần nữa.')
     if direction == 'exit' and record is None:
-        flash(f'Không tìm thấy xe {plate} đang gửi trong bãi, không thể xác nhận xe ra.', 'error')
-        return render_gate(direction, token, plate, note)
+        return fail(f'Không tìm thấy xe {plate} đang gửi trong bãi, không thể xác nhận xe ra.')
 
     # ---------- XE RA ----------
     if direction == 'exit':
@@ -783,16 +827,24 @@ def gate_confirm(direction, token, plate, note):
         fee, duration, fee_note = calc_fee(record, now)
         payment_method = request.form.get('payment_method')
         if payment_method is not None and payment_method not in database.PAYMENT_METHODS:
-            flash('Phương thức thanh toán không hợp lệ.', 'error')
-            return render_gate(direction, token, plate, note, form=request.form)
+            return fail('Phương thức thanh toán không hợp lệ.', frm=request.form)
         filename = promote_tmp(token, 'out')
         try:
             exit_slot = database.close_record(record['id'], filename, fee, note, payment_method=payment_method)
         except ValueError as error:
             os.remove(os.path.join(OUT_DIR, filename))
+            if inline:
+                return _gate_inline_json(direction, False, str(error), note=note)
             flash(str(error), 'error')
             return redirect(url_for('exit_gate', source=request.form.get('source', 'upload')))
         invoice_print_url = url_for('invoice_print', record_id=record['id'])
+        success_text = f'✅ Xe {plate} đã ra bãi (vị trí {exit_slot or "?"}). Thời gian gửi: {duration}. Phí: {fee:,} VNĐ ({fee_note}).'
+        if inline:
+            return _gate_inline_json(direction, True, success_text, extra={
+                'record_id': record['id'],
+                'print_invoice': record['id'] if request.form.get('action') == 'pay' else None,
+                'invoice_print_url': invoice_print_url,
+            })
         flash(
             Markup(
                 f'✅ Xe <b>{plate}</b> đã ra bãi (vị trí {exit_slot or "?"}). '
@@ -820,28 +872,23 @@ def gate_confirm(direction, token, plate, note):
         type_id = registered['vehicle_type_id']
     vehicle_type = next((t for t in all_types if t['id'] == type_id), None)
     if vehicle_type is None:
-        flash('Vui lòng chọn loại xe.', 'error')
-        return render_gate(direction, token, plate, note, form)
+        return fail('Vui lòng chọn loại xe.', frm=form)
     entry_price = database.find_turn_price(type_id, datetime.now())
     month_ok = month_ticket_valid(registered, date.today())
     if entry_price is None and not month_ok:
-        flash(f'Chưa có giá cho "{vehicle_type["name"]}" lúc {datetime.now():%H:%M}. '
-              'Vui lòng nhờ nhân viên/admin bổ sung ở trang Giá xe.', 'error')
-        return render_gate(direction, token, plate, note, form)
+        return fail(f'Chưa có giá cho "{vehicle_type["name"]}" lúc {datetime.now():%H:%M}. '
+                    'Vui lòng nhờ nhân viên/admin bổ sung ở trang Giá xe.', frm=form)
 
     if entry_mode == 'auto':
         chosen_slot = database.find_free_slot(vehicle_type_id=type_id)
         if not chosen_slot:
-            flash('Không còn ô trống phù hợp với loại xe đã chọn.', 'error')
-            return render_gate(direction, token, plate, note, form)
+            return fail('Không còn ô trống phù hợp với loại xe đã chọn.', frm=form)
     else:
         chosen_slot = form.get('slot_name', '').strip()
         if not chosen_slot:
-            flash('Vui lòng chọn một vị trí đỗ.', 'error')
-            return render_gate(direction, token, plate, note, form)
+            return fail('Vui lòng chọn một vị trí đỗ.', frm=form)
         if not database.is_slot_available(chosen_slot, vehicle_type_id=type_id):
-            flash(f'Ô {chosen_slot} không còn trống hoặc không phù hợp với loại xe. Hãy chọn ô khác.', 'error')
-            return render_gate(direction, token, plate, note, form)
+            return fail(f'Ô {chosen_slot} không còn trống hoặc không phù hợp với loại xe. Hãy chọn ô khác.', frm=form)
 
     filename = promote_tmp(token, 'in')
     try:
@@ -849,6 +896,8 @@ def gate_confirm(direction, token, plate, note):
                                                        type_id, vehicle_type['name'], note)
     except ValueError as error:
         os.remove(os.path.join(IN_DIR, filename))
+        if inline:
+            return _gate_inline_json(direction, False, str(error), note=note)
         flash(str(error), 'error')
         return redirect(url_for('entry', source=request.form.get('source', 'upload')))
     if month_ok:
@@ -856,8 +905,10 @@ def gate_confirm(direction, token, plate, note):
     else:
         price_text = (f'Giá khung vào: {entry_price["amount"]:,} VNĐ (khung {entry_price["period_name"]}); '
                       'sang khung giờ khác sẽ cộng thêm phí khung đó')
-    flash(f'✅ Xe vào bãi thành công! Biển số: {plate} — {vehicle_type["name"]} — Vị trí: {chosen_slot} '
-          f'— {price_text}', 'success')
+    success_text = f'✅ Xe vào bãi thành công! Biển số: {plate} — {vehicle_type["name"]} — Vị trí: {chosen_slot} — {price_text}'
+    if inline:
+        return _gate_inline_json(direction, True, success_text)
+    flash(success_text, 'success')
     return redirect(url_for('entry', source=request.form.get('source', 'upload')))
 
 
@@ -1081,20 +1132,57 @@ def parse_stats_range(args):
 # CÀI ĐẶT CÁ NHÂN (MỌI NGƯỜI DÙNG TỰ CHỌN)
 # ============================================================
 
+DEVICE_SETTING_DEFAULTS = {
+    'entry_plate_camera': '',
+    'entry_overview_camera': '',
+    'exit_plate_camera': '',
+    'exit_overview_camera': '',
+    'entry_barrier_port': 'COM3',
+    'exit_barrier_port': 'COM4',
+    'barrier_baudrate': '9600',
+    'card_reader_port': 'USB-HID',
+    'led_display_port': '',
+    'printer_port': 'Mặc định trình duyệt',
+    'auto_open_barrier': '0',
+}
+
+
+def get_device_settings():
+    return {
+        key: database.get_setting(key, default)
+        for key, default in DEVICE_SETTING_DEFAULTS.items()
+    }
+
+
 @app.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings():
     actor = database.get_user_by_id(session['user_id'])
     ai_admin = bool(actor and actor['role'] == 'admin' and actor['status'] == 'active')
     section_param = request.args.get('section', 'entry')
-    settings_section = 'ai' if section_param == 'ai' else ('payment' if section_param == 'payment' else 'entry')
+    settings_section = (
+        section_param if section_param in ('ai', 'payment', 'devices') else 'entry'
+    )
     if settings_section == 'ai' and not ai_admin:
         abort(403)
     if session.get('role') == 'user':      # người dùng: trang cài đặt tài khoản riêng
         return render_user_settings()
 
     if request.method == 'POST':
-        if request.form.get('setting_type') == 'payment':
+        setting_type = request.form.get('setting_type')
+        if setting_type == 'devices':
+            if session.get('role') not in ('admin', 'manager'):
+                abort(403)
+            for key in DEVICE_SETTING_DEFAULTS:
+                if key == 'auto_open_barrier':
+                    val = '1' if request.form.get(key) == '1' else '0'
+                else:
+                    val = request.form.get(key, '').strip()[:120]
+                database.set_setting(key, val)
+            flash('Đã lưu cấu hình cổng kết nối và camera.', 'success')
+            return redirect(url_for('settings', section='devices'))
+
+        if setting_type == 'payment':
             if session.get('role') not in ('admin', 'manager'):
                 abort(403)
             bank_bin = request.form.get('vietqr_bank_bin', '').strip()
@@ -1140,7 +1228,8 @@ def settings():
         vietqr_bank_name=vietqr_bank_name,
         vietqr_account_number=vietqr_account_number,
         vietqr_account_name=vietqr_account_name,
-        vietqr_template=vietqr_template
+        vietqr_template=vietqr_template,
+        device_settings=get_device_settings(),
     )
 
 

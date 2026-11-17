@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS support_messages (
 CREATE INDEX IF NOT EXISTS idx_support_messages_thread ON support_messages(thread_id, id);
 CREATE INDEX IF NOT EXISTS idx_support_threads_agent ON support_threads(agent_id, updated_at);
 
--- Chỉ lưu hội thoại AI của chính tài khoản; không đưa API key vào database.
+-- Chỉ lưu hội thoại AI của chính tài khoản; không tự đưa vào kho huấn luyện.
 CREATE TABLE IF NOT EXISTS support_ai_turns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
