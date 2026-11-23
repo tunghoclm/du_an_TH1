@@ -50,3 +50,23 @@
   margin-top: 8px;
   background: #0d1f3c;
 }
+
+.detail-photos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.detail-photo {
+  border: 1px solid #dce6f4;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f8fafd;
+}
+
+@media (max-width: 640px) {
+  .detail-photos {
+    grid-template-columns: 1fr;
+  }
+}

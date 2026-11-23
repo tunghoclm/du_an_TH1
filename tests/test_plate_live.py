@@ -17,9 +17,11 @@ class PlateLiveTests(unittest.TestCase):
     def setUpClass(cls):
         easyocr = types.ModuleType('easyocr')
         easyocr.Reader = lambda *args, **kwargs: None
+        torch_mod = types.ModuleType('torch')
+        torch_mod.cuda = types.SimpleNamespace(is_available=lambda: False)
         spec = importlib.util.spec_from_file_location('live_recognition_test_module', ROOT / 'py/plate_recognition.py')
         cls.recognition = importlib.util.module_from_spec(spec)
-        with patch.dict(sys.modules, {'easyocr': easyocr}):
+        with patch.dict(sys.modules, {'easyocr': easyocr, 'torch': torch_mod}):
             spec.loader.exec_module(cls.recognition)
 
     def test_live_coordinates_remain_in_original_frame_space(self):

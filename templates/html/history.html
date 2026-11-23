@@ -199,13 +199,14 @@
                         data-id="{{ r.id }}"
                         data-plate="{{ r.plate_number }}"
                         data-slot="{{ r.slot_name or '—' }}"
-                        data-time-in="{{ r.entry_time or '—' }}"
-                        data-time-out="{{ r.exit_time or '—' }}"
+                        data-vehicle-type="{{ r.vehicle_type_name or '—' }}"
+                        data-time-in="{{ (r.entry_time[:10]|vdate ~ ' · ' ~ r.entry_time[11:19]) if r.entry_time else '—' }}"
+                        data-time-out="{{ (r.exit_time[:10]|vdate ~ ' · ' ~ r.exit_time[11:19]) if r.exit_time else '—' }}"
                         data-fee="{{ ('{:,}'.format(r.fee).replace(',', '.') ~ ' ₫') if r.fee is not none else '—' }}"
                         data-status="{{ 'Đang gửi' if r.status == 'IN' else ('Đã ra' if r.status == 'OUT' else 'Đã xóa') }}"
                         data-note="{{ r.note or '—' }}"
-                        data-image-in="{{ ('/static/in/' ~ r.image_in) if r.image_in else '' }}"
-                        data-image-out="{{ ('/static/out/' ~ r.image_out) if r.image_out else '' }}">
+                        data-image-in="{{ url_for('static', filename='in/' ~ r.entry_image) if r.entry_image else '' }}"
+                        data-image-out="{{ url_for('static', filename='out/' ~ r.exit_image) if r.exit_image else '' }}">
                   Chi tiết
                 </button>
               </td>
@@ -255,11 +256,12 @@
       <div class="detail-grid">
         <div><span>Biển số xe</span><b id="detail-plate" class="plate"></b></div>
         <div><span>Vị trí ô đỗ</span><b id="detail-slot"></b></div>
+        <div><span>Loại phương tiện</span><b id="detail-type"></b></div>
+        <div><span>Trạng thái</span><b id="detail-status"></b></div>
         <div><span>Thời gian vào</span><b id="detail-in"></b></div>
         <div><span>Thời gian ra</span><b id="detail-out"></b></div>
         <div><span>Phí gửi xe</span><b id="detail-fee" style="color:var(--primary);"></b></div>
-        <div><span>Trạng thái</span><b id="detail-status"></b></div>
-        <div style="grid-column: 1 / -1;"><span>Ghi chú / Nhật ký</span><b id="detail-note"></b></div>
+        <div><span>Ghi chú / Nhật ký</span><b id="detail-note"></b></div>
       </div>
     </div>
 
@@ -286,6 +288,7 @@
         document.getElementById('detail-title').textContent = 'Chi tiết lượt gửi #' + (d.id || '');
         document.getElementById('detail-plate').textContent = d.plate || '—';
         document.getElementById('detail-slot').textContent = d.slot || '—';
+        document.getElementById('detail-type').textContent = d.vehicleType || '—';
         document.getElementById('detail-in').textContent = d.timeIn || '—';
         document.getElementById('detail-out').textContent = d.timeOut || '—';
         document.getElementById('detail-fee').textContent = d.fee || '—';
@@ -300,6 +303,7 @@
           empIn.hidden = true;
         } else {
           imgIn.hidden = true;
+          imgIn.removeAttribute('src');
           empIn.hidden = false;
         }
 
@@ -311,6 +315,7 @@
           empOut.hidden = true;
         } else {
           imgOut.hidden = true;
+          imgOut.removeAttribute('src');
           empOut.hidden = false;
         }
 
@@ -320,6 +325,9 @@
     });
     document.getElementById('detail-close').addEventListener('click', closeDialog);
     document.getElementById('detail-close-btn').addEventListener('click', closeDialog);
+    dialog.addEventListener('click', function (e) {
+      if (e.target === dialog) closeDialog();
+    });
   })();
 </script>
 {% endblock %}

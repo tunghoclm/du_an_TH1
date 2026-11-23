@@ -1,6 +1,6 @@
 /* KiotViet-inspired Employee (Nhân viên) page & 2-tab setup modal */
-.employee-screen .invoice-toolbar { grid-template-columns: 236px minmax(220px, 480px) minmax(290px, 1fr); }
-.employee-table { min-width: 1020px; }
+.employee-screen .invoice-toolbar { grid-template-columns: 236px minmax(200px, 420px) minmax(360px, 1fr); }
+.employee-table { min-width: 1220px; }
 .employee-table th { height: 52px; }
 .employee-avatar-cell { width: 48px; text-align: center; }
 .employee-row-avatar {
@@ -131,4 +131,2491 @@
 .attendance-quick-form label { font-size: 11px; color: #687587; }
 .attendance-quick-form input, .attendance-quick-form select {
   min-height: 32px; padding: 4px 10px; border: 1px solid #d9dce1; border-radius: 8px; font-size: 13px; background: #fff;
+}
+
+/* Payroll export dropdown */
+.employee-payroll-menu { position: relative; }
+.employee-payroll-menu > summary { list-style: none; cursor: pointer; }
+.employee-payroll-menu > summary::-webkit-details-marker { display: none; }
+.employee-payroll-dropdown {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30;
+  min-width: 210px; padding: 6px;
+  background: #fff; border: 1px solid #d9dce1; border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  display: grid; gap: 2px;
+}
+.employee-payroll-dropdown a {
+  display: block; padding: 8px 10px; border-radius: 7px;
+  color: #15171a; font-size: 13px; font-weight: 500; text-decoration: none;
+}
+.employee-payroll-dropdown a:hover { background: #edf4fe; color: #0066da; }
+
+/* Payroll summary strip */
+.payroll-summary-strip {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px; margin-bottom: 12px;
+}
+.payroll-summary-item {
+  padding: 10px 14px; border: 1px solid #e5e9f2; border-radius: 12px; background: #fff;
+}
+.payroll-summary-item small { display: block; color: #687587; font-size: 11.5px; margin-bottom: 3px; }
+.payroll-summary-item strong { color: #15171a; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.payroll-summary-item strong.is-plus { color: #188246; }
+.payroll-summary-item strong.is-minus { color: #b93636; }
+.payroll-summary-item.is-total { background: #f0f6ff; border-color: #c7dcff; }
+.payroll-summary-item.is-total strong { color: #14306b; font-weight: 700; }
+
+/* Money cells in employee table */
+.employee-money-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.employee-money-sub { display: block; font-size: 11px; color: #7b8594; margin-top: 2px; }
+.employee-money-unset { color: #8c96a4; font-size: 12px; }
+.employee-salary-net { color: #188246; font-weight: 600; }
+
+@media (max-width: 900px) {
+  .payroll-summary-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .payroll-summary-strip { grid-template-columns: 1fr; }
+}
+
+/* =========================================================
+   KiotViet-inspired Employee UI, Gate MultiSelect & Motion
+   ========================================================= */
+@keyframes kvFadeSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes kvChipPop {
+  from { opacity: 0; transform: scale(0.86); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes kvDialogIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.975); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.employee-page .invoice-workspace {
+  transition: grid-template-columns 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+}
+.employee-page .invoice-filters {
+  position: relative;
+  transition: opacity 0.22s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), padding 0.25s ease;
+}
+.employee-page .invoice-workspace.is-sidebar-collapsed {
+  grid-template-columns: 36px minmax(0, 1fr);
+}
+.employee-page .invoice-workspace.is-sidebar-collapsed .invoice-filters > form {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  height: 0;
+  overflow: hidden;
+}
+.employee-page .invoice-workspace.is-sidebar-collapsed .invoice-filters {
+  padding: 10px 4px;
+  overflow: visible;
+}
+.kv-sidebar-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 10px;
+  margin-left: auto;
+  border: 1px solid #d9dce1;
+  border-radius: 50%;
+  background: #fff;
+  color: #525d6d;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+.kv-sidebar-collapse-btn:hover {
+  background: #edf4fe;
+  color: #0066da;
+  border-color: #b7d3fa;
+  box-shadow: 0 2px 8px rgba(0, 102, 218, 0.14);
+}
+.employee-page .invoice-workspace.is-sidebar-collapsed .kv-sidebar-collapse-btn {
+  margin: 0 auto;
+  transform: rotate(180deg);
+}
+
+/* Filter header with "+ Tạo mới" */
+.kv-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.kv-inline-create {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #0070f4;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.kv-inline-create:hover {
+  color: #0054ba;
+  text-decoration: underline;
+}
+.kv-quick-create-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  animation: kvFadeSlideUp 0.18s ease-out;
+}
+.kv-quick-create-row input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 4px 8px;
+  border: 1px solid #8cb9f7;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.kv-quick-create-row button {
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #0070f4;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Kendo-style MultiSelect Tag-Chip Combobox (Cổng làm việc) */
+.form-field-full {
+  grid-column: 1 / -1;
+}
+.kv-required-hint {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #edf4fe;
+  color: #0066da;
+  font-size: 11px;
+  font-weight: 600;
+}
+.kv-multiselect {
+  position: relative;
+  width: 100%;
+}
+.kv-multiselect-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-height: 38px;
+  padding: 4px 8px;
+  border: 1px solid #d5dbe3;
+  border-radius: 9px;
+  background: #fff;
+  cursor: text;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+.kv-multiselect-box:hover {
+  border-color: #9bb8e3;
+}
+.kv-multiselect.is-open .kv-multiselect-box,
+.kv-multiselect-box:focus-within {
+  border-color: #0070f4;
+  box-shadow: 0 0 0 3px rgba(0, 112, 244, 0.12);
+}
+.kv-multiselect-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.kv-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 7px 3px 9px;
+  border-radius: 999px;
+  background: #eaf3ff;
+  border: 1px solid #c3dcff;
+  color: #0b4fa8;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  animation: kvChipPop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.kv-tag-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(11, 79, 168, 0.14);
+  color: #0b4fa8;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+.kv-tag-chip-remove:hover {
+  background: #0b4fa8;
+  color: #fff;
+  transform: scale(1.1);
+}
+.kv-multiselect-input {
+  flex: 1 1 80px;
+  min-width: 72px;
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 3px 2px !important;
+  min-height: 24px !important;
+  font-size: 13px;
+  background: transparent;
+}
+.kv-multiselect-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 5px);
+  z-index: 60;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid #d5dbe3;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+  display: grid;
+  gap: 2px;
+  transform-origin: top center;
+  animation: kvFadeSlideUp 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.kv-multiselect-dropdown[hidden] {
+  display: none;
+}
+.kv-multiselect-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #15171a;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+.kv-multiselect-option:hover {
+  background: #f0f6ff;
+  color: #0066da;
+}
+.kv-multiselect-option.is-selected {
+  background: #eaf3ff;
+  color: #0066da;
+  font-weight: 600;
+}
+.kv-multiselect-check {
+  opacity: 0;
+  font-weight: 700;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  transform: scale(0.7);
+}
+.kv-multiselect-option.is-selected .kv-multiselect-check {
+  opacity: 1;
+  transform: scale(1);
+}
+.kv-multiselect-all {
+  border-bottom: 1px solid #eef1f5;
+  margin-bottom: 2px;
+  padding-bottom: 8px;
+}
+
+/* Gate pills in table */
+.employee-gate-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.employee-gate-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef5ff;
+  border: 1px solid #d0e2ff;
+  color: #0d52ad;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Smooth interactive transitions across rows, cards, panels, dialogs */
+.employee-table tbody tr.customer-row {
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
+}
+.employee-table tbody tr.customer-row:hover {
+  background-color: #f5f9ff;
+}
+.employee-table tbody tr.customer-row.is-expanded {
+  background-color: #edf4fe;
+}
+.customer-detail-row:not([hidden]) .customer-detail {
+  animation: kvFadeSlideUp 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.customer-tab-panel:not([hidden]),
+.employee-modal-panel:not([hidden]) {
+  animation: kvFadeSlideUp 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.payroll-summary-item,
+.salary-card,
+.salary-summary-box {
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.payroll-summary-item:hover,
+.salary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  border-color: #cddcf2;
+}
+.employee-page dialog[open],
+dialog.customer-dialog[open] {
+  animation: kvDialogIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.employee-payroll-menu[open] .employee-payroll-dropdown {
+  animation: kvFadeSlideUp 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .employee-page *,
+  dialog.customer-dialog[open] {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* =========================================================
+   Employee Suite: Schedule, Timesheet Matrix, Payroll, Quick Setup
+   ========================================================= */
+.kv-suite-toolbar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+.kv-suite-select {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #d5dbe3;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 13px;
+  color: #15171a;
+}
+.kv-week-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.kv-week-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #15171a;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+.kv-matrix-card {
+  background: #fff;
+  border: 1px solid #e5e9f2;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+.kv-week-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 920px;
+}
+.kv-week-matrix th,
+.kv-week-matrix td {
+  border-bottom: 1px solid #eef1f5;
+  border-right: 1px solid #eef1f5;
+  vertical-align: top;
+}
+.kv-week-matrix th {
+  padding: 10px 8px;
+  background: #f4f7fb;
+  font-size: 12.5px;
+  color: #525d6d;
+  text-align: center;
+}
+.kv-week-matrix th.is-today,
+.kv-week-matrix td.is-today {
+  background: #f5f9ff;
+}
+.kv-matrix-emp-col {
+  width: 220px;
+  text-align: left !important;
+  padding-left: 14px !important;
+}
+.kv-day-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.kv-day-head b {
+  font-size: 15px;
+  color: #15171a;
+}
+.kv-matrix-emp-cell {
+  padding: 10px 12px;
+  background: #fff;
+}
+.kv-matrix-emp-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.kv-matrix-emp-info strong {
+  display: block;
+  font-size: 13px;
+  color: #15171a;
+}
+.kv-matrix-emp-info small {
+  display: block;
+  font-size: 11px;
+  color: #7b8594;
+}
+.kv-matrix-cell {
+  padding: 8px;
+  min-height: 74px;
+}
+.kv-shift-stack {
+  display: grid;
+  gap: 5px;
+}
+.kv-shift-chip,
+.kv-att-chip {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  animation: kvFadeSlideUp 0.18s ease-out;
+}
+.kv-att-chip {
+  flex-direction: column;
+  gap: 2px;
+}
+.kv-shift-chip.is-morning { background: #eaf3ff; border: 1px solid #c3dcff; color: #0b4fa8; }
+.kv-shift-chip.is-afternoon { background: #fff4e5; border: 1px solid #ffd8a8; color: #9c4a00; }
+.kv-shift-chip.is-night { background: #eef0ff; border: 1px solid #c7cffd; color: #2b3595; }
+.kv-shift-chip.is-office { background: #eaf8ef; border: 1px solid #bfe6cc; color: #166534; }
+.kv-shift-chip small,
+.kv-att-chip small { display: block; opacity: 0.85; font-size: 10.5px; }
+.kv-shift-del {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.65;
+  padding: 0 2px;
+}
+.kv-shift-del:hover { opacity: 1; }
+
+.kv-att-chip.is-completed { background: #eaf8ef; border: 1px solid #bfe6cc; color: #166534; }
+.kv-att-chip.is-working { background: #eaf3ff; border: 1px solid #c3dcff; color: #0b4fa8; }
+.kv-att-chip.is-late { background: #fff4e5; border: 1px solid #ffd8a8; color: #9c4a00; }
+.kv-att-chip.is-leave { background: #f2f4f7; border: 1px solid #d9dce1; color: #525d6d; }
+
+.kv-cell-add-btn {
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px dashed #cfd6e0;
+  border-radius: 7px;
+  background: transparent;
+  color: #687587;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.kv-cell-add-btn:hover {
+  background: #edf4fe;
+  border-color: #8cb9f7;
+  color: #0066da;
+}
+.kv-timesheet-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #fafbfc;
+  border-top: 1px solid #eef1f5;
+  font-size: 12.5px;
+  color: #3f4754;
+}
+.kv-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.kv-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.kv-dot.is-completed { background: #188246; }
+.kv-dot.is-working { background: #0070f4; }
+.kv-dot.is-late { background: #d97706; }
+.kv-dot.is-leave { background: #8c96a4; }
+
+.kv-paysheet-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.kv-paysheet-badge.is-draft { background: #f2f4f7; color: #525d6d; }
+.kv-paysheet-badge.is-provisional { background: #fff4e5; color: #b45309; }
+.kv-paysheet-badge.is-finalized { background: #eaf8ef; color: #188246; }
+.kv-paysheet-badge.is-cancelled { background: #fdecec; color: #b93636; }
+.kv-paysheet-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Settings -> Employee Quick Setup (Exact KiotViet #/EmployerSetting proportions) */
+.kv-emp-setting-page {
+  padding: 16px 16px 28px;
+  background: #f7f8f9;
+  min-height: calc(100vh - 64px);
+}
+.kv-emp-setting-header {
+  margin-bottom: 14px;
+}
+.kv-emp-setting-header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 22px;
+  color: #15171a;
+}
+.kv-emp-setting-shell {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.kv-emp-setting-nav {
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px;
+  display: grid;
+  gap: 2px;
+}
+.kv-emp-setting-group {
+  font-size: 14px;
+  font-weight: 500;
+  color: #677484;
+  padding: 10px 12px 6px;
+}
+.kv-border-top-tab {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid #eef1f5;
+}
+.kv-emp-setting-tab,
+.kv-emp-setting-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: 39px;
+  padding: 0 12px 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #15171a;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.kv-emp-setting-tab svg,
+.kv-emp-setting-link svg {
+  flex-shrink: 0;
+  color: #525d6d;
+}
+.kv-emp-setting-tab:hover,
+.kv-emp-setting-link:hover {
+  background: #f3f7fe;
+  color: #0070f4;
+}
+.kv-emp-setting-tab:hover svg,
+.kv-emp-setting-link:hover svg {
+  color: #0070f4;
+}
+.kv-emp-setting-tab.is-active {
+  background: #e5f1fe;
+  color: #0070f4;
+  font-weight: 600;
+}
+.kv-emp-setting-tab.is-active svg {
+  color: #0070f4;
+}
+
+/* Main white cards (pos-setting-content) */
+.kv-pos-setting-content {
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 0;
+}
+.kv-quick-setup-head {
+  padding: 12px 24px 10px;
+}
+.kv-quick-setup-head h2 {
+  margin: 0 0 4px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #15171a;
+}
+.kv-quick-setup-head p {
+  margin: 0;
+  color: #666666;
+  font-size: 13.5px;
+  line-height: 20px;
+}
+.kv-quick-setup-rows {
+  display: grid;
+}
+.kv-quick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 24px;
+  min-height: 63px;
+}
+.kv-quick-row-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+.kv-quick-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 1.5px solid #cbd5e1;
+  color: #64748b;
+  background: #fff;
+}
+.kv-quick-check.is-done {
+  border-color: #3e464f;
+  color: #15171a;
+}
+.kv-quick-row-left h3 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #15171a;
+}
+.kv-quick-row-left p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: #525d6d;
+  line-height: 1.5;
+}
+.kv-quick-row-left p a {
+  color: #0070f4;
+  font-weight: 500;
+  text-decoration: none;
+}
+.kv-quick-row-left p a:hover {
+  text-decoration: underline;
+}
+.kv-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  background: #fff;
+  color: #15171a;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.kv-quick-btn:hover {
+  border-color: #0070f4;
+  color: #0070f4;
+  background: #f5f9ff;
+}
+
+/* Sub-tabs (Chấm công / Tính lương / Ngày làm & Nghỉ) + right anchor sidebar */
+.kv-emp-sub-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 12px;
+  align-items: start;
+}
+.kv-emp-cards-stack {
+  display: grid;
+  gap: 24px;
+}
+.kv-ts-col-title {
+  padding: 10px 16px 12px;
+  border-bottom: 1px solid #e6eaef;
+}
+.kv-ts-col-title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #15171a;
+}
+.kv-ts-col {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e6eaef;
+}
+.kv-ts-col-last {
+  border-bottom: 0;
+}
+.kv-ts-col-label {
+  flex: 1 1 auto;
+}
+.kv-ts-col-label strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #15171a;
+  margin-bottom: 2px;
+}
+.kv-ts-col-label small {
+  display: block;
+  font-size: 13px;
+  color: #666666;
+}
+.kv-ts-col-ctrl {
+  flex: 0 0 auto;
+}
+.kv-ts-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 130px);
+  gap: 10px;
+}
+.kv-ts-grid-3 input,
+.kv-ts-inline-field input,
+.kv-ts-select {
+  height: 34px;
+  padding: 4px 10px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  font-size: 13.5px;
+  background: #fff;
+}
+.kv-ts-inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: #525d6d;
+}
+.kv-ts-inline-field input {
+  width: 84px;
+}
+.kv-pill-info {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #e5f1fe;
+  color: #0070f4;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.kv-ts-save-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 24px 8px;
+  border-top: 1px solid #e6eaef;
+}
+.kv-sub-content-tabs {
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 0;
+  display: grid;
+  position: sticky;
+  top: 16px;
+}
+.kv-sub-content-tabs a {
+  position: relative;
+  display: block;
+  padding: 8px 16px;
+  font-size: 14px;
+  line-height: 18px;
+  color: #525d6d;
+  text-decoration: none;
+  font-weight: 500;
+}
+.kv-sub-content-tabs a.is-active {
+  color: #0070f4;
+  font-weight: 600;
+}
+.kv-sub-content-tabs a.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 16px;
+  background: #0070f4;
+  border-radius: 2px;
+}
+.kv-ts-table-wrap {
+  padding: 12px 16px;
+}
+.kv-ts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.kv-ts-table th,
+.kv-ts-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #e8eaed;
+  text-align: left;
+}
+.kv-ts-table thead tr:first-child th {
+  background: #f0f1f3;
+  color: #15171a;
+  font-size: 12px;
+  font-weight: 600;
+  border-bottom: 0;
+}
+.kv-ts-table thead tr.kv-ts-filter-row th {
+  background: #fff;
+  padding: 10px 12px;
+}
+.kv-ts-inline-search {
+  width: min(300px, 100%);
+  height: 32px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13.5px;
+  color: #15171a;
+  background: #fff;
+}
+@media (max-width: 1040px) {
+  .kv-emp-sub-layout { grid-template-columns: 1fr; }
+  .kv-sub-content-tabs { display: none; }
+  .kv-ts-col { flex-direction: column; align-items: flex-start; }
+  .kv-ts-grid-3 { grid-template-columns: 1fr; }
+}
+@media (max-width: 820px) {
+  .kv-emp-setting-shell { grid-template-columns: 1fr; }
+  .kv-quick-row { flex-direction: column; align-items: flex-start; }
+}
+
+/* Extra KiotViet EmployerSetting controls */
+.kv-ts-stack-checks {
+  display: grid;
+  gap: 8px;
+}
+.kv-ts-check-row,
+.kv-ts-radio-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: #15171a;
+  cursor: pointer;
+}
+.kv-ts-check-row input[type="number"] {
+  width: 72px;
+  height: 32px;
+  padding: 2px 8px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+.kv-outline-blue-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid #0070f4;
+  border-radius: 8px;
+  background: #fff;
+  color: #0070f4;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+.kv-outline-blue-btn:hover {
+  background: #e5f1fe;
+}
+.kv-ts-filter-row th {
+  background: #fff !important;
+  padding: 6px 12px !important;
+}
+.kv-ts-inline-search {
+  width: 100%;
+  max-width: 240px;
+  height: 30px;
+  padding: 3px 10px;
+  border: 1px solid #d1d5da;
+  border-radius: 7px;
+  font-size: 12.5px;
+}
+.kv-icon-edit-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #525d6d;
+  font-size: 14px;
+  cursor: pointer;
+}
+.kv-icon-edit-btn:hover {
+  background: #e5f1fe;
+  color: #0070f4;
+}
+.kv-day-segment-group {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  flex: 1 1 auto;
+  max-width: 344px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+.kv-day-segment {
+  position: relative;
+  cursor: pointer;
+}
+.kv-day-segment + .kv-day-segment {
+  border-left: 1px solid #d1d5da;
+}
+.kv-day-segment input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.kv-day-segment span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #3e464f;
+  background: #fff;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.kv-day-segment input:checked + span {
+  background: #0070f4;
+  color: #fff;
+}
+.kv-day-segment:has(input:checked) + .kv-day-segment:has(input:checked) {
+  border-left-color: #005fd1;
+}
+.kv-holiday-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.kv-holiday-chip {
+  padding: 4px 10px;
+  border: 1px solid #d1d5da;
+  border-radius: 999px;
+  background: #f7f8f9;
+  color: #2f3744;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.kv-holiday-chip:hover {
+  background: #e5f1fe;
+  border-color: #8cb9f7;
+  color: #0070f4;
+}
+
+/* Quick Add Multi-Employee Modal */
+.kv-quick-add-emp-dialog {
+  width: min(760px, calc(100vw - 32px));
+}
+.kv-quick-emp-cards {
+  display: grid;
+  gap: 14px;
+}
+.kv-quick-emp-card {
+  padding: 16px 18px;
+  border: 1px solid #e5e9f2;
+  border-radius: 10px;
+  background: #fff;
+}
+.kv-quick-emp-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.kv-quick-emp-card-head strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: #15171a;
+}
+.kv-quick-emp-remove {
+  border: 0;
+  background: transparent;
+  color: #7b8594;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.kv-quick-emp-remove:hover {
+  color: #b93636;
+}
+.kv-quick-add-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: #0070f4;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kv-quick-add-more-btn:hover {
+  text-decoration: underline;
+}
+
+/* Quick Salary Modal (KiotViet Khởi tạo -> Thiết lập lương) */
+.kv-quick-salary-dialog {
+  width: min(980px, calc(100vw - 32px));
+}
+/* KiotViet Cập nhật mẫu áp dụng modal */
+.kv-tpl-dialog {
+  width: min(960px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.kv-tpl-dialog .customer-dialog-heading {
+  background: #fff;
+  padding: 16px 22px;
+  border-bottom: 1px solid #e8ecf2;
+}
+.kv-tpl-dialog .customer-dialog-heading h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #15171a;
+}
+.kv-tpl-dialog-body {
+  background: #f0f2f5;
+  padding: 16px 20px;
+  max-height: min(74vh, 720px);
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+}
+.kv-tpl-name-card {
+  background: #fff;
+  border: 1px solid #e6e9ef;
+  border-radius: 10px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.kv-tpl-name-card label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  min-width: 110px;
+  margin: 0;
+}
+.kv-tpl-name-card input {
+  width: min(320px, 100%);
+  height: 36px;
+  border: 1px solid #d5dbe5;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: #15171a;
+  background: #fff;
+}
+.kv-tpl-card {
+  background: #fff;
+  border: 1px solid #e6e9ef;
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.kv-tpl-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.kv-tpl-card-body {
+  margin-top: 14px;
+}
+.kv-tpl-inline-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #eceef2;
+  border-radius: 8px;
+  overflow: hidden;
+  table-layout: fixed;
+}
+.kv-tpl-inline-table thead th {
+  background: #f3f5f8;
+  color: #1f2937;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e8ecf2;
+}
+.kv-tpl-inline-table tbody td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #f0f2f5;
+  vertical-align: middle;
+}
+.kv-tpl-inline-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.kv-tpl-inline-table select,
+.kv-tpl-inline-table input[type="text"],
+.kv-tpl-inline-table input[type="number"] {
+  width: 100%;
+  height: 34px;
+  border: 1px solid #d5dbe5;
+  border-radius: 7px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: #15171a;
+  background: #fff;
+  box-sizing: border-box;
+}
+.kv-tpl-type-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kv-tpl-info-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid #9ca3af;
+  color: #6b7280;
+  font-size: 11px;
+  flex: 0 0 16px;
+  cursor: help;
+}
+.kv-tpl-row-del {
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.kv-tpl-row-del:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.kv-tpl-add-link {
+  margin-top: 10px;
+  border: 0;
+  background: transparent;
+  color: #0070f4;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.kv-tpl-add-link:hover {
+  text-decoration: underline;
+}
+.kv-tpl-footer {
+  background: #fff;
+  padding: 14px 22px;
+  border-top: 1px solid #e8ecf2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kv-tpl-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.kv-tpl-btn-delete {
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid #d5dbe5;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kv-tpl-btn-delete:hover {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #dc2626;
+}
+@media (max-width: 720px) {
+  .kv-tpl-name-card { flex-direction: column; align-items: stretch; gap: 8px; }
+  .kv-tpl-name-card input { width: 100%; }
+  .kv-tpl-inline-table { display: block; overflow-x: auto; }
+}
+/* KiotViet Cập nhật loại phụ cấp / giảm trừ modal */
+.kv-cat-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+.kv-cat-stack {
+  display: grid;
+  gap: 14px;
+}
+.kv-cat-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.kv-cat-min-wrap {
+  display: grid;
+  gap: 6px;
+}
+.kv-cat-min-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.kv-cat-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #15171a;
+  cursor: pointer;
+}
+.kv-cat-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: none;
+  flex: 0 0 16px;
+  accent-color: #0070f4;
+  margin: 0;
+}
+.kv-cat-check input[type="checkbox"]:focus {
+  box-shadow: none;
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+.kv-cat-unit-group {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid #d5dbe5;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #fff;
+}
+.kv-cat-unit-group input {
+  width: 76px;
+  height: 34px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 10px;
+  font-size: 13px;
+  outline: none;
+}
+.kv-cat-unit-group input:disabled {
+  background: #f0f2f5;
+  color: #6b7280;
+}
+.kv-cat-unit-group.is-disabled {
+  background: #f0f2f5;
+  border-color: #e2e6ed;
+}
+.kv-cat-unit-group.is-disabled .kv-cat-unit-suffix {
+  background: #f0f2f5;
+  color: #6b7280;
+  border-left-color: #d5dbe5;
+}
+.kv-cat-unit-suffix {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  background: #f3f4f6;
+  border-left: 1px solid #d5dbe5;
+  font-size: 13px;
+  color: #4b5563;
+}
+.kv-cat-help {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+.kv-cat-radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 24px;
+  padding-top: 2px;
+}
+.kv-cat-radio-col {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+.kv-cat-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #15171a;
+  cursor: pointer;
+}
+.kv-cat-radio input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: none;
+  flex: 0 0 16px;
+  accent-color: #0070f4;
+  margin: 0;
+}
+.kv-cat-radio input[type="radio"]:focus {
+  box-shadow: none;
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+.kv-cat-block-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kv-cat-unit-group-sm input {
+  width: 64px;
+  text-align: right;
+}
+.kv-info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.kv-info-bubble {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 340px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #062142;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  box-shadow: 0 10px 24px #00000038;
+  z-index: 40;
+  white-space: normal;
+  pointer-events: none;
+}
+.kv-info-bubble::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: #062142;
+}
+.kv-info-bubble-right {
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: 360px;
+}
+.kv-info-bubble-right::before {
+  top: 50%;
+  left: -5px;
+  transform: translateY(-50%) rotate(45deg);
+}
+.kv-info-bubble-top {
+  top: auto;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 380px;
+}
+.kv-info-bubble-top::before {
+  top: auto;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+}
+.kv-info-tip:hover .kv-info-bubble,
+.kv-info-tip:focus-within .kv-info-bubble {
+  display: block;
+}
+.kv-cat-amt-benefit-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+.kv-cat-shift-wrap {
+  display: grid;
+  gap: 6px;
+}
+.kv-cat-shift-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #15171a;
+}
+@media (max-width: 560px) {
+  .kv-cat-amt-benefit-row {
+    grid-template-columns: 1fr;
+  }
+}
+.kv-wd-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 0 16px 8px;
+  font-size: 13.5px;
+  color: #3e464f;
+}
+.kv-wd-pager select {
+  height: 30px;
+  border: 1px solid #d5dbe5;
+  border-radius: 7px;
+  padding: 0 8px;
+  font-size: 13px;
+  color: #15171a;
+  background: #fff;
+}
+.kv-hol-bonus-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.kv-workdays-dialog {
+  width: min(520px, calc(100vw - 32px)) !important;
+}
+.kv-holiday-dialog {
+  width: min(800px, calc(100vw - 32px)) !important;
+}
+/* KiotViet Lịch làm việc (TimeSheet/update) */
+.kv-sched-page {
+  padding: 16px 16px 24px;
+  background: #f7f8f9;
+  min-height: calc(100vh - 64px);
+}
+.kv-sched-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.kv-sched-toolbar-left,
+.kv-sched-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.kv-sched-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #15171a;
+  min-width: 140px;
+}
+.kv-sched-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 244px;
+  height: 32px;
+  padding: 0 10px;
+  background: #fff;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+}
+.kv-sched-search input {
+  border: 0;
+  outline: none;
+  width: 100%;
+  font-size: 13.5px;
+  color: #15171a;
+  background: transparent;
+}
+.kv-sched-week-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.kv-sched-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: #525d6d;
+  text-decoration: none;
+}
+.kv-sched-arrow:hover {
+  background: #eef1f5;
+  color: #15171a;
+}
+.kv-sched-week-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #15171a;
+  padding: 0 4px;
+}
+.kv-sched-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  background: #fff;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  color: #3e464f;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.kv-sched-btn-outline:hover {
+  background: #f5f7fa;
+  border-color: #b9c1cc;
+}
+.kv-sched-select {
+  height: 32px;
+  padding: 0 10px;
+  background: #fff;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  color: #15171a;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.kv-sched-grid-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.kv-sched-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 1080px;
+}
+.kv-sched-table thead th {
+  height: 46px;
+  padding: 8px 10px;
+  background: #fff;
+  border-bottom: 1px solid #e5e5e5;
+  border-right: 1px solid #e5e5e5;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #15171a;
+  text-align: left;
+  vertical-align: middle;
+}
+.kv-sched-table thead th:last-child,
+.kv-sched-table tbody td:last-child {
+  border-right: 0;
+}
+.kv-sched-day-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kv-sched-day-head span {
+  font-weight: 500;
+  color: #15171a;
+}
+.kv-sched-day-head b {
+  font-weight: 600;
+  color: #15171a;
+}
+.kv-sched-table thead th.is-today .kv-sched-day-head span {
+  color: #0070f4;
+}
+.kv-sched-table thead th.is-today .kv-sched-day-head b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #0070f4;
+  color: #fff;
+}
+.kv-sched-summary-row td {
+  height: 40px;
+  padding: 8px 10px;
+  background: #fff;
+  border-bottom: 1px solid #e8eaed;
+  border-right: 1px solid #e5e5e5;
+  font-size: 15px;
+  font-weight: 600;
+  color: #15171a;
+}
+.kv-sched-table tbody tr:not(.kv-sched-summary-row) td {
+  height: 72px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e8eaed;
+  border-right: 1px solid #e5e5e5;
+  vertical-align: top;
+}
+.kv-sched-emp-cell strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #15171a;
+}
+.kv-sched-emp-cell small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: #6b7280;
+}
+.kv-sched-pay-cell {
+  text-align: right;
+  vertical-align: middle !important;
+  padding-right: 12px !important;
+}
+.kv-sched-pay-cell strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #15171a;
+}
+.kv-sched-pay-cell small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: #6b7280;
+}
+.kv-sched-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  border: 0;
+  border-radius: 8px;
+  background: #e5f1fe;
+  color: #005ac3;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.kv-sched-pill:hover {
+  background: #d2e6fd;
+}
+.kv-sched-pill small {
+  font-size: 11px;
+  color: #3b82f6;
+  margin-left: 6px;
+}
+.kv-sched-add-link {
+  border: 0;
+  background: transparent;
+  color: #0070f4;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 0;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.kv-sched-table tbody tr:hover .kv-sched-add-link,
+.kv-sched-add-link:focus {
+  opacity: 1;
+}
+.kv-sched-popup {
+  width: min(660px, calc(100vw - 32px)) !important;
+}
+.kv-sched-popup-sub {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 400;
+  margin-top: 2px;
+}
+.kv-sched-section {
+  padding: 14px 0;
+  border-bottom: 1px solid #eef1f5;
+}
+.kv-sched-section:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.kv-sched-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.kv-sched-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #15171a;
+}
+.kv-sched-section-desc {
+  font-size: 12.5px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+.kv-sched-rep-days {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.kv-sched-rep-chip {
+  position: relative;
+  cursor: pointer;
+}
+.kv-sched-rep-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.kv-sched-rep-chip span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  background: #fff;
+  color: #3e464f;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.kv-sched-rep-chip input:checked + span {
+  background: #0070f4;
+  border-color: #0070f4;
+  color: #fff;
+}
+.kv-sched-rep-end-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.kv-sched-rep-end-row input[type="date"] {
+  width: 180px;
+  height: 32px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.kv-sched-other-emps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+/* KiotViet Bảng chấm công (TimeSheet) */
+.kv-ts-block {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border: 0;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  background: #e5f1fe;
+  color: #005ac3;
+}
+.kv-ts-block:hover { filter: brightness(0.97); }
+.kv-ts-block strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.kv-ts-block span {
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.kv-ts-block small {
+  display: block;
+  font-size: 11px;
+  margin-top: 2px;
+  font-weight: 600;
+}
+.kv-ts-block.is-completed { background: #e5f1fe; color: #005ac3; }
+.kv-ts-block.is-late { background: #f3e8ff; color: #7e22ce; }
+.kv-ts-block.is-missing { background: #fee2e2; color: #dc2626; }
+.kv-ts-block.is-unpunched { background: #fff3e5; color: #c25e00; }
+.kv-ts-block.is-future { background: #f0f1f3; color: #4b5563; }
+.kv-ts-block.is-leave { background: #f3f4f6; color: #6b7280; }
+.kv-ts-block.is-working { background: #e0f2fe; color: #0369a1; }
+.kv-ts-empty-row-cell {
+  text-align: center !important;
+  vertical-align: middle !important;
+  color: #6b7280;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.kv-ts-empty-row-cell:hover {
+  background: #f9fafb;
+  color: #0070f4;
+}
+.kv-ts-floating-legend {
+  position: sticky;
+  bottom: 16px;
+  margin: 18px auto 0;
+  width: fit-content;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 0 20px;
+  min-height: 40px;
+  background: #fff;
+  border-radius: 50px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  z-index: 20;
+}
+.kv-ts-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #15171a;
+  cursor: pointer;
+}
+.kv-ts-legend-item input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+.kv-ts-modal-sub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #525d6d;
+  margin-top: 4px;
+}
+.kv-ts-tabs {
+  display: flex;
+  gap: 18px;
+  border-bottom: 1px solid #e5e7eb;
+  margin: 14px 0 12px;
+}
+.kv-ts-tab-btn {
+  border: 0;
+  background: transparent;
+  padding: 8px 2px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #6b7280;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.kv-ts-tab-btn.is-active {
+  color: #0070f4;
+  border-bottom-color: #0070f4;
+}
+.kv-ts-time-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.kv-ts-time-row input[type="time"] {
+  height: 34px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13.5px;
+}
+/* KiotViet Bảng lương (Paysheet) */
+.kv-ps-btn-primary-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 33px;
+  padding: 0 14px;
+  background: #fff;
+  border: 1px solid #0070f4;
+  border-radius: 8px;
+  color: #0070f4;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kv-ps-btn-primary-outline:hover {
+  background: #eff6ff;
+}
+.kv-ps-workspace {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.kv-ps-sidebar {
+  display: grid;
+  gap: 12px;
+}
+.kv-ps-filter-card {
+  background: #fff;
+  border: 1px solid #e6e9ef;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.kv-ps-filter-card h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #15171a;
+}
+.kv-ps-filter-card select {
+  width: 100%;
+  height: 34px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13px;
+  background: #fff;
+}
+.kv-ps-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.kv-ps-table thead th {
+  background: #e6f1fe;
+  color: #15171a;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 11px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+.kv-ps-table tbody tr.kv-ps-summary-row td {
+  background: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px;
+  border-bottom: 1px solid #e8eaed;
+}
+.kv-ps-table tbody tr.kv-ps-row {
+  cursor: pointer;
+  border-bottom: 1px solid #e8eaed;
+}
+.kv-ps-table tbody tr.kv-ps-row:hover {
+  background: #f8fafc;
+}
+.kv-ps-table tbody tr.kv-ps-row.is-expanded {
+  background: #f3f8ff;
+  outline: 1.5px solid #0070f4;
+}
+.kv-ps-table tbody tr.kv-ps-row td {
+  padding: 14px 10px;
+  vertical-align: middle;
+}
+.kv-ps-detail-row td {
+  padding: 0 !important;
+  background: #f8fafc;
+  border-bottom: 2px solid #0070f4;
+}
+.kv-ps-detail-box {
+  padding: 14px 20px 18px;
+}
+.kv-ps-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin-bottom: 14px;
+}
+.kv-ps-detail-grid small {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+.kv-ps-detail-grid strong {
+  font-size: 13.5px;
+  color: #15171a;
+}
+.kv-ps-detail-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+@media (max-width: 900px) {
+  .kv-ps-workspace { grid-template-columns: 1fr; }
+  .kv-ps-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.kv-wd-inline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 10px 0;
+}
+.kv-wd-inline-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #15171a;
+  white-space: nowrap;
+  margin: 0;
+}
+@media (max-width: 520px) {
+  .kv-wd-inline-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+.kv-qs-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.kv-qs-plus-btn {
+  border: 0;
+  background: transparent;
+  color: #525d6d;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.kv-qs-plus-btn:hover {
+  background: #e5f1fe;
+  color: #0070f4;
+}
+.kv-qs-edit-link {
+  border: 0;
+  background: transparent;
+  color: #0070f4;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kv-qs-edit-row td {
+  background: #f7f9fc;
+  padding: 12px 14px !important;
+}
+.kv-qs-inline-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+.kv-qs-inline-form .form-field label {
+  font-size: 12px;
+  color: #525d6d;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.kv-qs-inline-form input[type="number"],
+.kv-qs-inline-form select {
+  height: 34px;
+  padding: 4px 8px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+}
+@media (max-width: 820px) {
+  .kv-qs-inline-form { grid-template-columns: 1fr 1fr; }
+}
+
+/* Quick Attendance Mode Modal (Thiết lập chế độ chấm công) */
+.kv-quick-att-mode-dialog {
+  width: min(680px, calc(100vw - 32px));
+}
+.kv-att-mode-cards {
+  display: grid;
+  gap: 12px;
+}
+.kv-att-mode-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+}
+.kv-att-mode-card:hover {
+  border-color: #93c5fd;
+}
+.kv-att-mode-card input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.kv-att-mode-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #64748b;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+.kv-att-mode-text {
+  flex: 1 1 auto;
+}
+.kv-att-mode-text strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #15171a;
+  margin-bottom: 3px;
+}
+.kv-att-mode-text small {
+  display: block;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.45;
+}
+.kv-att-mode-radio {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid #94a3b8;
+  background: #fff;
+  position: relative;
+  transition: border-color 0.16s ease;
+}
+.kv-att-mode-card:has(input:checked) {
+  border-color: #0070f4;
+  box-shadow: 0 0 0 1px rgba(0, 112, 244, 0.15);
+}
+.kv-att-mode-card:has(input:checked) .kv-att-mode-icon {
+  background: #e5f1fe;
+  color: #0070f4;
+}
+.kv-att-mode-card:has(input:checked) .kv-att-mode-radio {
+  border-color: #0070f4;
+}
+.kv-att-mode-card:has(input:checked) .kv-att-mode-radio::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: #0070f4;
+}
+
+/* Quick Check-in Method Modal (Hình thức chấm công) */
+.kv-checkin-method-list {
+  display: grid;
+}
+.kv-checkin-method-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 4px;
+  border-bottom: 1px solid #eef1f5;
+  cursor: pointer;
+}
+.kv-checkin-method-row:last-child {
+  border-bottom: 0;
+}
+.kv-checkin-method-row input[type="checkbox"] {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  accent-color: #0070f4;
+  flex-shrink: 0;
+}
+.kv-checkin-method-row strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #15171a;
+  margin-bottom: 3px;
+}
+.kv-checkin-method-row small {
+  display: block;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+/* Stacked Attendance Settings (KiotViet Chấm công tab) */
+.kv-ts-col-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+.kv-ts-stacked-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.kv-ts-stacked-head strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #15171a;
+  margin-bottom: 2px;
+}
+.kv-ts-stacked-head small {
+  display: block;
+  font-size: 13px;
+  color: #666666;
+}
+.kv-ts-form-rows {
+  display: grid;
+  gap: 12px;
+}
+.kv-ts-form-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.kv-ts-row-label {
+  width: 195px;
+  flex-shrink: 0;
+  font-size: 13.5px;
+  color: #15171a;
+  font-weight: 500;
+}
+.kv-ts-check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.kv-ts-row-inputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: #525d6d;
+}
+.kv-ts-row-inputs input[type="time"],
+.kv-ts-shift-inp {
+  height: 34px;
+  padding: 4px 10px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  font-size: 13.5px;
+  background: #fff;
+}
+.kv-ts-row-inputs input[type="time"]:disabled {
+  background: #f2f4f7;
+  color: #94a3b8;
+}
+.kv-ts-muted {
+  color: #64748b;
+  font-size: 13px;
+}
+.kv-ts-inline-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: #15171a;
+}
+.kv-ts-num-inp {
+  width: 72px;
+  height: 32px;
+  padding: 2px 8px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  font-size: 13.5px;
+  background: #fff;
+}
+.kv-ts-check-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #0070f4;
+  flex-shrink: 0;
+}
+.kv-ts-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+.kv-ts-content-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 6px 0 0 24px;
+  transition: opacity 0.18s ease;
+}
+.kv-ts-content-detail.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+  user-select: none;
+}
+.kv-ts-content-detail.is-disabled input {
+  cursor: not-allowed;
+}
+.kv-ts-sub-label {
+  min-width: 185px;
+}
+.kv-ts-indent-sub {
+  padding-left: 24px;
+}
+
+/* Clean borderless KiotViet "1 mẫu lương >" trigger */
+.kv-link-chevron-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #15171a;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.kv-link-chevron-btn:hover {
+  background: #f0f6ff;
+  color: #0070f4;
+}
+.kv-link-chevron-btn span {
+  font-size: 16px;
+  line-height: 1;
+  color: #64748b;
+}
+.kv-link-chevron-btn:hover span {
+  color: #0070f4;
+}
+.kv-tpl-staff-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #0070f4;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.kv-tpl-staff-link:hover {
+  text-decoration: underline;
 }

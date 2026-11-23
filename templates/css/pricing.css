@@ -334,3 +334,443 @@
 @media (max-width: 520px) {
   .pricing-page .form-grid { grid-template-columns: 1fr; }
 }
+
+/* ---- KiotViet #/Products Layout for Bảng giá & Gói vé ---- */
+.kv-pricing-topbar {
+  display: grid;
+  grid-template-columns: 248px minmax(220px, 440px) 1fr;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.kv-pricing-topbar h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #15171a;
+}
+
+.kv-pricing-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  background: #fff;
+  border: 1px solid #d9dce1;
+  border-radius: 10px;
+  color: #7b8594;
+}
+
+.kv-pricing-search:focus-within {
+  border-color: #0070f4;
+  box-shadow: 0 0 0 2px rgba(0, 112, 244, 0.12);
+}
+
+.kv-pricing-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 13.5px;
+  color: #15171a;
+  padding: 0;
+}
+
+.kv-pricing-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kv-add-menu-wrap {
+  position: relative;
+}
+
+.kv-btn-kv-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #0070f4;
+  border-radius: 8px;
+  background: #0070f4;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kv-btn-kv-primary:hover:not(:disabled) {
+  background: #005fd1;
+}
+
+.kv-btn-kv-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.kv-btn-kv-white {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #d9dce1;
+  border-radius: 8px;
+  background: #fff;
+  color: #15171a;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.kv-btn-kv-white:hover {
+  border-color: #0070f4;
+  color: #0070f4;
+  background: #f8fbff;
+}
+
+.kv-add-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 210px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+  display: grid;
+  gap: 2px;
+}
+
+.kv-add-menu-popover[hidden] {
+  display: none;
+}
+
+.kv-add-menu-popover button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: #15171a;
+  cursor: pointer;
+}
+
+.kv-add-menu-popover button:hover:not(:disabled) {
+  background: #eef5ff;
+  color: #0070f4;
+}
+
+.kv-pricing-layout {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.kv-pricing-sidebar {
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 18px;
+  position: sticky;
+  top: 16px;
+}
+
+.kv-ps-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.kv-ps-head h2 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #15171a;
+}
+
+.kv-ps-link {
+  border: 0;
+  background: transparent;
+  color: #0070f4;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+}
+
+.kv-ps-link:hover {
+  text-decoration: underline;
+}
+
+.kv-ps-list {
+  display: grid;
+  gap: 8px;
+}
+
+.kv-ps-check,
+.kv-ps-radio {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: #292e35;
+  cursor: pointer;
+}
+
+.kv-ps-check input,
+.kv-ps-radio input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #0070f4;
+  cursor: pointer;
+}
+
+.kv-pricing-main {
+  min-width: 0;
+}
+
+@media (max-width: 960px) {
+  .kv-pricing-topbar {
+    grid-template-columns: 1fr;
+  }
+  .kv-pricing-actions {
+    justify-content: flex-start;
+  }
+  .kv-pricing-layout {
+    grid-template-columns: 1fr;
+  }
+  .kv-pricing-sidebar {
+    position: static;
+  }
+}
+
+/* ---- KiotViet #/Products Table & Inline Expansion ---- */
+.kv-products-card {
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.kv-products-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.kv-products-table th {
+  padding: 12px 14px;
+  background: #e6f1fe;
+  color: #15171a;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.kv-products-table th.right,
+.kv-products-table td.right {
+  text-align: right;
+}
+
+.kv-products-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #eceef1;
+  font-size: 13.5px;
+  color: #15171a;
+  vertical-align: middle;
+}
+
+.kv-prod-row {
+  cursor: pointer;
+  transition: background .12s;
+}
+
+.kv-prod-row:hover td {
+  background: #f5f9ff;
+}
+
+.kv-prod-row.is-expanded td {
+  background: #fff;
+  border-top: 1.5px solid #0070f4;
+}
+
+.kv-prod-row.is-expanded td:first-child { border-left: 1.5px solid #0070f4; }
+.kv-prod-row.is-expanded td:last-child { border-right: 1.5px solid #0070f4; }
+
+.kv-prod-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  color: #525d6a;
+}
+
+.kv-prod-sub {
+  font-size: 12px;
+  color: #7b8594;
+  margin-top: 2px;
+}
+
+.kv-item-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid #d9dce1;
+  background: #fff;
+  color: #3e464f;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.kv-inline-prices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kv-price-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid #c5dcf9;
+  background: #eef5ff;
+  color: #0b3d84;
+}
+
+.kv-price-pill:hover {
+  border-color: #0070f4;
+  background: #dfecff;
+}
+
+.kv-price-pill.is-empty {
+  border-style: dashed;
+  border-color: #e3b45a;
+  background: #fff8e8;
+  color: #7a4e00;
+  font-weight: 600;
+}
+
+.kv-prod-detail-row td {
+  padding: 0;
+  background: #fafcff;
+  border-left: 1.5px solid #0070f4;
+  border-right: 1.5px solid #0070f4;
+  border-bottom: 1.5px solid #0070f4;
+}
+
+.kv-prod-detail-box {
+  padding: 14px 18px 18px;
+}
+
+.kv-prod-detail-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 14px;
+}
+
+.kv-prod-dtab {
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  color: #525d6a;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.kv-prod-dtab.active {
+  color: #0070f4;
+  font-weight: 600;
+  border-bottom-color: #0070f4;
+}
+
+.kv-prod-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 20px;
+  margin: 0;
+}
+
+.kv-prod-kv-grid > div {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eceef1;
+}
+
+.kv-prod-kv-grid dt {
+  font-size: 12px;
+  color: #7b8594;
+  margin-bottom: 4px;
+}
+
+.kv-prod-kv-grid dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #15171a;
+}
+
+.kv-prod-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.kv-prod-submatrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.kv-subprice-item {
+  padding: 10px 12px;
+  border: 1px solid #e6ebf2;
+  border-radius: 10px;
+  background: #fff;
+  display: grid;
+  gap: 8px;
+}
+
+.kv-subprice-item.is-month {
+  border-color: #c5dcf9;
+  background: #f8fbff;
+}
+
+.kv-subprice-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #15171a;
+}
+
+.kv-subprice-name small {
+  display: block;
+  font-weight: 400;
+  color: #7b8594;
+}

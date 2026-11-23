@@ -8,6 +8,7 @@
     const sourceButtons = form.querySelectorAll('[data-source]');
     const image = $('image');
     const video = $('camera-video');
+    const ipStreamImg = $('camera-ip-stream');
     const overlay = $('camera-overlay');
     const snapshot = $('camera-snapshot');
     const select = $('camera-select');
@@ -23,9 +24,15 @@
     const checkedPlate = $('checked-plate');
     const cameraUrl = form.dataset.cameraUrl;
     const storageKey = 'smart-parking-camera-' + form.dataset.direction;
+    const defaultDevice = () => (select?.dataset?.defaultDevice || '').trim();
+    const isIpCameraSource = val => {
+        if (!val) return false;
+        const s = String(val).trim();
+        return /^(https?|rtsps?):\/\//i.test(s) || /^[a-zA-Z0-9._-]+:\d{2,5}(\/.*)?$/.test(s);
+    };
     let hasPreview = recognizeButton.dataset.hasPreview === 'true';
     let canConfirm = !confirmButton.disabled;
-    let stream = null, generation = 0, opening = false, scanning = false, submitting = false, capturing = false;
+    let stream = null, ipActive = false, generation = 0, opening = false, scanning = false, submitting = false, capturing = false;
     let scanTimer = null, activeRequest = null, lastResult = null;
     let candidate = '', candidateHits = 0, failures = 0;
     let acceptedPreviewUrl = snapshot.getAttribute('src') || '';
@@ -43,7 +50,28 @@
         try { localStorage.setItem(storageKey, id); } catch (_) { /* lưu cài đặt có thể bị chặn */ }
     }
     function remembered() {
+        const cfg = defaultDevice();
+        if (cfg) return cfg;
         try { return localStorage.getItem(storageKey) || ''; } catch (_) { return ''; }
+    }
+    function configuredIpCameras() {
+        const raw = (select?.dataset?.ipCameras || '').split('|').map(s => s.trim()).filter(Boolean);
+        const cfg = defaultDevice();
+        if (cfg) raw.unshift(cfg);
+        const seen = new Set();
+        return raw.filter(item => {
+            if (!isIpCameraSource(item) || seen.has(item)) return false;
+            seen.add(item);
+            return true;
+        });
+    }
+    function getCabinPrefs() {
+        try { return JSON.parse(localStorage.getItem('cabin_settings_v1') || '{}'); }
+        catch (_) { return {}; }
+    }
+    function autoRecognizeEnabled() {
+        const prefs = getCabinPrefs();
+        return 'auto_recognize' in prefs ? Boolean(prefs.auto_recognize) : true;
     }
     function syncSlotOptions() {
         const type = $('vehicle_type_id'), slots = $('slot-name');
@@ -68,12 +96,12 @@
         // Giữ nguyên các control cho tới khi trình duyệt gom xong dữ liệu POST,
         // đặc biệt name=action của nút Xác nhận. Chỉ khóa ở task kế tiếp.
         if (submitting) return;
-        const running = opening || scanning || !!stream;
+        const running = opening || scanning || !!stream || ipActive;
         startButton.disabled = capturing;
         startButton.textContent = running ? 'Dừng' : 'Bắt đầu';
         startButton.setAttribute('aria-pressed', String(running));
         startButton.classList.toggle('is-running', running);
-        captureButton.disabled = !stream || opening || capturing;
+        captureButton.disabled = (!stream && !ipActive) || opening || capturing;
         $('camera-capture-label').textContent = capturing ? 'Đang đọc…' : 'Chụp';
         select.disabled = opening || capturing;
         refreshButton.disabled = opening || capturing;
@@ -140,9 +168,11 @@
         lastResult = null;
         const previousStream = stream;
         stream = null;
+        ipActive = false;
         previousStream?.getTracks().forEach(track => track.stop());
         video.srcObject = null;
         video.hidden = true;
+        if (ipStreamImg) { ipStreamImg.onload = null; ipStreamImg.onerror = null; ipStreamImg.removeAttribute('src'); ipStreamImg.hidden = true; }
         overlay.hidden = true;
         showPreview();
         updateControls();
@@ -161,15 +191,24 @@
         })[error.name] || 'Không mở được camera. Hãy kiểm tra kết nối và chọn lại thiết bị.';
     }
     async function refreshCameras(preferredId) {
-        if (!supported()) return;
+        const cfg = defaultDevice();
+        const ipList = configuredIpCameras();
+        const wanted = preferredId ?? (select.value || cfg || remembered());
+        if (!supported() && !ipList.length) return;
         try {
-            const cameras = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput');
-            const wanted = preferredId ?? select.value;
+            const cameras = supported()
+                ? (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput')
+                : [];
             select.replaceChildren(new Option('Camera mặc định', ''));
+            ipList.forEach(ipUrl => {
+                select.add(new Option('Camera IP (' + ipUrl + ')', ipUrl));
+            });
             cameras.forEach((device, index) => {
                 if (device.deviceId) select.add(new Option(device.label || 'Camera ' + (index + 1), device.deviceId));
             });
-            select.value = cameras.some(device => device.deviceId === wanted) ? wanted : '';
+            const hasWanted = ipList.includes(wanted) || cameras.some(device => device.deviceId === wanted);
+            const fallback = (cfg && (ipList.includes(cfg) || cameras.some(d => d.deviceId === cfg))) ? cfg : '';
+            select.value = hasWanted ? wanted : fallback;
             const activeId = stream?.getVideoTracks()[0]?.getSettings().deviceId;
             if (activeId && !cameras.some(device => device.deviceId === activeId)) {
                 stopCamera(true, false);
@@ -180,7 +219,7 @@
         }
     }
     function scheduleScan(epoch, delay = 80) {
-        if (!scanning || epoch !== generation || scanTimer !== null) return;
+        if (!scanning || !autoRecognizeEnabled() || epoch !== generation || scanTimer !== null) return;
         scanTimer = setTimeout(() => {
             scanTimer = null;
             void scanFrame(epoch);
@@ -208,8 +247,11 @@
         }
     }
     async function scanFrame(epoch) {
-        if (!scanning || epoch !== generation || activeRequest) return;
-        if (video.readyState < 2 || !video.videoWidth) { scheduleScan(epoch, 250); return; }
+        if (!scanning || !autoRecognizeEnabled() || epoch !== generation || activeRequest) return;
+        const sourceEl = ipActive && ipStreamImg ? ipStreamImg : video;
+        const srcW = ipActive && ipStreamImg ? (ipStreamImg.naturalWidth || 0) : video.videoWidth;
+        const srcH = ipActive && ipStreamImg ? (ipStreamImg.naturalHeight || 0) : video.videoHeight;
+        if ((!ipActive && video.readyState < 2) || !srcW) { scheduleScan(epoch, 250); return; }
         const request = { epoch, controller: new AbortController() };
         request.done = new Promise(resolve => { request.finish = resolve; });
         activeRequest = request;
@@ -217,10 +259,10 @@
         let retryDelay = 80;
         try {
             const canvas = document.createElement('canvas');
-            const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
-            canvas.width = Math.round(video.videoWidth * scale);
-            canvas.height = Math.round(video.videoHeight * scale);
-            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            const scale = Math.min(1, 1280 / Math.max(srcW, srcH));
+            canvas.width = Math.round(srcW * scale);
+            canvas.height = Math.round(srcH * scale);
+            canvas.getContext('2d').drawImage(sourceEl, 0, 0, canvas.width, canvas.height);
             const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
             if (epoch !== generation || !scanning) return;
             if (!blob) throw new Error('Không lấy được ảnh camera. Hãy bấm Bắt đầu để thử lại.');
@@ -270,12 +312,15 @@
         }
     }
     async function captureFrame() {
-        if (!stream || opening || capturing || submitting || video.readyState < 2 || !video.videoWidth) return;
+        const sourceEl = ipActive && ipStreamImg ? ipStreamImg : video;
+        const srcW = ipActive && ipStreamImg ? (ipStreamImg.naturalWidth || 0) : video.videoWidth;
+        const srcH = ipActive && ipStreamImg ? (ipStreamImg.naturalHeight || 0) : video.videoHeight;
+        if ((!stream && !ipActive) || opening || capturing || submitting || (!ipActive && video.readyState < 2) || !srcW) return;
         const canvas = document.createElement('canvas');
-        const scale = Math.min(1, 1920 / Math.max(video.videoWidth, video.videoHeight));
-        canvas.width = Math.round(video.videoWidth * scale);
-        canvas.height = Math.round(video.videoHeight * scale);
-        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        const scale = Math.min(1, 1920 / Math.max(srcW, srcH));
+        canvas.width = Math.round(srcW * scale);
+        canvas.height = Math.round(srcH * scale);
+        canvas.getContext('2d').drawImage(sourceEl, 0, 0, canvas.width, canvas.height);
         const pending = activeRequest;
         // Freeze the clicked frame immediately, then wait for the current OCR
         // request to finish so the single server worker is not overloaded.
@@ -338,6 +383,41 @@
     }
     async function startCamera() {
         if (submitting) return;
+        const chosen = (select.value || defaultDevice()).trim();
+        if (isIpCameraSource(chosen) && ipStreamImg) {
+            stopCamera(false, false);
+            clearCapturePreview();
+            const epoch = generation;
+            opening = true;
+            scanning = true;
+            ipActive = true;
+            candidate = '';
+            candidateHits = 0;
+            failures = 0;
+            snapshot.hidden = true;
+            updateControls();
+            message('Đang kết nối camera IP…');
+            ipStreamImg.onload = () => {
+                if (epoch !== generation || !ipActive) return;
+                opening = false;
+                ipStreamImg.hidden = false;
+                remember(chosen);
+                updateControls();
+                if (autoRecognizeEnabled()) {
+                    message('Đang nhận diện từ Camera IP… Đưa biển số vào khung hình.');
+                    scheduleScan(epoch, 0);
+                } else {
+                    message('Camera IP đang chạy. Bấm "Chụp" để nhận diện biển số.');
+                }
+            };
+            ipStreamImg.onerror = () => {
+                if (epoch !== generation) return;
+                stopCamera(false, false);
+                message('Không kết nối được camera IP. Kiểm tra lại địa chỉ IP Webcam và Wi-Fi.', true);
+            };
+            ipStreamImg.src = `/gate/camera-stream/${form.dataset.direction}_plate?url=${encodeURIComponent(chosen)}&t=${Date.now()}`;
+            return;
+        }
         if (!supported()) {
             message(window.isSecureContext
                 ? 'Trình duyệt này chưa hỗ trợ camera. Hãy dùng Chrome hoặc Edge mới, hoặc chọn Tải ảnh.'
@@ -377,8 +457,12 @@
             await refreshCameras(id);
             if (epoch !== generation) return;
             opening = false;
-            message('Đang nhận diện từ ' + (track.label || 'camera đã chọn') + '… Đưa biển số vào khung hình.');
-            scheduleScan(epoch, 0);
+            if (autoRecognizeEnabled()) {
+                message('Đang nhận diện từ ' + (track.label || 'camera đã chọn') + '… Đưa biển số vào khung hình.');
+                scheduleScan(epoch, 0);
+            } else {
+                message('Camera ' + (track.label || 'đã chọn') + ' đang chạy. Bấm "Chụp" để nhận diện biển số.');
+            }
         } catch (error) {
             if (epoch !== generation) return;
             stopCamera(false, false);
@@ -426,12 +510,20 @@
         showPreview();
         updateControls();
     });
-    startButton.addEventListener('click', () => { if (stream || opening || scanning) stopCamera(true); else void startCamera(); });
+    startButton.addEventListener('click', () => { if (stream || ipActive || opening || scanning) stopCamera(true); else void startCamera(); });
     captureButton.addEventListener('click', () => { void captureFrame(); });
     refreshButton.addEventListener('click', () => { void refreshCameras(); });
     select.addEventListener('change', () => {
         remember(select.value);
-        if (scanning || opening) void startCamera();
+        if (select.dataset) select.dataset.defaultDevice = select.value;
+        if (form.dataset.direction) {
+            void fetch('/api/camera/select-lane', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ direction: form.dataset.direction, device: select.value })
+            }).catch(() => {});
+        }
+        if (scanning || opening || ipActive) void startCamera();
     });
     video.addEventListener('loadeddata', () => {
         if (scanning && !opening) scheduleScan(generation, 0);
@@ -460,6 +552,49 @@
     navigator.mediaDevices?.addEventListener('devicechange', () => { if (source() === 'camera') void refreshCameras(); });
     syncSource();
     if (source() === 'camera') void refreshCameras(remembered());
+
+    function getCabinPrefs() {
+        try { return JSON.parse(localStorage.getItem('cabin_settings_v1') || '{}'); }
+        catch (_) { return {}; }
+    }
+    let lastAutoStart = Boolean(getCabinPrefs().auto_start_camera);
+    async function applyGateAutoPrefs() {
+        const prefs = getCabinPrefs();
+        const shouldStart = Boolean(prefs.auto_start_camera);
+        const turnedOff = lastAutoStart && !shouldStart;
+        lastAutoStart = shouldStart;
+        if (turnedOff && (stream || ipActive || opening || scanning)) {
+            stopCamera(true);
+            return;
+        }
+        if ((stream || ipActive) && !opening) {
+            if (autoRecognizeEnabled()) {
+                scheduleScan(generation, 0);
+            } else {
+                clearTimeout(scanTimer);
+                scanTimer = null;
+                activeRequest?.controller.abort();
+                activeRequest = null;
+                message('Camera đang chạy. Bấm "Chụp" để nhận diện biển số.');
+            }
+        }
+        if (shouldStart && !submitting && !capturing && !hasPreview) {
+            if (source() !== 'camera') {
+                sourceSelect.value = 'camera';
+                syncSource();
+            }
+            if (!stream && !ipActive && !opening && !scanning) {
+                await refreshCameras(remembered());
+                if (!stream && !ipActive && !opening && !scanning && source() === 'camera') {
+                    void startCamera();
+                }
+            }
+        }
+    }
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('cabin:prefs-updated', () => { void applyGateAutoPrefs(); });
+    }
+    void applyGateAutoPrefs();
     const printFrame = $('invoice-print-frame');
     if (printFrame) {
         let printed = false;
@@ -499,9 +634,39 @@
     const posModal = $('pos-payment-modal');
     if (posModal && payButton) {
         let currentMethod = 'cash';
+        let discountUnit = 'vnd';
         const feeBox = $('pos-fee-display');
-        const getFee = () => (feeBox ? parseInt(feeBox.dataset.fee || '0', 10) : 0);
+        const getBaseFee = () => (feeBox ? parseInt(feeBox.dataset.fee || '0', 10) : 0);
+        const getDiscountedFee = () => {
+            const base = getBaseFee();
+            const discInput = $('pos-discount-input');
+            const raw = discInput ? Math.max(0, parseFloat(discInput.value.replace(/[^0-9.]/g, '') || '0') || 0) : 0;
+            if (discountUnit === 'percent') {
+                return Math.max(0, Math.round(base * (1 - Math.min(100, raw) / 100)));
+            }
+            return Math.max(0, base - Math.round(raw));
+        };
+        const getFee = () => getDiscountedFee();
         const formatMoney = num => Math.max(0, num).toLocaleString('vi-VN') + ' VNĐ';
+
+        function updateDiscountUI() {
+            const unitTxt = $('pos-discount-unit-text');
+            const unitBtn = $('pos-discount-unit-btn');
+            const label = discountUnit === 'percent' ? '%' : 'VND';
+            if (unitTxt) unitTxt.textContent = label;
+            if (unitBtn) unitBtn.textContent = label;
+            const netFee = getFee();
+            if (feeBox) feeBox.innerHTML = `${netFee.toLocaleString('vi-VN')} <small>VNĐ</small>`;
+            const qrAmount = $('pos-qr-amount-text');
+            if (qrAmount) qrAmount.textContent = formatMoney(netFee);
+            const prefs = getCabinPrefs();
+            const autoFill = 'auto_fill_pay' in prefs ? Boolean(prefs.auto_fill_pay) : true;
+            const cashInput = $('pos-cash-given');
+            if (cashInput && autoFill) {
+                cashInput.value = netFee > 0 ? netFee.toLocaleString('vi-VN') : '0';
+            }
+            updateChangeDue();
+        }
 
         function updateChangeDue() {
             const fee = getFee();
@@ -574,14 +739,30 @@
             if (qrAmount) qrAmount.textContent = formatMoney(fee);
             if (qrMemo) qrMemo.textContent = 'Nội dung: XE ' + cleanPlate;
 
-            // Reset Tiền khách đưa
+            // Áp dụng Tùy chọn cài đặt Cabin (Thanh toán & Phiếu xe)
+            const prefs = getCabinPrefs();
+            const autoFill = 'auto_fill_pay' in prefs ? Boolean(prefs.auto_fill_pay) : true;
+            const defaultMethod = (prefs.default_payment === 'transfer') ? 'transfer' : 'cash';
+            discountUnit = (prefs.discount_unit === 'percent') ? 'percent' : 'vnd';
+            const discInput = $('pos-discount-input');
+            const inlineDisc = $('exit-discount-input');
+            if (discInput) discInput.value = (inlineDisc && inlineDisc.value) ? inlineDisc.value : '0';
+            updateDiscountUI();
+
+            const printReceiptCb = $('pos-print-receipt-cb');
+            if (printReceiptCb && 'auto_print_exit' in prefs) {
+                printReceiptCb.checked = Boolean(prefs.auto_print_exit);
+            }
+
+            // Reset Tiền khách đưa theo tùy chọn Tự động điền giá trị khách thanh toán
+            const netFee = getFee();
             const cashInput = $('pos-cash-given');
             if (cashInput) {
-                cashInput.value = fee > 0 ? fee.toLocaleString('vi-VN') : '0';
+                cashInput.value = autoFill ? (netFee > 0 ? netFee.toLocaleString('vi-VN') : '0') : '';
                 updateChangeDue();
             }
 
-            switchPosMethod('cash');
+            switchPosMethod(defaultMethod);
             posModal.removeAttribute('hidden');
             setTimeout(() => { if (cashInput) cashInput.focus(); }, 100);
         }
@@ -653,6 +834,17 @@
         if (cashInput) {
             cashInput.addEventListener('input', updateChangeDue);
         }
+        const discInput = $('pos-discount-input');
+        if (discInput) {
+            discInput.addEventListener('input', updateDiscountUI);
+        }
+        const discUnitBtn = $('pos-discount-unit-btn');
+        if (discUnitBtn) {
+            discUnitBtn.addEventListener('click', () => {
+                discountUnit = discountUnit === 'percent' ? 'vnd' : 'percent';
+                updateDiscountUI();
+            });
+        }
 
         function confirmPosPayment() {
             const confirmBtn = $('pos-modal-confirm-btn');
@@ -665,6 +857,13 @@
 
             const mainSelect = $('exit-payment-method');
             if (mainSelect) mainSelect.value = currentMethod;
+            const inlineDisc = $('exit-discount-input');
+            const modalDisc = $('pos-discount-input');
+            if (inlineDisc && modalDisc) {
+                inlineDisc.value = modalDisc.value.replace(/[^0-9]/g, '') || '0';
+            }
+            const unitHid = document.querySelector('[data-exit-discount-unit]');
+            if (unitHid) unitHid.value = discountUnit;
 
             const printReceipt = $('pos-print-receipt-cb');
             const shouldPrint = !printReceipt || printReceipt.checked;

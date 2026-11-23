@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS parking_records (
     exit_image    TEXT,                       -- Tên file ảnh chụp lúc ra
     fee           INTEGER,                    -- Phí gửi xe (VNĐ)
     payment_method TEXT CHECK(payment_method IN ('cash','card','transfer')), -- NULL = chưa ghi nhận / không thu phí
+    entry_gate    TEXT,                       -- Tên cổng lúc xe vào
+    exit_gate     TEXT,                       -- Tên cổng lúc xe ra
     status        TEXT NOT NULL DEFAULT 'IN'  -- IN = đang gửi, OUT = đã lấy xe, DELETED = đã xóa khỏi ô
 );
 
@@ -32,7 +34,8 @@ CREATE TABLE IF NOT EXISTS parking_slots (
 CREATE TABLE IF NOT EXISTS parking_areas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    vehicle_type_id INTEGER                  -- NULL = mọi loại xe; một ID = chỉ loại xe đó
+    vehicle_type_id INTEGER,                 -- NULL = mọi loại xe; một ID = chỉ loại xe đó
+    note TEXT
 );
 
 -- Bảng cài đặt hệ thống (key-value)
@@ -107,7 +110,8 @@ CREATE TABLE IF NOT EXISTS vehicle_types (
     next_hour_amount INTEGER NOT NULL DEFAULT 0,
     monthly_price INTEGER,
     grace_minutes INTEGER NOT NULL DEFAULT 0 CHECK(grace_minutes >= 0),
-    daily_cap INTEGER NOT NULL DEFAULT 0 CHECK(daily_cap >= 0)
+    daily_cap INTEGER NOT NULL DEFAULT 0 CHECK(daily_cap >= 0),
+    wheel_group TEXT NOT NULL DEFAULT '2w'
 );
 
 -- Giá theo (loại xe + khung thời gian)
@@ -193,8 +197,11 @@ CREATE TABLE IF NOT EXISTS parking_zones (
     name            TEXT NOT NULL UNIQUE COLLATE NOCASE,
     zone_type       TEXT NOT NULL DEFAULT 'gate_inout', -- gate_inout | gate_in | gate_out | area
     location        TEXT,
+    area_names      TEXT,                               -- danh sách khu đỗ thuộc cổng, VD: "A,B" (rỗng = toàn bãi)
     vehicle_type_id INTEGER,
+    vehicle_type_ids TEXT,                              -- danh sách ID loại xe áp dụng, VD: "1,2,3" (rỗng = tất cả)
     capacity        INTEGER NOT NULL DEFAULT 0,
+    operating_hours TEXT DEFAULT '24/7',
     status          TEXT NOT NULL DEFAULT 'active',     -- active | inactive
     note            TEXT,
     created_at      TEXT

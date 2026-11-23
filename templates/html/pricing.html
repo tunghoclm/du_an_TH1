@@ -52,25 +52,104 @@
 
 <div class="pricing-page">
 
-  <div class="page-heading">
-    <div>
-      <h1>Quản lý vé &amp; Bảng giá</h1>
-      <p>
-        {% if can_edit %}
-          Đặt giá gửi xe theo loại phương tiện và khung giờ. Bấm vào một ô trong bảng để đặt hoặc sửa giá.
-        {% else %}
-          Biểu phí gửi xe niêm yết theo loại phương tiện và khung giờ.
-        {% endif %}
-      </p>
+  <!-- Thanh tiêu đề & tìm kiếm kiểu KiotViet #/Products -->
+  <div class="kv-pricing-topbar">
+    <h1>Bảng giá &amp; Gói vé</h1>
+
+    <div class="kv-pricing-search" role="search">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="search" id="kv-pricing-search" placeholder="Theo tên loại xe, khung giờ..." aria-label="Tìm kiếm bảng giá">
     </div>
-    {% if can_edit %}
-      <div class="heading-actions">
-        <button type="button" class="btn btn-primary" id="open-add-price" {% if not ready %}disabled title="Cần có ít nhất một loại xe và một khung thời gian"{% endif %}>
-          + Thêm mức giá
-        </button>
-      </div>
-    {% endif %}
+
+    <div class="kv-pricing-actions">
+      {% if can_edit %}
+        <div class="kv-add-menu-wrap">
+          <button type="button" class="kv-btn-kv-primary" id="kv-pricing-add-menu-btn" aria-haspopup="true" aria-expanded="false">
+            + Thêm mới ▾
+          </button>
+          <div class="kv-add-menu-popover" id="kv-pricing-add-menu" hidden>
+            <button type="button" id="open-add-price" {% if not ready %}disabled title="Cần có ít nhất một loại xe và một khung thời gian"{% endif %}>+ Thêm mức giá</button>
+            <button type="button" data-add-period>+ Thêm khung thời gian</button>
+            <button type="button" data-add-vtype>+ Thêm loại xe</button>
+          </div>
+        </div>
+      {% endif %}
+      <a href="{{ url_for('pricing_export') }}" class="kv-btn-kv-white">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Xuất file</span>
+      </a>
+    </div>
   </div>
+
+  <!-- Bố cục 2 cột kiểu KiotViet #/Products -->
+  <div class="kv-pricing-layout">
+    <aside class="kv-pricing-sidebar" aria-label="Bộ lọc bảng giá">
+      <div>
+        <div class="kv-ps-head">
+          <h2>Nhóm xe</h2>
+          {% if can_edit %}
+            <button type="button" class="kv-ps-link" id="kv-jump-vtypes">Thiết lập</button>
+          {% endif %}
+        </div>
+        <div class="kv-ps-list">
+          <label class="kv-ps-check">
+            <input type="checkbox" name="kv_wg_filter" value="2w" checked>
+            <span>Xe 2 bánh</span>
+          </label>
+          <label class="kv-ps-check">
+            <input type="checkbox" name="kv_wg_filter" value="4w" checked>
+            <span>Xe 4 bánh</span>
+          </label>
+          <label class="kv-ps-check">
+            <input type="checkbox" name="kv_wg_filter" value="other" checked>
+            <span>Khác</span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <div class="kv-ps-head">
+          <h2>Loại phương tiện</h2>
+          {% if can_edit %}
+            <button type="button" class="kv-ps-link" data-add-vtype>Tạo mới</button>
+          {% endif %}
+        </div>
+        <div class="kv-ps-list">
+          <label class="kv-ps-radio">
+            <input type="radio" name="kv_vt_filter" value="all" checked>
+            <span>Tất cả</span>
+          </label>
+          {% for vt in vehicle_types %}
+            <label class="kv-ps-radio">
+              <input type="radio" name="kv_vt_filter" value="{{ vt.id }}">
+              <span>{{ vt.name }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <div class="kv-ps-head">
+          <h2>Chính sách tính phí</h2>
+        </div>
+        <div class="kv-ps-list">
+          <label class="kv-ps-radio">
+            <input type="radio" name="kv_policy_filter" value="all" checked>
+            <span>Tất cả</span>
+          </label>
+          <label class="kv-ps-radio">
+            <input type="radio" name="kv_policy_filter" value="period">
+            <span>Theo khung giờ</span>
+          </label>
+          <label class="kv-ps-radio">
+            <input type="radio" name="kv_policy_filter" value="block">
+            <span>Theo block giờ</span>
+          </label>
+        </div>
+      </div>
+    </aside>
+
+    <div class="kv-pricing-main">
 
   {# ---- Hướng dẫn thiết lập khi chưa đủ dữ liệu ---- #}
   {% if can_edit and not ready %}
@@ -134,54 +213,154 @@
     </button>
   </div>
 
-  {# ================= TAB 1: BẢNG GIÁ ================= #}
-  <section class="panel tab-panel" role="tabpanel" id="panel-prices" aria-labelledby="tab-prices">
+  {# ================= TAB 1: BẢNG GIÁ (Kiểu KiotViet #/Products) ================= #}
+  <section class="panel tab-panel kv-products-card" role="tabpanel" id="panel-prices" aria-labelledby="tab-prices">
     {% if vehicle_types %}
-      <div class="matrix-wrap">
-        <table class="price-matrix">
-          <caption class="sr-only">Bảng giá gửi xe: mỗi hàng là một loại phương tiện, mỗi cột là một khung thời gian</caption>
+      <div class="table-scroll">
+        <table class="kv-products-table" aria-label="Bảng giá gửi xe theo loại phương tiện">
           <thead>
             <tr>
-              <th scope="col" rowspan="2" class="corner">Loại phương tiện</th>
-              <th scope="col" rowspan="2">Miễn phí ban đầu</th>
-              <th scope="col" rowspan="2">Block đầu tiên</th>
-              <th scope="col" rowspan="2">Giờ tiếp theo</th>
-              <th scope="col" rowspan="2">Giá trần 24h</th>
-              <th scope="col" rowspan="2">Giá vé tháng cố định</th>
-              {% if time_periods %}<th scope="colgroup" colspan="{{ time_periods|length }}" class="group">Vé lượt <small>cộng theo từng khung giờ xe đi qua</small></th>{% endif %}
-              {% if day_periods %}<th scope="colgroup" colspan="{{ day_periods|length }}" class="group month">Vé tháng <small>giá cho 1 tháng</small></th>{% endif %}
-            </tr>
-            <tr>
-              {% for tp in time_periods %}
-                <th scope="col" class="period">{{ tp.name }}<small>{{ tp.start_value }} – {{ tp.end_value }}</small></th>
-              {% endfor %}
-              {% for tp in day_periods %}
-                <th scope="col" class="period month">{{ tp.name }}<small>ngày {{ tp.start_value }} – {{ tp.end_value }}</small></th>
-              {% endfor %}
+              <th>Mã</th>
+              <th>Loại phương tiện</th>
+              <th>Nhóm xe</th>
+              <th>Chính sách tính</th>
+              <th>Miễn phí đầu</th>
+              <th class="right">Vé tháng</th>
+              <th>Mức giá theo khung giờ</th>
             </tr>
           </thead>
           <tbody>
             {% for vt in vehicle_types %}
-              <tr>
-                <th scope="row" class="vehicle">
-                  {{ vt.name }}
-                  <small>{{ vt.grace_minutes }} phút ân hạn · Trần {{ '{:,}'.format(vt.daily_cap).replace(',', '.') if vt.daily_cap else 'Không giới hạn' }}{{ ' ₫/24h' if vt.daily_cap else '' }}</small>
-                  {% if can_edit %}<button type="button" class="btn btn-outline" data-edit-vtype data-id="{{ vt.id }}" data-name="{{ vt.name }}" data-grace="{{ vt.grace_minutes }}" data-cap="{{ vt.daily_cap }}" data-free="{{ vt.free_minutes }}" data-first-hours="{{ vt.first_block_hours }}" data-first-amount="{{ vt.first_block_amount }}" data-next="{{ vt.next_hour_amount }}" data-monthly="{{ vt.monthly_price if vt.monthly_price is not none else '' }}">Thiết lập</button>{% endif %}
-                  <small>{{ prices|selectattr('vehicle_type_id', 'equalto', vt.id)|list|length }} mức giá</small>
-                </th>
+              {% set wg = vt.wheel_group if vt.wheel_group is defined and vt.wheel_group else '2w' %}
+              {% set vt_prices_count = prices|selectattr('vehicle_type_id', 'equalto', vt.id)|list|length %}
+              <tr class="kv-prod-row"
+                  data-pricing-vt-row
+                  data-prod-row="{{ vt.id }}"
+                  data-vt-id="{{ vt.id }}"
+                  data-wg="{{ wg }}"
+                  data-policy="{{ 'block' if vt.first_block_hours else 'period' }}"
+                  data-name="{{ vt.name|lower }}"
+                  tabindex="0"
+                  aria-expanded="false">
+                <td><span class="kv-prod-code">BG{{ '%04d'|format(vt.id) }}</span></td>
+                <td>
+                  <strong>{{ vt.name }}</strong>
+                  <div class="kv-prod-sub">{{ vt_prices_count }} mức giá · {{ vt.grace_minutes }}p ân hạn</div>
+                </td>
+                <td>
+                  {% if wg == '4w' %}
+                    <span class="badge badge-blue"><span></span>Xe 4 bánh</span>
+                  {% elif wg == 'other' %}
+                    <span class="badge badge-amber"><span></span>Khác</span>
+                  {% else %}
+                    <span class="badge badge-green"><span></span>Xe 2 bánh</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if vt.first_block_hours %}
+                    <span class="kv-item-badge">Block {{ vt.first_block_hours }}h: {{ '{:,}'.format(vt.first_block_amount).replace(',', '.') }} ₫</span>
+                  {% else %}
+                    <span class="kv-item-badge">Theo khung giờ</span>
+                  {% endif %}
+                </td>
                 <td>{{ vt.free_minutes }} phút</td>
-                <td>{% if vt.first_block_hours %}{{ '{:,}'.format(vt.first_block_amount).replace(',', '.') }} ₫ / {{ vt.first_block_hours }} giờ{% else %}Theo khung giờ{% endif %}</td>
-                <td>{% if vt.first_block_hours %}{{ '{:,}'.format(vt.next_hour_amount).replace(',', '.') }} ₫/giờ{% else %}—{% endif %}</td>
-                <td>{{ '{:,}'.format(vt.daily_cap).replace(',', '.') ~ ' ₫' if vt.daily_cap else 'Không giới hạn' }}</td>
-                <td>{{ '{:,}'.format(vt.monthly_price).replace(',', '.') ~ ' ₫/tháng' if vt.monthly_price is not none else 'Theo khung ngày' }}</td>
-                {% for tp in time_periods %}
-                  {% set p = pm.get(vt.id|string ~ '-' ~ tp.id|string) %}
-                  <td>{{ price_cell(vt, tp, p, can_edit, url_for('pricing_price_delete', price_id=p.id) if p else '') }}</td>
-                {% endfor %}
-                {% for tp in day_periods %}
-                  {% set p = pm.get(vt.id|string ~ '-' ~ tp.id|string) %}
-                  <td>{{ price_cell(vt, tp, p, can_edit, url_for('pricing_price_delete', price_id=p.id) if p else '') }}</td>
-                {% endfor %}
+                <td class="right">
+                  <strong>{{ '{:,}'.format(vt.monthly_price).replace(',', '.') ~ ' ₫' if vt.monthly_price is not none else 'Theo khung' }}</strong>
+                </td>
+                <td>
+                  <div class="kv-inline-prices">
+                    {% for tp in time_periods %}
+                      {% set p = pm.get(vt.id|string ~ '-' ~ tp.id|string) %}
+                      {% if p %}
+                        <button type="button" class="kv-price-pill is-set" data-price-cell
+                                data-id="{{ p.id }}" data-vtype="{{ vt.id }}" data-period="{{ tp.id }}"
+                                data-amount="{{ p.amount }}" data-delete-url="{{ url_for('pricing_price_delete', price_id=p.id) }}"
+                                data-label="{{ vt.name }} · {{ tp.name }}">
+                          <span>{{ tp.name }}:</span> <b>{{ '{:,}'.format(p.amount).replace(',', '.') }}₫</b>
+                        </button>
+                      {% elif can_edit %}
+                        <button type="button" class="kv-price-pill is-empty" data-price-cell
+                                data-id="" data-vtype="{{ vt.id }}" data-period="{{ tp.id }}" data-amount="" data-delete-url=""
+                                data-label="{{ vt.name }} · {{ tp.name }}">
+                          + {{ tp.name }}
+                        </button>
+                      {% endif %}
+                    {% endfor %}
+                  </div>
+                </td>
+              </tr>
+
+              <tr class="kv-prod-detail-row" data-prod-detail="{{ vt.id }}" hidden>
+                <td colspan="7">
+                  <div class="kv-prod-detail-box">
+                    <div class="kv-prod-detail-tabs" role="tablist">
+                      <button type="button" class="kv-prod-dtab active" data-prod-dtab="info">Thông tin chính sách</button>
+                      <button type="button" class="kv-prod-dtab" data-prod-dtab="matrix">Bảng giá chi tiết ({{ time_periods|length + day_periods|length }})</button>
+                    </div>
+
+                    <div class="kv-prod-dpane active" data-prod-dpane="info">
+                      <dl class="kv-prod-kv-grid">
+                        <div>
+                          <dt>Loại phương tiện</dt>
+                          <dd>{{ vt.name }} ({{ 'Xe 4 bánh' if wg == '4w' else ('Khác' if wg == 'other' else 'Xe 2 bánh') }})</dd>
+                        </div>
+                        <div>
+                          <dt>Miễn phí ban đầu</dt>
+                          <dd>{{ vt.free_minutes }} phút</dd>
+                        </div>
+                        <div>
+                          <dt>Ân hạn giao thời</dt>
+                          <dd>{{ vt.grace_minutes }} phút</dd>
+                        </div>
+                        <div>
+                          <dt>Block đầu tiên</dt>
+                          <dd>{% if vt.first_block_hours %}{{ '{:,}'.format(vt.first_block_amount).replace(',', '.') }} ₫ / {{ vt.first_block_hours }} giờ{% else %}Theo khung giờ{% endif %}</dd>
+                        </div>
+                        <div>
+                          <dt>Giờ tiếp theo</dt>
+                          <dd>{% if vt.first_block_hours %}{{ '{:,}'.format(vt.next_hour_amount).replace(',', '.') }} ₫/giờ{% else %}—{% endif %}</dd>
+                        </div>
+                        <div>
+                          <dt>Giá trần 24h</dt>
+                          <dd>{{ '{:,}'.format(vt.daily_cap).replace(',', '.') ~ ' ₫' if vt.daily_cap else 'Không giới hạn' }}</dd>
+                        </div>
+                        <div>
+                          <dt>Giá vé tháng cố định</dt>
+                          <dd>{{ '{:,}'.format(vt.monthly_price).replace(',', '.') ~ ' ₫/tháng' if vt.monthly_price is not none else 'Theo khung ngày' }}</dd>
+                        </div>
+                      </dl>
+                      {% if can_edit %}
+                      <div class="kv-prod-detail-actions">
+                        <button type="button" class="btn btn-primary" data-edit-vtype
+                                data-id="{{ vt.id }}" data-name="{{ vt.name }}" data-wg="{{ wg }}"
+                                data-grace="{{ vt.grace_minutes }}" data-cap="{{ vt.daily_cap }}"
+                                data-free="{{ vt.free_minutes }}" data-first-hours="{{ vt.first_block_hours }}"
+                                data-first-amount="{{ vt.first_block_amount }}" data-next="{{ vt.next_hour_amount }}"
+                                data-monthly="{{ vt.monthly_price if vt.monthly_price is not none else '' }}">Chỉnh sửa chính sách</button>
+                      </div>
+                      {% endif %}
+                    </div>
+
+                    <div class="kv-prod-dpane" data-prod-dpane="matrix" hidden>
+                      <div class="kv-prod-submatrix">
+                        {% for tp in time_periods %}
+                          {% set p = pm.get(vt.id|string ~ '-' ~ tp.id|string) %}
+                          <div class="kv-subprice-item">
+                            <span class="kv-subprice-name">{{ tp.name }} <small>({{ tp.start_value }} – {{ tp.end_value }})</small></span>
+                            {{ price_cell(vt, tp, p, can_edit, url_for('pricing_price_delete', price_id=p.id) if p else '') }}
+                          </div>
+                        {% endfor %}
+                        {% for tp in day_periods %}
+                          {% set p = pm.get(vt.id|string ~ '-' ~ tp.id|string) %}
+                          <div class="kv-subprice-item is-month">
+                            <span class="kv-subprice-name">{{ tp.name }} <small>(Ngày {{ tp.start_value }} – {{ tp.end_value }})</small></span>
+                            {{ price_cell(vt, tp, p, can_edit, url_for('pricing_price_delete', price_id=p.id) if p else '') }}
+                          </div>
+                        {% endfor %}
+                      </div>
+                    </div>
+                  </div>
+                </td>
               </tr>
             {% endfor %}
           </tbody>
@@ -296,6 +475,9 @@
         <thead>
           <tr>
             <th scope="col">Tên loại xe</th>
+            <th scope="col">Phân loại nhóm</th>
+            <th scope="col">Miễn phí đầu</th>
+            <th scope="col">Giá vé tháng</th>
             <th scope="col">Mức giá đang dùng</th>
             {% if can_edit %}<th scope="col" class="right">Thao tác</th>{% endif %}
           </tr>
@@ -303,15 +485,31 @@
         <tbody>
           {% for vt in vehicle_types %}
             {% set cnt = prices|selectattr('vehicle_type_id', 'equalto', vt.id)|list|length %}
-            <tr>
+            {% set wg = vt.wheel_group if vt.wheel_group is defined and vt.wheel_group else '2w' %}
+            <tr data-pricing-vt-row
+                data-vt-id="{{ vt.id }}"
+                data-wg="{{ wg }}"
+                data-policy="{{ 'block' if vt.first_block_hours else 'period' }}"
+                data-name="{{ vt.name|lower }}">
               <th scope="row">{{ vt.name }}</th>
+              <td>
+                {% if wg == '4w' %}
+                  <span class="badge badge-blue"><span></span>Xe 4 bánh</span>
+                {% elif wg == 'other' %}
+                  <span class="badge badge-amber"><span></span>Khác</span>
+                {% else %}
+                  <span class="badge badge-green"><span></span>Xe 2 bánh</span>
+                {% endif %}
+              </td>
+              <td>{{ vt.free_minutes }} phút</td>
+              <td>{{ '{:,}'.format(vt.monthly_price).replace(',', '.') ~ ' ₫/tháng' if vt.monthly_price is not none else 'Theo khung ngày' }}</td>
               <td>{{ cnt }}</td>
               {% if can_edit %}
                 <td class="right">
                   <div class="row-actions">
                     <button type="button" class="btn btn-outline" data-edit-vtype
-                            data-id="{{ vt.id }}" data-name="{{ vt.name }}" data-grace="{{ vt.grace_minutes }}" data-cap="{{ vt.daily_cap }}" data-free="{{ vt.free_minutes }}" data-first-hours="{{ vt.first_block_hours }}" data-first-amount="{{ vt.first_block_amount }}" data-next="{{ vt.next_hour_amount }}" data-monthly="{{ vt.monthly_price if vt.monthly_price is not none else '' }}"
-                            aria-label="Đổi tên loại xe {{ vt.name }}">Sửa</button>
+                            data-id="{{ vt.id }}" data-name="{{ vt.name }}" data-wg="{{ wg }}" data-grace="{{ vt.grace_minutes }}" data-cap="{{ vt.daily_cap }}" data-free="{{ vt.free_minutes }}" data-first-hours="{{ vt.first_block_hours }}" data-first-amount="{{ vt.first_block_amount }}" data-next="{{ vt.next_hour_amount }}" data-monthly="{{ vt.monthly_price if vt.monthly_price is not none else '' }}"
+                            aria-label="Sửa loại xe {{ vt.name }}">Sửa</button>
                     <form method="POST" action="{{ url_for('pricing_type_delete', type_id=vt.id) }}"
                           data-confirm="Xóa loại xe “{{ vt.name }}”{% if cnt %} và {{ cnt }} mức giá của loại xe này{% endif %}? Thao tác không thể hoàn tác.">
                       <button type="submit" class="btn btn-danger" aria-label="Xóa loại xe {{ vt.name }}">Xóa</button>
@@ -321,7 +519,7 @@
               {% endif %}
             </tr>
           {% else %}
-            <tr><td colspan="{{ 3 if can_edit else 2 }}" class="empty-cell">Chưa có loại phương tiện. Hãy thêm loại đầu tiên (ví dụ Xe máy).</td></tr>
+            <tr><td colspan="{{ 6 if can_edit else 5 }}" class="empty-cell">Chưa có loại phương tiện. Hãy thêm loại đầu tiên (ví dụ Xe máy).</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -437,6 +635,14 @@
           <label for="vtype-name">Tên loại phương tiện</label>
           <input type="text" id="vtype-name" name="name" required maxlength="40" placeholder="Ví dụ: Xe máy, Ô tô, Xe đạp điện">
         </div>
+        <div class="form-field">
+          <label for="vtype-wg">Phân loại nhóm xe</label>
+          <select id="vtype-wg" name="wheel_group">
+            <option value="2w">Xe 2 bánh</option>
+            <option value="4w">Xe 4 bánh</option>
+            <option value="other">Khác</option>
+          </select>
+        </div>
 
         <div class="form-grid">
           <div class="form-field">
@@ -482,6 +688,8 @@
       </form>
     </dialog>
   {% endif %}
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -622,6 +830,7 @@
         $('vtype-dialog-title').textContent = d.id ? 'Đổi tên loại phương tiện' : 'Thêm loại phương tiện';
         $('vtype-id').value = d.id || '';
         $('vtype-name').value = d.name || '';
+        if ($('vtype-wg')) $('vtype-wg').value = d.wg || '2w';
         $('vtype-grace').value = d.grace || '0';
         $('vtype-cap').value = d.cap || '0';
         $('vtype-free').value = d.free || '0';
@@ -639,6 +848,93 @@
         b.addEventListener('click', function () { openType({}); });
       });
     }
+
+    /* ---------- Bộ lọc sidebar & nút + Thêm mới kiểu KiotViet ---------- */
+    var addMenuBtn = $('kv-pricing-add-menu-btn');
+    var addMenuPop = $('kv-pricing-add-menu');
+    if (addMenuBtn && addMenuPop) {
+      addMenuBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var nextHidden = !addMenuPop.hidden;
+        addMenuPop.hidden = nextHidden;
+        addMenuBtn.setAttribute('aria-expanded', nextHidden ? 'false' : 'true');
+      });
+      addMenuPop.querySelectorAll('button').forEach(function (b) {
+        b.addEventListener('click', function () {
+          addMenuPop.hidden = true;
+          addMenuBtn.setAttribute('aria-expanded', 'false');
+        });
+      });
+      document.addEventListener('click', function (e) {
+        if (!addMenuPop.hidden && !addMenuPop.contains(e.target) && e.target !== addMenuBtn) {
+          addMenuPop.hidden = true;
+          addMenuBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+
+    var jumpVtypes = $('kv-jump-vtypes');
+    if (jumpVtypes) {
+      jumpVtypes.addEventListener('click', function () { showTab('types', true); });
+    }
+    var searchPricing = $('kv-pricing-search');
+    function applyPricingFilters() {
+      var checkedWgs = Array.prototype.slice.call(document.querySelectorAll('input[name="kv_wg_filter"]:checked')).map(function (c) { return c.value; });
+      var vtEl = document.querySelector('input[name="kv_vt_filter"]:checked');
+      var polEl = document.querySelector('input[name="kv_policy_filter"]:checked');
+      var vtVal = vtEl ? vtEl.value : 'all';
+      var polVal = polEl ? polEl.value : 'all';
+      var q = searchPricing ? searchPricing.value.trim().toLowerCase() : '';
+
+      document.querySelectorAll('[data-pricing-vt-row]').forEach(function (row) {
+        var wgOk = checkedWgs.indexOf(row.dataset.wg) !== -1;
+        var vtOk = vtVal === 'all' || row.dataset.vtId === vtVal;
+        var polOk = polVal === 'all' || row.dataset.policy === polVal;
+        var qOk = !q || (row.dataset.name || '').indexOf(q) !== -1 || row.textContent.toLowerCase().indexOf(q) !== -1;
+        row.hidden = !(wgOk && vtOk && polOk && qOk);
+      });
+    }
+    document.querySelectorAll('input[name="kv_wg_filter"], input[name="kv_vt_filter"], input[name="kv_policy_filter"]').forEach(function (el) {
+      el.addEventListener('change', applyPricingFilters);
+    });
+    if (searchPricing) searchPricing.addEventListener('input', applyPricingFilters);
+
+    // Inline row expansion for KiotViet #/Products pricing table
+    document.querySelectorAll('.kv-prod-row').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('button, a, input')) return;
+        var key = row.dataset.prodRow;
+        var detail = document.querySelector('.kv-prod-detail-row[data-prod-detail="' + key + '"]');
+        if (!detail) return;
+        var willOpen = detail.hidden;
+        document.querySelectorAll('.kv-prod-detail-row').forEach(function (d) { d.hidden = true; });
+        document.querySelectorAll('.kv-prod-row').forEach(function (r) {
+          r.classList.remove('is-expanded');
+          r.setAttribute('aria-expanded', 'false');
+        });
+        if (willOpen) {
+          detail.hidden = false;
+          row.classList.add('is-expanded');
+          row.setAttribute('aria-expanded', 'true');
+        }
+      });
+    });
+
+    document.querySelectorAll('.kv-prod-detail-box').forEach(function (box) {
+      var dtabs = box.querySelectorAll('[data-prod-dtab]');
+      var dpanes = box.querySelectorAll('[data-prod-dpane]');
+      dtabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          var target = tab.dataset.prodDtab;
+          dtabs.forEach(function (t) { t.classList.toggle('active', t === tab); });
+          dpanes.forEach(function (p) {
+            var on = p.dataset.prodDpane === target;
+            p.hidden = !on;
+            p.classList.toggle('active', on);
+          });
+        });
+      });
+    });
   })();
 </script>
 {% endblock %}

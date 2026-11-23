@@ -1,0 +1,2407 @@
+<div class="kv-emp-setting-shell">
+  <aside class="kv-emp-setting-nav" aria-label="Danh mục thiết lập nhân viên">
+    <div class="kv-emp-setting-group">Thiết lập</div>
+    <button type="button" class="kv-emp-setting-tab {{ 'is-active' if active_tab == 'init' else '' }}" data-emp-set-tab="init">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Khởi tạo</span>
+    </button>
+    <button type="button" class="kv-emp-setting-tab {{ 'is-active' if active_tab == 'attendance' else '' }}" data-emp-set-tab="attendance">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><path d="m9 14 2 2 4-4"/></svg>
+      <span>Chấm công</span>
+    </button>
+    <button type="button" class="kv-emp-setting-tab {{ 'is-active' if active_tab == 'payroll' else '' }}" data-emp-set-tab="payroll">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c0-1.1-1.1-2-2.5-2s-2.5.9-2.5 2 1.1 2 2.5 2 2.5.9 2.5 2-1.1 2-2.5 2-2.5-.9-2.5-2"/><path d="M12 6.5v11"/></svg>
+      <span>Tính lương</span>
+    </button>
+    <button type="button" class="kv-emp-setting-tab {{ 'is-active' if active_tab == 'schedule_rules' else '' }}" data-emp-set-tab="schedule_rules">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Ngày làm &amp; Nghỉ</span>
+    </button>
+  </aside>
+
+  <div class="kv-emp-setting-body">
+    <!-- Tab 1: Khởi tạo (Thiết lập nhanh) -->
+    <div class="kv-emp-setting-panel" data-emp-set-panel="init" {% if active_tab != 'init' %}hidden{% endif %}>
+      <div class="kv-pos-setting-content kv-quick-setup-card">
+        <div class="kv-quick-setup-head">
+          <h2>Thiết lập nhanh</h2>
+          <p>Chỉ vài bước cài đặt để quản lý nhân viên hiệu quả, tối ưu vận hành bãi xe và tính lương chính xác</p>
+        </div>
+
+        <div class="kv-quick-setup-rows">
+          <div class="kv-quick-row">
+            <div class="kv-quick-row-left">
+              <span class="kv-quick-check {{ 'is-done' if (emp_total_count or 0) > 0 else '' }}" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              <div>
+                <h3>Thêm nhân viên</h3>
+                <p>Bãi xe đang có {{ emp_total_count or 0 }} nhân viên. <a href="{{ url_for('accounts') }}">Xem danh sách</a></p>
+              </div>
+            </div>
+            <button type="button" class="kv-quick-btn" id="open-quick-add-emp-modal">Thêm nhân viên</button>
+          </div>
+
+          <div class="kv-quick-row">
+            <div class="kv-quick-row-left">
+              <span class="kv-quick-check is-done" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              <div>
+                <h3>Hình thức chấm công</h3>
+                <p>
+                  {% if employee_settings.emp_checkin_software == '1' or employee_settings.emp_checkin_photo == '1' %}
+                    Bãi xe đã thiết lập hình thức chấm công
+                    ({% if employee_settings.emp_checkin_software == '1' %}Qua phần mềm{% endif %}{% if employee_settings.emp_checkin_software == '1' and employee_settings.emp_checkin_photo == '1' %}, {% endif %}{% if employee_settings.emp_checkin_photo == '1' %}Chụp ảnh{% endif %}).
+                  {% else %}
+                    Chưa chọn hình thức chấm công.
+                  {% endif %}
+                  <a href="{{ url_for('employee_timesheet') }}">Xem chi tiết</a>
+                </p>
+              </div>
+            </div>
+            <button type="button" class="kv-quick-btn" id="open-quick-checkin-method-modal">Thiết lập</button>
+          </div>
+
+          <div class="kv-quick-row">
+            <div class="kv-quick-row-left">
+              <span class="kv-quick-check {{ 'is-done' if (emp_salary_configured_count or 0) > 0 else '' }}" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              <div>
+                <h3>Thiết lập lương</h3>
+                <p>Đã thiết lập lương cho {{ emp_salary_configured_count or 0 }}/{{ emp_total_count or 0 }} nhân viên. <a href="{{ url_for('accounts') }}">Xem chi tiết</a></p>
+              </div>
+            </div>
+            <button type="button" class="kv-quick-btn" id="open-quick-salary-modal">Thiết lập</button>
+          </div>
+
+          <div class="kv-quick-row">
+            <div class="kv-quick-row-left">
+              <span class="kv-quick-check is-done" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              <div>
+                <h3>Thiết lập bảng lương</h3>
+                <p>Theo dõi chính xác và tự động tính lương của nhân viên. <a href="{{ url_for('employee_payroll') }}">Xem danh sách</a></p>
+              </div>
+            </div>
+            <a href="{{ url_for('employee_payroll') }}" class="kv-quick-btn">Tạo bảng lương</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Form chung cho Tab 2 (Chấm công) & Tab 3 (Tính lương) -->
+    <form method="POST" action="{{ url_for('employee_settings') }}" id="employee-settings-form">
+      <input type="hidden" name="setting_type" value="employee">
+      <input type="hidden" name="emp_action" value="save_settings">
+      <input type="hidden" name="active_tab" id="emp-active-tab-input" value="{{ active_tab }}">
+
+      <!-- Tab 2: Chấm công (Exact KiotViet structure + Danh sách ca làm việc sub-view) -->
+      <div class="kv-emp-setting-panel" data-emp-set-panel="attendance" {% if active_tab != 'attendance' %}hidden{% endif %}>
+        <div class="kv-emp-sub-layout">
+          <div class="kv-pos-setting-content">
+            <!-- Sub-view A: Thiết lập chấm công chính -->
+            <div id="att-main-view" {% if att_view == 'shifts' %}hidden{% endif %}>
+              <div class="kv-ts-col-title">
+                <h2>Thiết lập chấm công</h2>
+              </div>
+
+              <!-- 1. Thiết lập ca làm việc -->
+              <div class="kv-ts-col" id="sec-att-shifts">
+                <div class="kv-ts-col-label">
+                  <strong>Thiết lập ca làm việc</strong>
+                  <small>Quản lý các ca làm việc của bãi xe</small>
+                </div>
+                <div class="kv-ts-col-ctrl">
+                  <button type="button" class="kv-quick-btn" id="open-shifts-subview">{{ (shifts|length) if shifts is defined else 3 }} ca làm việc &rsaquo;</button>
+                </div>
+              </div>
+
+              <!-- 2. Chấm công không cần xếp lịch -->
+              <div class="kv-ts-col kv-ts-col-stacked">
+                <div class="kv-ts-group-header">
+                  <div class="kv-ts-col-label">
+                    <strong>Chấm công không cần xếp lịch</strong>
+                    <small>Ngoài các ca làm việc đã được xếp lịch, nhân viên được phép chấm công vào ca làm việc chưa được xếp lịch.</small>
+                  </div>
+                  <label class="kv-switch" aria-label="Chấm công không cần xếp lịch">
+                    <input type="checkbox" id="emp_unscheduled_checkin" name="emp_unscheduled_checkin" value="1" {% if employee_settings.emp_unscheduled_checkin == '1' %}checked{% endif %}>
+                    <span class="kv-switch-slider"></span>
+                  </label>
+                </div>
+                <div class="kv-ts-content-detail {{ 'is-disabled' if employee_settings.emp_unscheduled_checkin != '1' else '' }}" id="unscheduled-sub-wrap">
+                  <label class="kv-ts-check-row">
+                    <input type="checkbox" id="emp_unscheduled_auto_approve" name="emp_unscheduled_auto_approve" value="1" {% if employee_settings.emp_unscheduled_auto_approve == '1' %}checked{% endif %} {% if employee_settings.emp_unscheduled_checkin != '1' %}disabled{% endif %}>
+                    <span>Cho phép chấm công vào ca chưa xếp lịch không cần quản lý duyệt</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- 3. Tự động chấm công -->
+              <div class="kv-ts-col">
+                <div class="kv-ts-col-label">
+                  <strong>Tự động chấm công</strong>
+                  <small>Nhân viên không phải chủ động chấm công. Hệ thống sẽ tự động gợi ý chấm công thay nhân viên</small>
+                </div>
+                <div class="kv-ts-col-ctrl">
+                  <label class="kv-switch" aria-label="Tự động chấm công">
+                    <input type="checkbox" name="emp_auto_checkin" value="1" {% if employee_settings.emp_auto_checkin == '1' %}checked{% endif %}>
+                    <span class="kv-switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- 4. Cho phép chấm 1 lượt Vào - Ra khi làm nhiều ca liên tục -->
+              <div class="kv-ts-col">
+                <div class="kv-ts-col-label">
+                  <strong>Cho phép chấm 1 lượt Vào - Ra khi làm nhiều ca liên tục</strong>
+                  <small>Ví dụ: Ca sáng (06:00 - 14:00), Ca chiều (14:00 - 22:00). Nhân viên chỉ cần chấm vào đầu ca 1 và chấm ra cuối ca 2</small>
+                </div>
+                <div class="kv-ts-col-ctrl">
+                  <label class="kv-switch" aria-label="Chấm 1 lượt nhiều ca liên tục">
+                    <input type="checkbox" name="emp_multi_shift_single_punch" value="1" {% if employee_settings.emp_multi_shift_single_punch == '1' %}checked{% endif %}>
+                    <span class="kv-switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- 5. Thiết lập số giờ tính công -->
+              <div class="kv-ts-col kv-ts-col-stacked" id="sec-att-hours">
+                <div class="kv-ts-stacked-head">
+                  <div>
+                    <strong>Thiết lập số giờ tính công</strong>
+                    <small>Thiết lập các mức giờ làm tương ứng với số công của loại lương Theo ngày công chuẩn.</small>
+                  </div>
+                </div>
+                <div class="kv-ts-content-detail">
+                  <div class="kv-ts-inline-line">
+                    <span>Số giờ của 1 ngày công chuẩn là</span>
+                    <input type="number" min="1" max="24" name="emp_standard_hours" value="{{ employee_settings.emp_standard_hours }}" class="kv-ts-num-inp">
+                    <span>giờ</span>
+                  </div>
+                  <label class="kv-ts-check-row">
+                    <input type="checkbox" name="emp_convert_hours_enabled" value="1" {% if employee_settings.emp_convert_hours_enabled == '1' %}checked{% endif %}>
+                    <span>Quy đổi số giờ làm thành số ngày công (nửa công / 1 công)</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- 6. Cài đặt đi muộn - về sớm -->
+              <div class="kv-ts-col kv-ts-col-stacked" id="sec-att-grace">
+                <div class="kv-ts-stacked-head">
+                  <div>
+                    <strong>Cài đặt đi muộn - về sớm</strong>
+                    <small>Cài đặt thời gian tối đa được đi muộn hoặc về sớm</small>
+                  </div>
+                </div>
+                <div class="kv-ts-content-detail">
+                  <label class="kv-ts-check-row">
+                    <input type="checkbox" name="emp_late_enabled" value="1" {% if employee_settings.emp_late_enabled == '1' %}checked{% endif %}>
+                    <span class="kv-ts-sub-label">Tính đi muộn sau</span>
+                    <input type="number" min="0" max="120" name="emp_late_grace_minutes" value="{{ employee_settings.emp_late_grace_minutes }}" class="kv-ts-num-inp">
+                    <span>phút</span>
+                  </label>
+                  <label class="kv-ts-check-row">
+                    <input type="checkbox" name="emp_early_leave_enabled" value="1" {% if employee_settings.emp_early_leave_enabled == '1' %}checked{% endif %}>
+                    <span class="kv-ts-sub-label">Tính về sớm trước</span>
+                    <input type="number" min="0" max="120" name="emp_early_leave_grace_minutes" value="{{ employee_settings.emp_early_leave_grace_minutes }}" class="kv-ts-num-inp">
+                    <span>phút</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- 7. Cài đặt làm thêm giờ -->
+              <div class="kv-ts-col kv-ts-col-stacked kv-ts-col-last" id="sec-att-overtime">
+                <div class="kv-ts-stacked-head">
+                  <div>
+                    <strong>Cài đặt làm thêm giờ</strong>
+                    <small>Tính làm thêm giờ cho nhân viên khi vào ca sớm hoặc tan ca muộn</small>
+                  </div>
+                </div>
+                <div class="kv-ts-content-detail">
+                  <label class="kv-ts-check-row">
+                    <input type="checkbox" name="emp_ot_before_enabled" value="1" {% if employee_settings.emp_ot_before_enabled == '1' %}checked{% endif %}>
+                    <span class="kv-ts-sub-label">Tính làm thêm giờ trước ca</span>
+                    <input type="number" min="0" max="120" name="emp_overtime_before_minutes" value="{{ employee_settings.emp_overtime_before_minutes }}" class="kv-ts-num-inp">
+                    <span>phút</span>
+                  </label>
+                  <label class="kv-ts-check-row">
+                    <input type="checkbox" name="emp_ot_after_enabled" value="1" {% if employee_settings.emp_ot_after_enabled == '1' %}checked{% endif %}>
+                    <span class="kv-ts-sub-label">Tính làm thêm giờ sau ca</span>
+                    <input type="number" min="0" max="120" name="emp_overtime_after_minutes" value="{{ employee_settings.emp_overtime_after_minutes }}" class="kv-ts-num-inp">
+                    <span>phút</span>
+                  </label>
+                  <label class="kv-ts-check-row kv-ts-indent-sub">
+                    <input type="checkbox" name="emp_ot_actual_all" value="1" {% if employee_settings.emp_ot_actual_all == '1' %}checked{% endif %}>
+                    <span>Tính toàn bộ thời gian làm thêm thực tế</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="kv-ts-save-bar">
+                <button type="submit" class="invoice-action invoice-action-primary">Lưu thiết lập chấm công</button>
+              </div>
+            </div>
+
+            <!-- Sub-view B: Danh sách ca làm việc (mở khi bấm "X ca làm việc >") -->
+            <div id="att-shifts-view" {% if att_view != 'shifts' %}hidden{% endif %}>
+              <div class="kv-ts-col-title" style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <button type="button" class="kv-icon-edit-btn" id="back-to-att-main" title="Quay lại Thiết lập chấm công" aria-label="Quay lại">&larr;</button>
+                  <h2 style="margin:0;">Danh sách ca làm việc</h2>
+                </div>
+                <button type="button" class="invoice-action invoice-action-primary" id="open-add-shift-modal" style="height:34px;">+ Thêm ca làm việc</button>
+              </div>
+              <div class="kv-ts-table-wrap">
+                <table class="kv-ts-table" aria-label="Danh sách ca làm việc">
+                  <thead>
+                    <tr>
+                      <th style="width:52px;">STT</th>
+                      <th>Ca làm việc</th>
+                      <th>Thời gian</th>
+                      <th>Tổng giờ làm việc</th>
+                      <th>Cổng làm việc</th>
+                      <th>Hoạt động</th>
+                      <th style="width:90px; text-align:center;">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for s in (shifts or []) %}
+                    <tr>
+                      <td>{{ loop.index }}</td>
+                      <td><b>{{ s.name }}</b></td>
+                      <td>{{ s.time_range }}</td>
+                      <td>{{ s.duration_label }}</td>
+                      <td><span class="employee-gate-pill">{{ s.gates_label }}</span></td>
+                      <td>
+                        <form method="post" action="{{ url_for('employee_settings') }}" style="display:inline;">
+                          <input type="hidden" name="emp_action" value="toggle_shift">
+                          <input type="hidden" name="shift_id" value="{{ s.id }}">
+                          <button type="submit" class="kv-paysheet-badge {{ 'is-finalized' if s.active else 'is-draft' }}" style="border:0; cursor:pointer;">
+                            {{ 'Đang hoạt động' if s.active else 'Ngừng' }}
+                          </button>
+                        </form>
+                      </td>
+                      <td style="text-align:center;">
+                        <button type="button" class="kv-icon-edit-btn"
+                                data-edit-shift
+                                data-id="{{ s.id }}"
+                                data-name="{{ s.name }}"
+                                data-start="{{ s.start }}"
+                                data-end="{{ s.end }}"
+                                data-ci-start="{{ s.checkin_start }}"
+                                data-ci-end="{{ s.checkin_end }}"
+                                data-gates="{{ s.gates_csv }}"
+                                title="Sửa ca" aria-label="Sửa ca">✎</button>
+                        <form method="post" action="{{ url_for('employee_settings') }}" style="display:inline;" onsubmit="return confirm('Xóa ca {{ s.name }}?');">
+                          <input type="hidden" name="emp_action" value="delete_shift">
+                          <input type="hidden" name="shift_id" value="{{ s.id }}">
+                          <button type="submit" class="kv-shift-del" title="Xóa ca" aria-label="Xóa ca">&times;</button>
+                        </form>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <aside class="kv-sub-content-tabs" aria-label="Mục con Chấm công">
+            <a href="#sec-att-shifts" class="is-active">Thiết lập ca làm việc</a>
+            <a href="#sec-att-hours">Số giờ tính công</a>
+            <a href="#sec-att-grace">Đi muộn - về sớm</a>
+            <a href="#sec-att-overtime">Làm thêm giờ</a>
+          </aside>
+        </div>
+      </div>
+
+      <!-- Tab 3: Tính lương -->
+      <div class="kv-emp-setting-panel" data-emp-set-panel="payroll" {% if active_tab != 'payroll' %}hidden{% endif %}>
+        <div class="kv-emp-sub-layout">
+          <div class="kv-pos-setting-content">
+            <!-- Pay Main View -->
+            <div id="pay-main-view" {% if pay_view in ('templates', 'allowances', 'deductions') %}hidden{% endif %}>
+              <div class="kv-ts-col-title">
+                <h2>Thiết lập tính lương</h2>
+              </div>
+
+              <div class="kv-ts-col" id="sec-pay-cutoff">
+                <div class="kv-ts-col-label">
+                  <strong>Ngày tính lương</strong>
+                  <small>Ngày chốt kỳ công cho nhân viên có kỳ lương hàng tháng</small>
+                </div>
+                <div class="kv-ts-col-ctrl">
+                  <select id="emp_payroll_cutoff_day" name="emp_payroll_cutoff_day" class="kv-ts-select">
+                    {% for opt in ['25', '28', 'Cuối tháng'] %}
+                      <option value="{{ opt }}" {% if employee_settings.emp_payroll_cutoff_day == opt %}selected{% endif %}>{{ 'Ngày ' ~ opt if opt != 'Cuối tháng' else opt }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+
+              <div class="kv-ts-col" id="sec-pay-auto">
+                <div class="kv-ts-col-label">
+                  <strong>Tự động tạo bảng tính lương</strong>
+                  <small>Bảng tính lương sẽ được tự động tổng hợp vào mỗi kỳ lương</small>
+                </div>
+                <div class="kv-ts-col-ctrl">
+                  <label class="kv-switch" aria-label="Tự động tạo bảng tính lương">
+                    <input type="checkbox" name="emp_auto_create_paysheet" value="1" {% if employee_settings.emp_auto_create_paysheet == '1' %}checked{% endif %}>
+                    <span class="kv-switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="kv-ts-col">
+                <div class="kv-ts-col-label">
+                  <strong>Tự động cập nhật bảng tính lương</strong>
+                  <small>Bảng tính lương tự động đồng bộ số liệu chấm công hàng ngày</small>
+                </div>
+                <div class="kv-ts-col-ctrl">
+                  <label class="kv-switch" aria-label="Tự động cập nhật bảng tính lương">
+                    <input type="checkbox" name="emp_auto_update_paysheet" value="1" {% if employee_settings.emp_auto_update_paysheet == '1' %}checked{% endif %}>
+                    <span class="kv-switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="kv-ts-col" id="sec-pay-templates">
+                <div class="kv-ts-col-label">
+                  <strong>Thiết lập Mẫu lương</strong>
+                  <small>Thưởng, Hoa hồng, Phụ cấp, Giảm trừ</small>
+                </div>
+                <div class="kv-ts-col-ctrl">
+                  <button type="button" class="kv-link-chevron-btn" data-open-pay-view="templates">{{ (salary_templates_data|length) if salary_templates_data is defined else 1 }} mẫu lương <span>&rsaquo;</span></button>
+                </div>
+              </div>
+
+              <div class="kv-ts-col" id="sec-pay-allowances">
+                <div class="kv-ts-col-label">
+                  <strong>Danh mục phụ cấp</strong>
+                  <small>Danh sách phụ cấp khoản tiền hỗ trợ nhân viên như ăn trưa, đi lại, điện thoại,...</small>
+                </div>
+                <div class="kv-ts-col-ctrl">
+                  <button type="button" class="kv-link-chevron-btn" data-open-pay-view="allowances">{{ (allowances_catalog|length) if allowances_catalog is defined else 1 }} phụ cấp <span>&rsaquo;</span></button>
+                </div>
+              </div>
+
+              <div class="kv-ts-col kv-ts-col-last" id="sec-pay-deductions">
+                <div class="kv-ts-col-label">
+                  <strong>Danh mục giảm trừ</strong>
+                  <small>Thiết lập khoản giảm trừ như đi muộn, về sớm, vi phạm nội quy,...</small>
+                </div>
+                <div class="kv-ts-col-ctrl">
+                  <button type="button" class="kv-link-chevron-btn" data-open-pay-view="deductions">{{ (deductions_catalog|length) if deductions_catalog is defined else 1 }} giảm trừ <span>&rsaquo;</span></button>
+                </div>
+              </div>
+
+              <div class="kv-ts-save-bar">
+                <button type="submit" class="invoice-action invoice-action-primary">Lưu thiết lập tính lương</button>
+              </div>
+            </div>
+
+            <!-- Sub-view: Thiết lập Mẫu lương -->
+            <div id="pay-templates-view" {% if pay_view != 'templates' %}hidden{% endif %}>
+              <div class="kv-ts-col-title" style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <button type="button" class="kv-icon-edit-btn" data-back-pay-main title="Quay lại Thiết lập tính lương" aria-label="Quay lại">&lsaquo;</button>
+                  <h2 style="margin:0;">Danh sách mẫu lương</h2>
+                </div>
+                <button type="button" class="kv-quick-btn" id="open-add-tpl-modal">+ Thêm mẫu lương</button>
+              </div>
+              <div class="kv-ts-table-wrap">
+                <table class="kv-ts-table">
+                  <thead>
+                    <tr>
+                      <th style="width:64px; text-align:center;">STT</th>
+                      <th>Tên mẫu lương</th>
+                      <th>Nhân viên áp dụng</th>
+                      <th style="width:100px; text-align:center;">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for t in (salary_templates_data or []) %}
+                    {% set used_cnt = (tpl_usage_counts.get(t.name, 0) if tpl_usage_counts is defined else 0) %}
+                    <tr>
+                      <td style="text-align:center;">{{ loop.index }}</td>
+                      <td>{{ t.name }}</td>
+                      <td>
+                        <button type="button" class="kv-tpl-staff-link" data-open-tpl-staff data-tpl-name="{{ t.name }}">
+                          {{ used_cnt }} nhân viên
+                        </button>
+                      </td>
+                      <td style="text-align:center;">
+                        <button type="button" class="kv-icon-edit-btn"
+                                data-edit-tpl
+                                data-id="{{ t.id }}"
+                                data-name="{{ t.name }}"
+                                data-note="{{ t.note or '' }}"
+                                data-salary-type="{{ t.salary_type or 'shift' }}"
+                                data-salary-amount="{{ t.salary_amount or 300000 }}"
+                                data-bonus-enabled="{{ '1' if t.bonus_enabled else '0' }}"
+                                data-bonus-type="{{ t.bonus_type or 'Theo doanh thu' }}"
+                                data-bonus-amount="{{ t.bonus_amount or 0 }}"
+                                data-commission-enabled="{{ '1' if t.commission_enabled else '0' }}"
+                                data-commission-type="{{ t.commission_type or 'Theo dịch vụ' }}"
+                                data-commission-rate="{{ t.commission_rate or 0 }}"
+                                data-allowance-enabled="{{ '1' if t.allowance_enabled else '0' }}"
+                                data-allowance-amount="{{ t.allowance_amount or 0 }}"
+                                data-allowances='{{ (t.allowances or [])|tojson }}'
+                                data-deduction-enabled="{{ '1' if t.deduction_enabled else '0' }}"
+                                data-deduction-amount="{{ t.deduction_amount or 0 }}"
+                                data-deduction-note="{{ t.deduction_note or '' }}"
+                                data-deductions='{{ (t.deductions or [])|tojson }}'
+                                title="Sửa mẫu lương" aria-label="Sửa mẫu lương">✎</button>
+                        <button type="button" class="kv-icon-edit-btn" data-delete-catalog="delete_salary_template" data-id="{{ t.id }}" data-name="{{ t.name }}" title="Xóa mẫu lương" aria-label="Xóa mẫu lương">🗑</button>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Sub-view: Danh mục phụ cấp -->
+            <div id="pay-allowances-view" {% if pay_view != 'allowances' %}hidden{% endif %}>
+              <div class="kv-ts-col-title" style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <button type="button" class="kv-icon-edit-btn" data-back-pay-main title="Quay lại Thiết lập tính lương" aria-label="Quay lại">&lsaquo;</button>
+                  <h2 style="margin:0;">Danh mục phụ cấp</h2>
+                </div>
+                <button type="button" class="kv-quick-btn" id="open-add-allowance-modal">+ Thêm phụ cấp</button>
+              </div>
+              <div class="kv-ts-table-wrap">
+                <table class="kv-ts-table">
+                  <thead>
+                    <tr>
+                      <th style="width:52px;">STT</th>
+                      <th>Tên phụ cấp</th>
+                      <th>Loại phụ cấp</th>
+                      <th>Số tiền</th>
+                      <th style="width:90px; text-align:center;">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for a in (allowances_catalog or []) %}
+                    <tr>
+                      <td>{{ loop.index }}</td>
+                      <td><b>{{ a.name }}</b></td>
+                      <td>{{ a.type }}</td>
+                      <td>
+                        {% if a.type == 'Phụ cấp theo ca làm việc' and a.shift_allowances %}
+                          <b>{{ a.shift_allowances|length }} ca áp dụng</b>
+                        {% elif a.benefit_type == 'percent' %}
+                          <b>{{ a.amount }}% Lương chính</b>
+                        {% else %}
+                          <b>{{ a.amount|vnd }}</b>
+                        {% endif %}
+                      </td>
+                      <td style="text-align:center;">
+                        <button type="button" class="kv-icon-edit-btn"
+                                data-edit-catalog="allowance"
+                                data-id="{{ a.id }}"
+                                data-name="{{ a.name }}"
+                                data-type="{{ a.type }}"
+                                data-amount="{{ a.amount }}"
+                                data-benefit-type="{{ a.benefit_type or 'vnd' }}"
+                                data-min-hours-enabled="{{ '1' if a.min_hours_enabled else '0' }}"
+                                data-min-hours="{{ a.min_hours or '' }}"
+                                data-shift-allowances='{{ (a.shift_allowances or [])|tojson }}'
+                                title="Sửa phụ cấp">✎</button>
+                        <button type="button" class="kv-shift-del" data-delete-catalog="delete_allowance" data-id="{{ a.id }}" data-name="{{ a.name }}" title="Xóa phụ cấp">&times;</button>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Sub-view: Danh mục giảm trừ -->
+            <div id="pay-deductions-view" {% if pay_view != 'deductions' %}hidden{% endif %}>
+              <div class="kv-ts-col-title" style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <button type="button" class="kv-icon-edit-btn" data-back-pay-main title="Quay lại Thiết lập tính lương" aria-label="Quay lại">&lsaquo;</button>
+                  <h2 style="margin:0;">Danh mục giảm trừ</h2>
+                </div>
+                <button type="button" class="kv-quick-btn" id="open-add-deduction-modal">+ Thêm giảm trừ</button>
+              </div>
+              <div class="kv-ts-table-wrap">
+                <table class="kv-ts-table">
+                  <thead>
+                    <tr>
+                      <th style="width:52px; text-align:center;">STT</th>
+                      <th>Tên giảm trừ</th>
+                      <th>Loại giảm trừ</th>
+                      <th>Mức giảm trừ</th>
+                      <th style="width:90px; text-align:center;"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for d in (deductions_catalog or []) %}
+                    {% set d_cond = d.condition or 'count' %}
+                    {% set d_block = d.block_minutes or 30 %}
+                    {% if d.type == 'Cố định' %}
+                      {% set d_type_label = 'Cố định' %}
+                      {% set d_amt_label = "{:,}".format((d.amount or 0)|int) %}
+                    {% elif d_cond == 'salary_coef' %}
+                      {% set d_type_label = d.type ~ ' theo hệ số lương' %}
+                      {% set d_amt_label = 'Theo hệ số lương' %}
+                    {% elif d_cond == 'block' %}
+                      {% set d_type_label = d.type ~ ' theo block ' ~ d_block ~ ' phút' %}
+                      {% set d_amt_label = "{:,}".format((d.amount or 0)|int) ~ ' / block ' ~ d_block ~ ' phút' %}
+                    {% else %}
+                      {% set d_type_label = d.type ~ ' theo số lần' %}
+                      {% set d_amt_label = "{:,}".format((d.amount or 0)|int) ~ ' / lần' %}
+                    {% endif %}
+                    <tr>
+                      <td style="text-align:center;">{{ loop.index }}</td>
+                      <td>{{ d.name }}</td>
+                      <td>{{ d_type_label }}</td>
+                      <td>{{ d_amt_label }}</td>
+                      <td style="text-align:center;">
+                        <button type="button" class="kv-icon-edit-btn"
+                                data-edit-catalog="deduction"
+                                data-id="{{ d.id }}"
+                                data-name="{{ d.name }}"
+                                data-type="{{ d.type }}"
+                                data-condition="{{ d_cond }}"
+                                data-block-minutes="{{ d_block }}"
+                                data-amount="{{ d.amount }}"
+                                title="Sửa giảm trừ">✎</button>
+                        <button type="button" class="kv-icon-edit-btn" data-delete-catalog="delete_deduction" data-id="{{ d.id }}" data-name="{{ d.name }}" title="Xóa giảm trừ">🗑</button>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <aside class="kv-sub-content-tabs" aria-label="Mục con Tính lương">
+            <a href="#sec-pay-cutoff" class="is-active">Ngày tính lương</a>
+            <a href="#sec-pay-templates">Mẫu lương</a>
+            <a href="#sec-pay-allowances">Phụ cấp &amp; Giảm trừ</a>
+          </aside>
+        </div>
+      </div>
+    </form>
+
+    <!-- Tab 4: Ngày làm & Nghỉ -->
+    <div class="kv-emp-setting-panel" data-emp-set-panel="schedule_rules" {% if active_tab != 'schedule_rules' %}hidden{% endif %}>
+      <div class="kv-emp-sub-layout">
+        <div class="kv-emp-cards-stack">
+          <!-- Card 1: Ngày làm việc -->
+          <div class="kv-pos-setting-content" id="sec-work-days">
+            <div class="kv-ts-col-title">
+              <h2>Ngày làm việc</h2>
+              <small style="color:#666; font-size:13px;">Thiết lập ngày làm việc trong tuần của các cổng làm việc</small>
+            </div>
+            <div class="kv-ts-table-wrap">
+              <table class="kv-ts-table">
+                <thead>
+                  <tr>
+                    <th style="width:54px;">STT</th>
+                    <th>Cổng làm việc</th>
+                    <th>Ngày làm việc</th>
+                    <th>Trạng thái</th>
+                    <th style="width:60px; text-align:center;"></th>
+                  </tr>
+                  <tr class="kv-ts-filter-row">
+                    <th></th>
+                    <th><input type="search" id="kv-wd-gate-search" placeholder="Tìm cổng..." class="kv-ts-inline-search"></th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="kv-wd-tbody">
+                  {% for wd in gate_work_days %}
+                  <tr data-wd-name="{{ wd.name|lower }}">
+                    <td>{{ loop.index }}</td>
+                    <td><b>{{ wd.name }}</b></td>
+                    <td>{{ wd.days_label }}</td>
+                    <td>
+                      <span class="kv-paysheet-badge {{ 'is-finalized' if wd.active else 'is-draft' }}">
+                        {{ 'Đang hoạt động' if wd.active else 'Ngừng' }}
+                      </span>
+                    </td>
+                    <td style="text-align:center;">
+                      <button type="button" class="kv-icon-edit-btn" data-edit-workdays data-gate-name="{{ wd.name }}" data-days="{{ wd.days_csv }}" title="Sửa ngày làm việc {{ wd.name }}" aria-label="Sửa ngày làm việc {{ wd.name }}">✎</button>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="kv-wd-pager">
+              <span>Hiển thị</span>
+              <select id="kv-wd-page-size" aria-label="Số bản ghi hiển thị">
+                <option value="10" selected>10 bản ghi</option>
+                <option value="20">20 bản ghi</option>
+                <option value="50">50 bản ghi</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Card 2: Ngày lễ, tết -->
+          <div class="kv-pos-setting-content" id="sec-holidays">
+            <div class="kv-ts-col-title" style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+              <div>
+                <h2>Ngày lễ, tết</h2>
+                <small style="color:#666; font-size:13px;">Thiết lập các ngày lễ, tết và chính sách thưởng nếu có</small>
+              </div>
+              <button type="button" class="kv-quick-btn" id="open-holiday-modal">+ Thêm kỳ lễ tết</button>
+            </div>
+            <div class="kv-ts-table-wrap">
+              <table class="kv-ts-table">
+                <thead>
+                  <tr>
+                    <th style="width:54px;">STT</th>
+                    <th>Tên kỳ lễ tết</th>
+                    <th>Từ ngày</th>
+                    <th>Đến hết ngày</th>
+                    <th>Số ngày</th>
+                    <th>Thưởng lễ</th>
+                    <th style="width:60px;"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for h in holidays %}
+                  <tr>
+                    <td>{{ loop.index }}</td>
+                    <td><b>{{ h.name }}</b></td>
+                    <td>{{ h.start_date }}</td>
+                    <td>{{ h.end_date }}</td>
+                    <td>{{ h.days }} ngày</td>
+                    <td>{{ h.bonus|vnd if h.bonus else '0 đ' }}</td>
+                    <td style="text-align:center; white-space:nowrap;">
+                      <button type="button" class="kv-icon-edit-btn"
+                              data-edit-holiday
+                              data-id="{{ h.id }}"
+                              data-name="{{ h.name }}"
+                              data-start="{{ h.start_date }}"
+                              data-end="{{ h.end_date }}"
+                              data-bonus-enabled="{{ '1' if h.get('bonus_enabled', True) else '0' }}"
+                              data-bonus="{{ h.bonus or 0 }}"
+                              title="Sửa kỳ lễ" aria-label="Sửa kỳ lễ">✎</button>
+                      <form method="post" action="{{ url_for('employee_settings') }}" style="display:inline;">
+                        <input type="hidden" name="emp_action" value="delete_holiday">
+                        <input type="hidden" name="holiday_id" value="{{ h.id }}">
+                        <button type="submit" class="kv-icon-edit-btn" title="Xóa kỳ lễ" aria-label="Xóa kỳ lễ">🗑</button>
+                      </form>
+                    </td>
+                  </tr>
+                  {% else %}
+                  <tr>
+                    <td colspan="7" style="text-align:center; padding:26px 12px; color:#7b8594;">Không có kết quả phù hợp</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <aside class="kv-sub-content-tabs" aria-label="Mục con Ngày làm & Nghỉ">
+          <a href="#sec-work-days" class="is-active">Ngày làm việc</a>
+          <a href="#sec-holidays">Ngày lễ, tết</a>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Thiết lập chế độ chấm công (KiotViet Khởi tạo) -->
+<dialog id="quick-att-mode-modal" class="customer-dialog kv-quick-att-mode-dialog" aria-labelledby="quick-att-mode-title">
+  <form method="post" action="{{ url_for('employee_settings') }}">
+    <input type="hidden" name="emp_action" value="quick_save_attendance_mode">
+    <div class="customer-dialog-heading">
+      <h2 id="quick-att-mode-title">Thiết lập chế độ chấm công</h2>
+      <button type="button" data-close-emp-set-dlg aria-label="Đóng">&times;</button>
+    </div>
+    <div class="customer-dialog-body">
+      <p style="margin:0 0 14px; font-size:13.5px; color:#525d6d;">Chọn phương thức phù hợp với cách vận hành của bãi xe.</p>
+      <div class="kv-att-mode-cards">
+        <label class="kv-att-mode-card">
+          <input type="radio" name="emp_attendance_mode" value="shift" {% if employee_settings.emp_attendance_mode != 'flex' %}checked{% endif %}>
+          <span class="kv-att-mode-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </span>
+          <span class="kv-att-mode-text">
+            <strong>Chấm công theo ca làm việc</strong>
+            <small>Nhân viên làm việc theo ca cố định. Cần thiết lập ca và xếp lịch cho từng nhân viên.</small>
+          </span>
+          <span class="kv-att-mode-radio" aria-hidden="true"></span>
+        </label>
+
+        <label class="kv-att-mode-card">
+          <input type="radio" name="emp_attendance_mode" value="flex" {% if employee_settings.emp_attendance_mode == 'flex' %}checked{% endif %}>
+          <span class="kv-att-mode-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+          </span>
+          <span class="kv-att-mode-text">
+            <strong>Chấm công theo khung giờ làm việc</strong>
+            <small>Nhân viên chấm vào/ra tự do trong khung giờ quy định. Không cần tạo ca hay xếp lịch.</small>
+          </span>
+          <span class="kv-att-mode-radio" aria-hidden="true"></span>
+        </label>
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu và tiếp tục</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal Hình thức chấm công (KiotViet Khởi tạo) -->
+<dialog id="quick-checkin-method-modal" class="customer-dialog kv-quick-att-mode-dialog" aria-labelledby="quick-checkin-method-title">
+  <form method="post" action="{{ url_for('employee_settings') }}">
+    <input type="hidden" name="emp_action" value="quick_save_checkin_methods">
+    <div class="customer-dialog-heading">
+      <h2 id="quick-checkin-method-title">Hình thức chấm công</h2>
+      <button type="button" data-close-emp-set-dlg aria-label="Đóng">&times;</button>
+    </div>
+    <div class="customer-dialog-body">
+      <div class="kv-checkin-method-list">
+        <label class="kv-checkin-method-row">
+          <input type="checkbox" name="emp_checkin_software" value="1" {% if employee_settings.emp_checkin_software == '1' %}checked{% endif %}>
+          <span>
+            <strong>Chấm công qua phần mềm</strong>
+            <small>Nhân viên dùng phần mềm để chấm công, trong quá trình sử dụng phần mềm sẽ tính công</small>
+          </span>
+        </label>
+        <label class="kv-checkin-method-row">
+          <input type="checkbox" name="emp_checkin_photo" value="1" {% if employee_settings.emp_checkin_photo == '1' %}checked{% endif %}>
+          <span>
+            <strong>Chấm công chụp ảnh</strong>
+            <small>Hệ thống sẽ ghi nhận dữ liệu chấm công bằng ảnh chụp có mặt của nhân viên</small>
+          </span>
+        </label>
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal Thiết lập lương (KiotViet Khởi tạo) -->
+<dialog id="quick-salary-modal" class="customer-dialog kv-quick-salary-dialog" {% if open_salary %}data-open-on-load{% endif %} aria-labelledby="quick-salary-title">
+  <div class="customer-dialog-heading">
+    <h2 id="quick-salary-title">Thiết lập lương</h2>
+    <button type="button" data-close-emp-set-dlg aria-label="Đóng">&times;</button>
+  </div>
+  <div class="customer-dialog-body">
+    <div class="kv-qs-filter-bar">
+      <div class="invoice-search" style="flex:1 1 220px;">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><path d="m20.5 20.5-4.2-4.2"/></svg>
+        <input type="search" id="qs-emp-search" placeholder="Tìm kiếm nhân viên" aria-label="Tìm kiếm nhân viên">
+      </div>
+      <select id="qs-gate-filter" class="kv-ts-select" style="flex:1 1 180px;">
+        <option value="">Tất cả các cổng</option>
+        {% for wd in (gate_work_days if gate_work_days is defined else []) %}
+          <option value="{{ wd.name|lower }}">{{ wd.name }}</option>
+        {% endfor %}
+        {% if gate_work_days is not defined %}
+          <option value="cổng chính">Cổng chính</option>
+          {% for ag in (active_gates or []) %}
+            <option value="{{ ag.name|lower }}">{{ ag.name }}</option>
+          {% endfor %}
+        {% endif %}
+      </select>
+      <select id="qs-type-filter" class="kv-ts-select" style="flex:1 1 180px;">
+        <option value="">Tất cả loại lương</option>
+        {% for code, label in salary_types %}
+          <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="kv-ts-table-wrap" style="padding: 12px 0 0;">
+      <table class="kv-ts-table" aria-label="Bảng thiết lập lương nhân viên">
+        <thead>
+          <tr>
+            <th style="width:52px;">STT</th>
+            <th>Nhân viên</th>
+            <th>Lương chính</th>
+            <th>Phụ cấp</th>
+            <th>Giảm trừ</th>
+            <th style="width:90px; text-align:right;">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="qs-emp-tbody">
+          {% set qs_staff = enriched_staff if enriched_staff is defined else (staff_members or []) %}
+          {% for emp in qs_staff %}
+          {% set emp_code = emp.code if emp.code is defined else ('NV' ~ '%06d'|format(emp.id)) %}
+          {% set emp_name = emp.fullname or emp.username %}
+          <tr class="kv-qs-row"
+              data-qs-name="{{ (emp_name ~ ' ' ~ emp_code ~ ' ' ~ (emp.username or ''))|lower }}"
+              data-qs-gates="{{ (emp.work_branch or 'cổng chính')|lower }}"
+              data-qs-type="{{ emp.salary_type or '' }}">
+            <td>{{ loop.index }}</td>
+            <td>
+              <div style="font-weight:600; color:#15171a;">{{ emp_name }}</div>
+              <small style="color:#7b8594;">{{ emp_code }}</small>
+            </td>
+            <td>
+              {% if emp.salary_amount %}
+                <div style="font-weight:600; color:#15171a;">{{ emp.salary_amount|vnd }}{{ emp.salary_unit_label }}</div>
+                <small style="color:#7b8594;">{{ emp.salary_type_label }}</small>
+              {% else %}
+                <button type="button" class="kv-qs-plus-btn" data-open-qs-edit="{{ emp.id }}">+</button>
+              {% endif %}
+            </td>
+            <td>
+              {% if emp.allowance_enabled and emp.allowance_amount %}
+                <span style="color:#188246; font-weight:600;">+{{ emp.allowance_amount|vnd }}</span>
+              {% else %}
+                <button type="button" class="kv-qs-plus-btn" data-open-qs-edit="{{ emp.id }}">+</button>
+              {% endif %}
+            </td>
+            <td>
+              {% if emp.deduction_enabled and emp.deduction_amount %}
+                <span style="color:#b93636; font-weight:600;">-{{ emp.deduction_amount|vnd }}</span>
+              {% else %}
+                <button type="button" class="kv-qs-plus-btn" data-open-qs-edit="{{ emp.id }}">+</button>
+              {% endif %}
+            </td>
+            <td style="text-align:right;">
+              <button type="button" class="kv-qs-edit-link" data-open-qs-edit="{{ emp.id }}">Sửa</button>
+            </td>
+          </tr>
+          <tr class="kv-qs-edit-row" id="qs-edit-row-{{ emp.id }}" hidden>
+            <td colspan="6">
+              <form method="post" action="{{ url_for('employee_settings') }}" class="kv-qs-inline-form">
+                <input type="hidden" name="emp_action" value="quick_save_salary">
+                <input type="hidden" name="user_id" value="{{ emp.id }}">
+                <div class="form-field">
+                  <label>Loại lương</label>
+                  <select name="salary_type">
+                    <option value="">Chọn loại lương</option>
+                    {% for code, label in salary_types %}
+                      <option value="{{ code }}" {% if emp.salary_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Mức lương (VNĐ)</label>
+                  <input type="number" min="0" step="10000" name="salary_amount" value="{{ emp.salary_amount or '' }}" placeholder="VD: 300000">
+                </div>
+                <div class="form-field">
+                  <label><input type="checkbox" name="allowance_enabled" value="1" {% if emp.allowance_enabled %}checked{% endif %}> Phụ cấp (VNĐ)</label>
+                  <input type="number" min="0" step="10000" name="allowance_amount" value="{{ emp.allowance_amount or '' }}" placeholder="VD: 500000">
+                </div>
+                <div class="form-field">
+                  <label><input type="checkbox" name="deduction_enabled" value="1" {% if emp.deduction_enabled %}checked{% endif %}> Giảm trừ (VNĐ)</label>
+                  <input type="number" min="0" step="10000" name="deduction_amount" value="{{ emp.deduction_amount or '' }}" placeholder="VD: 100000">
+                </div>
+                <div style="display:flex; gap:6px; align-items:flex-end;">
+                  <button type="submit" class="invoice-action invoice-action-primary" style="height:34px;">Lưu</button>
+                  <button type="button" class="invoice-action" style="height:34px;" data-close-qs-edit="{{ emp.id }}">Đóng</button>
+                </div>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" style="text-align:center; padding:24px; color:#7b8594;">Chưa có nhân viên nào</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="customer-dialog-footer">
+    <button type="button" class="kv-quick-btn" data-close-emp-set-dlg style="min-width:auto;">Xong</button>
+  </div>
+</dialog>
+
+<!-- Modal Thêm nhân viên nhanh (KiotViet Khởi tạo) -->
+<dialog id="quick-add-emp-modal" class="customer-dialog kv-quick-add-emp-dialog" aria-labelledby="quick-add-emp-title">
+  <form method="post" action="{{ url_for('employee_settings') }}" id="quick-add-emp-form">
+    <input type="hidden" name="emp_action" value="quick_add_employees">
+    <div class="customer-dialog-heading">
+      <h2 id="quick-add-emp-title">Thêm nhân viên</h2>
+      <button type="button" data-close-emp-set-dlg aria-label="Đóng">&times;</button>
+    </div>
+    <div class="customer-dialog-body">
+      <div id="quick-emp-cards" class="kv-quick-emp-cards">
+        <div class="kv-quick-emp-card" data-quick-emp-card>
+          <div class="kv-quick-emp-card-head">
+            <strong data-quick-emp-title>Nhân viên 1</strong>
+            <button type="button" class="kv-quick-emp-remove" data-remove-quick-emp hidden aria-label="Xóa nhân viên này">&times;</button>
+          </div>
+          <div class="customer-form-grid">
+            <div class="form-field">
+              <label>Tên nhân viên</label>
+              <input type="text" name="emp_fullname" placeholder="Nhập tên nhân viên" maxlength="160" required>
+            </div>
+            <div class="form-field">
+              <label>Số điện thoại</label>
+              <input type="text" name="emp_phone" placeholder="Nhập số điện thoại" maxlength="32">
+            </div>
+            <div class="form-field form-field-full">
+              <label>Cổng làm việc</label>
+              <div class="kv-multiselect" data-quick-gate-ms>
+                <input type="hidden" name="emp_work_branch" value="">
+                <div class="kv-multiselect-box" tabindex="0" role="combobox" aria-expanded="false">
+                  <div class="kv-multiselect-tags" data-qg-tags></div>
+                  <input type="text" class="kv-multiselect-input" data-qg-search placeholder="Chọn cổng" autocomplete="off">
+                </div>
+                <div class="kv-multiselect-dropdown" data-qg-dropdown hidden>
+                  {% for wd in gate_work_days %}
+                    <button type="button" class="kv-multiselect-option" data-qg-option="{{ wd.name }}">
+                      <span>{{ wd.name }}</span>
+                      <span class="kv-multiselect-check" aria-hidden="true">✓</span>
+                    </button>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="kv-quick-add-more-btn" id="btn-add-more-quick-emp">+ Thêm nhân viên</button>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-emp-set-dlg>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal Nhân viên áp dụng mẫu lương (KiotViet style) -->
+<dialog id="tpl-staff-modal" class="customer-dialog kv-quick-att-mode-dialog" aria-labelledby="tpl-staff-title">
+  <form method="post" action="{{ url_for('employee_settings') }}" id="tpl-staff-form">
+    <input type="hidden" name="emp_action" value="apply_salary_template">
+    <input type="hidden" name="tpl_name" id="tpl-staff-tpl-name" value="">
+    <div class="customer-dialog-heading">
+      <div>
+        <h2 id="tpl-staff-title" style="margin:0;">Nhân viên áp dụng</h2>
+        <div id="tpl-staff-sub" style="font-size:13px; color:#525d6d; margin-top:2px;"></div>
+      </div>
+      <button type="button" data-close-emp-set-dlg aria-label="Đóng">&times;</button>
+    </div>
+    <div class="customer-dialog-body">
+      <div class="kv-ts-table-wrap" style="padding:0;">
+        <table class="kv-ts-table">
+          <thead>
+            <tr>
+              <th style="width:54px;">STT</th>
+              <th>Tên nhân viên</th>
+              <th>Mã nhân viên</th>
+              <th style="width:52px;"></th>
+            </tr>
+          </thead>
+          <tbody id="tpl-staff-tbody"></tbody>
+        </table>
+      </div>
+      <div id="tpl-staff-hidden-inputs"></div>
+
+      <div style="margin-top:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="kv-quick-add-more-btn" id="btn-show-add-tpl-staff" style="margin-top:0;">Thêm nhân viên áp dụng</button>
+        <div id="tpl-staff-picker" hidden style="display:flex; align-items:center; gap:6px;">
+          <select id="tpl-staff-select" class="kv-ts-select" style="min-width:220px;">
+            <option value="">Chọn nhân viên...</option>
+            {% for emp in (enriched_staff if enriched_staff is defined else []) %}
+              <option value="{{ emp.id }}" data-name="{{ emp.fullname }}" data-code="{{ emp.code }}">{{ emp.fullname }} ({{ emp.code }})</option>
+            {% endfor %}
+          </select>
+          <button type="button" class="invoice-action invoice-action-primary" id="btn-add-tpl-staff-row" style="height:32px;">Thêm</button>
+        </div>
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="submit" class="invoice-action invoice-action-primary">Áp dụng</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Form ẩn dùng cho xóa danh mục (Mẫu lương / Phụ cấp / Giảm trừ) -->
+<form method="post" action="{{ url_for('employee_settings') }}" id="catalog-delete-form" hidden>
+  <input type="hidden" name="emp_action" id="cat-del-action" value="">
+  <input type="hidden" name="tpl_id" id="cat-del-tpl-id" value="">
+  <input type="hidden" name="item_id" id="cat-del-item-id" value="">
+</form>
+
+<!-- Modal Thêm / Sửa Mẫu lương (KiotViet Cập nhật mẫu áp dụng) -->
+<dialog id="tpl-modal" class="customer-dialog kv-tpl-dialog" aria-labelledby="tpl-modal-title">
+  <form method="post" action="{{ url_for('employee_settings') }}" id="tpl-modal-form">
+    <input type="hidden" name="emp_action" value="save_salary_template">
+    <input type="hidden" name="tpl_id" id="tpl-id" value="">
+    <input type="hidden" name="tpl_salary_type" id="tpl-stype" value="shift">
+    <input type="hidden" name="tpl_salary_amount" id="tpl-samount" value="300000">
+    <input type="hidden" name="tpl_note" id="tpl-note" value="">
+    <input type="hidden" name="tpl_allowance_amount" id="tpl-aamt" value="0">
+    <input type="hidden" name="tpl_deduction_amount" id="tpl-damt" value="0">
+    <input type="hidden" name="tpl_allowances_json" id="tpl-allowances-json" value="[]">
+    <input type="hidden" name="tpl_deductions_json" id="tpl-deductions-json" value="[]">
+
+    <div class="customer-dialog-heading">
+      <h2 id="tpl-modal-title">Cập nhật mẫu áp dụng</h2>
+      <button type="button" data-close-emp-set-dlg aria-label="Đóng">&times;</button>
+    </div>
+
+    <div class="kv-tpl-dialog-body">
+      <!-- Mẫu áp dụng -->
+      <div class="kv-tpl-name-card">
+        <label for="tpl-name">Mẫu áp dụng</label>
+        <input id="tpl-name" type="text" name="tpl_name" placeholder="VD: nhanvien" required maxlength="120">
+      </div>
+
+      <!-- Thưởng -->
+      <div class="kv-tpl-card">
+        <div class="kv-tpl-card-head">
+          <div>
+            <div class="salary-card-title">Thưởng</div>
+            <div class="salary-card-desc">Thiết lập thưởng cho nhân viên</div>
+          </div>
+          <label class="kv-switch" aria-label="Bật thưởng">
+            <input type="checkbox" id="tpl-ben" name="tpl_bonus_enabled" value="1">
+            <span class="kv-switch-slider"></span>
+          </label>
+        </div>
+        <div class="kv-tpl-card-body" id="tpl-bonus-extra" hidden>
+          <table class="kv-tpl-inline-table">
+            <thead>
+              <tr>
+                <th>Hình thức thưởng</th>
+                <th style="width:200px;">Mức thưởng (VNĐ)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <select id="tpl-btype" name="tpl_bonus_type">
+                    <option value="Theo doanh thu">Theo doanh thu</option>
+                    <option value="Thưởng chuyên cần">Thưởng chuyên cần</option>
+                    <option value="Thưởng cố định theo tháng">Thưởng cố định theo tháng</option>
+                  </select>
+                </td>
+                <td>
+                  <input id="tpl-bamt" type="number" min="0" step="10000" name="tpl_bonus_amount" value="0">
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Hoa hồng -->
+      <div class="kv-tpl-card">
+        <div class="kv-tpl-card-head">
+          <div>
+            <div class="salary-card-title">Hoa hồng</div>
+            <div class="salary-card-desc">Thiết lập mức hoa hồng theo sản phẩm hoặc dịch vụ</div>
+          </div>
+          <label class="kv-switch" aria-label="Bật hoa hồng">
+            <input type="checkbox" id="tpl-cen" name="tpl_commission_enabled" value="1">
+            <span class="kv-switch-slider"></span>
+          </label>
+        </div>
+        <div class="kv-tpl-card-body" id="tpl-comm-extra" hidden>
+          <table class="kv-tpl-inline-table">
+            <thead>
+              <tr>
+                <th>Loại hoa hồng</th>
+                <th style="width:200px;">Mức hoa hồng (%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <select id="tpl-ctype" name="tpl_commission_type">
+                    <option value="Theo dịch vụ">Theo dịch vụ</option>
+                    <option value="Theo doanh thu vé tháng">Theo doanh thu vé tháng</option>
+                  </select>
+                </td>
+                <td>
+                  <input id="tpl-crate" type="number" min="0" max="100" step="0.5" name="tpl_commission_rate" value="0">
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Phụ cấp -->
+      <div class="kv-tpl-card">
+        <div class="kv-tpl-card-head">
+          <div>
+            <div class="salary-card-title">Phụ cấp</div>
+            <div class="salary-card-desc">Thiết lập khoản hỗ trợ làm việc như ăn trưa, đi lại, điện thoại, ...</div>
+          </div>
+          <label class="kv-switch" aria-label="Bật phụ cấp">
+            <input type="checkbox" id="tpl-aen" name="tpl_allowance_enabled" value="1">
+            <span class="kv-switch-slider"></span>
+          </label>
+        </div>
+        <div class="kv-tpl-card-body" id="tpl-allow-extra" hidden>
+          <table class="kv-tpl-inline-table">
+            <thead>
+              <tr>
+                <th style="width:32%;">Tên phụ cấp</th>
+                <th style="width:38%;">Loại phụ cấp</th>
+                <th style="width:22%;">Mức phụ cấp</th>
+                <th style="width:44px;"></th>
+              </tr>
+            </thead>
+            <tbody id="tpl-allow-tbody"></tbody>
+          </table>
+          <button type="button" class="kv-tpl-add-link" id="tpl-add-allow-row">Thêm phụ cấp</button>
+        </div>
+      </div>
+
+      <!-- Giảm trừ -->
+      <div class="kv-tpl-card">
+        <div class="kv-tpl-card-head">
+          <div>
+            <div class="salary-card-title">Giảm trừ</div>
+            <div class="salary-card-desc">Thiết lập khoản giảm trừ như đi muộn, về sớm, vi phạm nội quy, ...</div>
+          </div>
+          <label class="kv-switch" aria-label="Bật giảm trừ">
+            <input type="checkbox" id="tpl-den" name="tpl_deduction_enabled" value="1">
+            <span class="kv-switch-slider"></span>
+          </label>
+        </div>
+        <div class="kv-tpl-card-body" id="tpl-ded-extra" hidden>
+          <table class="kv-tpl-inline-table">
+            <thead>
+              <tr>
+                <th style="width:22%;">Tên giảm trừ</th>
+                <th style="width:28%;">Loại giảm trừ</th>
+                <th style="width:24%;"></th>
+                <th style="width:18%;">Khoản giảm trừ</th>
+                <th style="width:44px;"></th>
+              </tr>
+            </thead>
+            <tbody id="tpl-ded-tbody"></tbody>
+          </table>
+          <button type="button" class="kv-tpl-add-link" id="tpl-add-ded-row">Thêm giảm trừ</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kv-tpl-footer">
+      <button type="button" class="kv-tpl-btn-delete" id="tpl-modal-delete-btn" hidden>Xóa</button>
+      <div class="kv-tpl-footer-right">
+        <button type="button" class="invoice-action" data-close-emp-set-dlg>Bỏ qua</button>
+        <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal Thêm / Sửa Phụ cấp & Giảm trừ (KiotViet style) -->
+<dialog id="catalog-item-modal" class="customer-dialog kv-cat-dialog" aria-labelledby="cat-modal-title">
+  <form method="post" action="{{ url_for('employee_settings') }}" id="catalog-item-form">
+    <input type="hidden" name="emp_action" id="cat-action" value="save_allowance">
+    <input type="hidden" name="item_id" id="cat-id" value="">
+    <div class="customer-dialog-heading">
+      <h2 id="cat-modal-title">Cập nhật loại phụ cấp</h2>
+      <button type="button" data-close-emp-set-dlg aria-label="Đóng">&times;</button>
+    </div>
+    <div class="customer-dialog-body">
+      <div class="kv-cat-stack">
+        <div class="form-field">
+          <label for="cat-name" id="cat-name-label">Tên loại phụ cấp</label>
+          <input id="cat-name" type="text" name="item_name" placeholder="Nhập tên" required maxlength="120">
+        </div>
+        <div class="form-field" id="cat-type-select-wrap">
+          <label for="cat-type" class="kv-cat-label-row">
+            <span id="cat-type-label">Loại phụ cấp</span>
+            <span class="kv-tpl-info-dot" id="cat-type-info" title="Chọn cách tính phụ cấp theo ngày, tháng hoặc ca làm việc">i</span>
+          </label>
+          <select id="cat-type" name="item_type"></select>
+        </div>
+
+        <!-- Loại giảm trừ (radio ngang giống KiotViet) -->
+        <div class="form-field" id="cat-ded-type-wrap" hidden>
+          <label>Loại giảm trừ</label>
+          <div class="kv-cat-radio-row">
+            <label class="kv-cat-radio">
+              <input type="radio" name="item_ded_type" value="Đi muộn" checked>
+              <span>Đi muộn</span>
+            </label>
+            <label class="kv-cat-radio">
+              <input type="radio" name="item_ded_type" value="Về sớm">
+              <span>Về sớm</span>
+            </label>
+            <label class="kv-cat-radio">
+              <input type="radio" name="item_ded_type" value="Cố định">
+              <span>Cố định</span>
+              <span class="kv-info-tip" tabindex="0">
+                <span class="kv-tpl-info-dot" aria-label="Thông tin giảm trừ cố định">i</span>
+                <span class="kv-info-bubble">
+                  <strong>Giảm trừ cố định:</strong> là khoản giảm trừ mà nhân viên bị trừ mỗi tháng không phụ thuộc vào đi muộn hay về sớm.
+                </span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Điều kiện giảm trừ (radio dọc giống KiotViet) -->
+        <div class="form-field" id="cat-ded-cond-wrap" hidden>
+          <label>Điều kiện</label>
+          <div class="kv-cat-radio-col">
+            <label class="kv-cat-radio">
+              <input type="radio" name="item_condition" value="count" checked>
+              <span>Theo số lần</span>
+            </label>
+            <label class="kv-cat-radio">
+              <input type="radio" name="item_condition" value="salary_coef">
+              <span>Theo hệ số lương</span>
+              <span class="kv-info-tip" tabindex="0">
+                <span class="kv-tpl-info-dot" aria-label="Thông tin theo hệ số lương">i</span>
+                <span class="kv-info-bubble kv-info-bubble-top">
+                  <strong>Số tiền giảm trừ được tính dựa trên hệ số lương chính, áp dụng cho nhân viên có loại lương Theo ngày công chuẩn và Theo ca làm việc.</strong><br><br>
+                  <strong>Công thức:</strong><br>
+                  Số phút đi muộn/ Tổng giờ chuẩn của ca hoặc ngày * Lương mỗi ca hoặc ngày<br><br>
+                  <strong>Giả định:</strong><br>
+                  - Nhân viên có loại lương Theo ngày công chuẩn, lương chính = 5 triệu. Số giờ của ngày công chuẩn = 8h.<br>
+                  - Nhân viên đi muộn 30 phút = 0,5h.<br><br>
+                  <strong>&rArr; Giảm trừ đi muộn = 0,5 / 8 x (5tr / 22 công)</strong>
+                </span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="kv-cat-min-wrap" id="cat-min-hours-wrap">
+          <div class="kv-cat-min-row">
+            <label class="kv-cat-check">
+              <input type="checkbox" id="cat-min-hours-en" name="item_min_hours_enabled" value="1">
+              <span>Tính phụ cấp khi làm tối thiểu</span>
+            </label>
+            <div class="kv-cat-unit-group">
+              <input id="cat-min-hours" type="number" min="0" max="24" step="0.5" name="item_min_hours" value="">
+              <span class="kv-cat-unit-suffix">giờ/ngày</span>
+            </div>
+          </div>
+          <p class="kv-cat-help">Nhân viên cần làm đủ số giờ tối thiểu trong ngày để hưởng phụ cấp.</p>
+        </div>
+        <div class="kv-cat-amt-benefit-row" id="cat-amount-wrap">
+          <div class="form-field">
+            <label for="cat-amount" id="cat-amount-label">Mức phụ cấp</label>
+            <input id="cat-amount" type="number" min="0" step="1000" name="item_amount" value="0">
+          </div>
+          <div class="form-field" id="cat-benefit-wrap" hidden>
+            <label>Hình thức thụ hưởng</label>
+            <div class="kv-cat-radio-row" style="height:36px;">
+              <label class="kv-cat-radio">
+                <input type="radio" name="item_benefit_type" value="vnd" checked>
+                <span>VND</span>
+              </label>
+              <label class="kv-cat-radio">
+                <input type="radio" name="item_benefit_type" value="percent">
+                <span>% Lương chính</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="kv-cat-shift-wrap" id="cat-shift-allow-wrap" hidden>
+          <input type="hidden" name="item_shift_allowances_json" id="cat-shift-allow-json" value="[]">
+          <div class="kv-cat-shift-label">Mức phụ cấp</div>
+          <table class="kv-tpl-inline-table">
+            <thead>
+              <tr>
+                <th style="width:52%;">Ca làm việc</th>
+                <th style="width:40%;">Mức phụ cấp</th>
+                <th style="width:40px;"></th>
+              </tr>
+            </thead>
+            <tbody id="cat-shift-allow-tbody"></tbody>
+          </table>
+          <button type="button" class="kv-tpl-add-link" id="cat-add-shift-allow-row">Thêm ca áp dụng</button>
+        </div>
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-emp-set-dlg>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal Thêm / Sửa ca làm việc (KiotViet Danh sách ca làm việc) -->
+<dialog id="shift-modal" class="customer-dialog kv-quick-att-mode-dialog" aria-labelledby="shift-modal-title">
+  <form method="post" action="{{ url_for('employee_settings') }}">
+    <input type="hidden" name="emp_action" value="save_shift">
+    <input type="hidden" name="shift_id" id="sh-id" value="">
+    <div class="customer-dialog-heading">
+      <h2 id="shift-modal-title">Thêm ca làm việc</h2>
+      <button type="button" data-close-emp-set-dlg aria-label="Đóng">&times;</button>
+    </div>
+    <div class="customer-dialog-body">
+      <div class="customer-form-grid">
+        <div class="form-field form-field-full">
+          <label for="sh-name">Tên ca làm việc</label>
+          <input id="sh-name" type="text" name="shift_name" placeholder="VD: Ca sáng" required maxlength="80">
+        </div>
+        <div class="form-field">
+          <label for="sh-start">Giờ làm việc (Từ)</label>
+          <input id="sh-start" type="time" name="shift_start" value="06:00" required>
+        </div>
+        <div class="form-field">
+          <label for="sh-end">Đến</label>
+          <input id="sh-end" type="time" name="shift_end" value="14:00" required>
+        </div>
+        <div class="form-field">
+          <label for="sh-ci-start">Giờ cho phép chấm công (Từ)</label>
+          <input id="sh-ci-start" type="time" name="checkin_start" value="05:00">
+        </div>
+        <div class="form-field">
+          <label for="sh-ci-end">Đến</label>
+          <input id="sh-ci-end" type="time" name="checkin_end" value="15:00">
+        </div>
+        <div class="form-field form-field-full">
+          <label>Phạm vi áp dụng (Cổng làm việc)</label>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; padding-top:4px;">
+            {% for wd in (gate_work_days if gate_work_days is defined else []) %}
+              <label style="display:inline-flex; align-items:center; gap:6px; font-size:13.5px; cursor:pointer;">
+                <input type="checkbox" name="shift_gates" value="{{ wd.name }}" data-sh-gate="{{ wd.name }}">
+                <span>{{ wd.name }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-emp-set-dlg>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal Sửa ngày làm việc (7 ngày T2..CN) -->
+<dialog id="workdays-modal" class="customer-dialog kv-workdays-dialog" aria-labelledby="workdays-modal-title">
+  <form method="post" action="{{ url_for('employee_settings') }}">
+    <input type="hidden" name="emp_action" value="save_work_days">
+    <input type="hidden" name="gate_name" id="wd-gate-input" value="">
+    <div class="customer-dialog-heading">
+      <h2 id="workdays-modal-title">Sửa ngày làm việc <span style="color:#d1d5db; font-weight:400; margin:0 4px;">|</span> <span id="wd-gate-label">Cổng chính</span></h2>
+      <button type="button" data-close-emp-set-dlg aria-label="Đóng">&times;</button>
+    </div>
+    <div class="customer-dialog-body">
+      <div class="kv-wd-inline-row">
+        <label class="kv-wd-inline-label">Ngày làm việc</label>
+        <div class="kv-day-segment-group" role="group" aria-label="Chọn các ngày làm việc trong tuần">
+          {% for d in ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'] %}
+            <label class="kv-day-segment">
+              <input type="checkbox" name="work_days" value="{{ d }}" data-wd-checkbox="{{ d }}">
+              <span>{{ d }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-emp-set-dlg>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal Thêm / Sửa kỳ lễ tết -->
+<dialog id="holiday-modal" class="customer-dialog kv-holiday-dialog" aria-labelledby="holiday-modal-title">
+  <form method="post" action="{{ url_for('employee_settings') }}">
+    <input type="hidden" name="emp_action" value="add_holiday">
+    <input type="hidden" name="holiday_id" id="hol-id" value="">
+    <input type="hidden" name="holiday_bonus_present" value="1">
+    <div class="customer-dialog-heading">
+      <h2 id="holiday-modal-title">Thêm kỳ lễ tết</h2>
+      <button type="button" data-close-emp-set-dlg aria-label="Đóng">&times;</button>
+    </div>
+    <div class="customer-dialog-body">
+      <div class="customer-form-grid">
+        <div class="form-field form-field-full">
+          <label for="hol-name">Tên kỳ lễ tết</label>
+          <input id="hol-name" type="text" name="holiday_name" placeholder="Nhập hoặc chọn nhanh bên dưới" required maxlength="120">
+          <div class="kv-holiday-chips">
+            {% for preset in ['Tết Dương lịch', 'Tết Nguyên Đán', 'Giỗ tổ Hùng Vương', 'Ngày Giải phóng miền Nam', 'Ngày Quốc tế Lao động', 'Ngày Quốc khánh'] %}
+              <button type="button" class="kv-holiday-chip" data-holiday-preset="{{ preset }}">{{ preset }}</button>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="form-field">
+          <label for="hol-start">Từ ngày</label>
+          <input id="hol-start" type="date" name="start_date" value="{{ today }}" required>
+        </div>
+        <div class="form-field">
+          <label for="hol-end">Đến hết ngày <span id="hol-days-preview" style="color:#0070f4; font-weight:600;">(1 ngày)</span></label>
+          <input id="hol-end" type="date" name="end_date" value="{{ today }}" required>
+        </div>
+        <div class="form-field form-field-full">
+          <div class="kv-hol-bonus-row">
+            <label class="kv-cat-check">
+              <input type="checkbox" id="hol-bonus-en" name="holiday_bonus_enabled" value="1" checked>
+              <span>Thưởng lễ, tết</span>
+              <span class="kv-info-tip" tabindex="0">
+                <span class="kv-tpl-info-dot" aria-label="Thông tin thưởng lễ tết">i</span>
+                <span class="kv-info-bubble kv-info-bubble-top">
+                  Áp dụng khoản thưởng ngày lễ, tết cho nhân viên làm việc trong kỳ lễ này.
+                </span>
+              </span>
+            </label>
+          </div>
+          <input id="hol-bonus" type="number" min="0" step="10000" name="holiday_bonus" value="0">
+        </div>
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-emp-set-dlg>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  var tabs = document.querySelectorAll('[data-emp-set-tab]');
+  var panels = document.querySelectorAll('[data-emp-set-panel]');
+  var activeTabInput = document.getElementById('emp-active-tab-input');
+
+  function activate(key) {
+    tabs.forEach(function (t) { t.classList.toggle('is-active', t.dataset.empSetTab === key); });
+    panels.forEach(function (p) { p.hidden = p.dataset.empSetPanel !== key; });
+    if (activeTabInput && (key === 'attendance' || key === 'payroll')) {
+      activeTabInput.value = key;
+    }
+  }
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () { activate(t.dataset.empSetTab); });
+  });
+  document.querySelectorAll('[data-jump-emp-tab]').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      activate(btn.dataset.jumpEmpTab);
+    });
+  });
+
+  // Sub-content anchor highlight
+  document.querySelectorAll('.kv-sub-content-tabs a').forEach(function (link) {
+    link.addEventListener('click', function () {
+      var group = link.closest('.kv-sub-content-tabs');
+      if (!group) return;
+      group.querySelectorAll('a').forEach(function (a) { a.classList.remove('is-active'); });
+      link.classList.add('is-active');
+    });
+  });
+
+  // Gate working days inline search
+  var wdSearch = document.getElementById('kv-wd-gate-search');
+  if (wdSearch) {
+    wdSearch.addEventListener('input', function () {
+      var q = (wdSearch.value || '').trim().toLowerCase();
+      document.querySelectorAll('#kv-wd-tbody tr[data-wd-name]').forEach(function (tr) {
+        tr.hidden = q.length > 0 && tr.dataset.wdName.indexOf(q) === -1;
+      });
+    });
+  }
+
+  // Modal helpers
+  function openDlg(dlg) {
+    if (!dlg) return;
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+  }
+  function closeDlg(dlg) {
+    if (!dlg) return;
+    if (typeof dlg.close === 'function') dlg.close();
+    else dlg.removeAttribute('open');
+  }
+  document.querySelectorAll('[data-close-emp-set-dlg]').forEach(function (btn) {
+    btn.addEventListener('click', function () { closeDlg(btn.closest('dialog')); });
+  });
+
+  // Work days edit modal
+  var wdDlg = document.getElementById('workdays-modal');
+  document.querySelectorAll('[data-edit-workdays]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!wdDlg) return;
+      var gateName = btn.dataset.gateName || 'Cổng chính';
+      var selected = (btn.dataset.days || '').split(',').map(function (s) { return s.trim(); });
+      document.getElementById('wd-gate-input').value = gateName;
+      document.getElementById('wd-gate-label').textContent = gateName;
+      wdDlg.querySelectorAll('[data-wd-checkbox]').forEach(function (cb) {
+        cb.checked = selected.indexOf(cb.value) !== -1;
+      });
+      openDlg(wdDlg);
+    });
+  });
+
+  // Holiday modal + quick-pick chips + day count
+  var holDlg = document.getElementById('holiday-modal');
+  var openHol = document.getElementById('open-holiday-modal');
+  var holBonusEn = document.getElementById('hol-bonus-en');
+  var holBonusInp = document.getElementById('hol-bonus');
+  function syncHolBonus() {
+    if (holBonusInp && holBonusEn) holBonusInp.disabled = !holBonusEn.checked;
+  }
+  if (holBonusEn) holBonusEn.addEventListener('change', syncHolBonus);
+  if (openHol && holDlg) {
+    openHol.addEventListener('click', function () {
+      document.getElementById('holiday-modal-title').textContent = 'Thêm kỳ lễ tết';
+      document.getElementById('hol-id').value = '';
+      document.getElementById('hol-name').value = '';
+      if (holBonusEn) holBonusEn.checked = true;
+      if (holBonusInp) holBonusInp.value = '0';
+      syncHolBonus();
+      updateHolDays();
+      openDlg(holDlg);
+    });
+  }
+  document.querySelectorAll('[data-edit-holiday]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!holDlg) return;
+      document.getElementById('holiday-modal-title').textContent = 'Cập nhật kỳ lễ tết';
+      document.getElementById('hol-id').value = btn.dataset.id || '';
+      document.getElementById('hol-name').value = btn.dataset.name || '';
+      if (holStart) holStart.value = btn.dataset.start || '';
+      if (holEnd) holEnd.value = btn.dataset.end || '';
+      if (holBonusEn) holBonusEn.checked = (btn.dataset.bonusEnabled !== '0');
+      if (holBonusInp) holBonusInp.value = btn.dataset.bonus || '0';
+      syncHolBonus();
+      updateHolDays();
+      openDlg(holDlg);
+    });
+  });
+  document.querySelectorAll('[data-holiday-preset]').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var inp = document.getElementById('hol-name');
+      if (inp) inp.value = chip.dataset.holidayPreset;
+    });
+  });
+  var holStart = document.getElementById('hol-start');
+  var holEnd = document.getElementById('hol-end');
+  var holPreview = document.getElementById('hol-days-preview');
+  function updateHolDays() {
+    if (!holStart || !holEnd || !holPreview) return;
+    var s = new Date(holStart.value);
+    var e = new Date(holEnd.value);
+    if (!isNaN(s) && !isNaN(e)) {
+      var diff = Math.max(1, Math.round((e - s) / 86400000) + 1);
+      holPreview.textContent = '(' + diff + ' ngày)';
+    }
+  }
+  if (holStart) holStart.addEventListener('change', updateHolDays);
+  if (holEnd) holEnd.addEventListener('change', updateHolDays);
+
+  // Quick Add Multi-Employee Modal
+  function initQuickGateMs(ms) {
+    var hiddenInp = ms.querySelector('input[type="hidden"][name="emp_work_branch"]');
+    var box = ms.querySelector('.kv-multiselect-box');
+    var tagsWrap = ms.querySelector('[data-qg-tags]');
+    var searchInp = ms.querySelector('[data-qg-search]');
+    var dropdown = ms.querySelector('[data-qg-dropdown]');
+    if (!hiddenInp || !box || !tagsWrap || !searchInp || !dropdown) return;
+
+    function getList() {
+      return (hiddenInp.value || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    }
+    function setList(arr) {
+      var dedup = [];
+      arr.forEach(function (v) { if (v && dedup.indexOf(v) === -1) dedup.push(v); });
+      hiddenInp.value = dedup.join(', ');
+      render();
+    }
+    function render() {
+      var list = getList();
+      tagsWrap.innerHTML = '';
+      list.forEach(function (g) {
+        var chip = document.createElement('span');
+        chip.className = 'kv-tag-chip';
+        chip.textContent = g;
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'kv-tag-chip-remove';
+        rm.textContent = '×';
+        rm.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          setList(list.filter(function (x) { return x !== g; }));
+        });
+        chip.appendChild(rm);
+        tagsWrap.appendChild(chip);
+      });
+      dropdown.querySelectorAll('[data-qg-option]').forEach(function (opt) {
+        var val = opt.dataset.qgOption;
+        opt.classList.toggle('is-selected', list.indexOf(val) !== -1);
+      });
+    }
+    box.addEventListener('click', function () {
+      var willOpen = dropdown.hidden;
+      document.querySelectorAll('[data-quick-gate-ms]').forEach(function (other) {
+        if (other !== ms) {
+          other.classList.remove('is-open');
+          var d = other.querySelector('[data-qg-dropdown]');
+          if (d) d.hidden = true;
+        }
+      });
+      ms.classList.toggle('is-open', willOpen);
+      dropdown.hidden = !willOpen;
+      if (willOpen) searchInp.focus();
+    });
+    searchInp.addEventListener('input', function () {
+      var q = (searchInp.value || '').trim().toLowerCase();
+      dropdown.querySelectorAll('[data-qg-option]').forEach(function (opt) {
+        opt.hidden = q.length > 0 && opt.dataset.qgOption.toLowerCase().indexOf(q) === -1;
+      });
+      dropdown.hidden = false;
+      ms.classList.add('is-open');
+    });
+    dropdown.querySelectorAll('[data-qg-option]').forEach(function (opt) {
+      opt.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var val = opt.dataset.qgOption;
+        var list = getList();
+        var i = list.indexOf(val);
+        if (i >= 0) list.splice(i, 1);
+        else list.push(val);
+        setList(list);
+      });
+    });
+    render();
+  }
+
+  var qAddDlg = document.getElementById('quick-add-emp-modal');
+  var openQAdd = document.getElementById('open-quick-add-emp-modal');
+  var cardsWrap = document.getElementById('quick-emp-cards');
+  var addMoreBtn = document.getElementById('btn-add-more-quick-emp');
+  if (qAddDlg && cardsWrap) {
+    cardsWrap.querySelectorAll('[data-quick-gate-ms]').forEach(initQuickGateMs);
+    if (openQAdd) {
+      openQAdd.addEventListener('click', function () { openDlg(qAddDlg); });
+    }
+    function renumberCards() {
+      var cards = cardsWrap.querySelectorAll('[data-quick-emp-card]');
+      cards.forEach(function (card, idx) {
+        var titleEl = card.querySelector('[data-quick-emp-title]');
+        if (titleEl) titleEl.textContent = 'Nhân viên ' + (idx + 1);
+        var rmBtn = card.querySelector('[data-remove-quick-emp]');
+        if (rmBtn) rmBtn.hidden = cards.length <= 1;
+      });
+    }
+    if (addMoreBtn) {
+      addMoreBtn.addEventListener('click', function () {
+        var first = cardsWrap.querySelector('[data-quick-emp-card]');
+        if (!first) return;
+        var clone = first.cloneNode(true);
+        clone.querySelectorAll('input[type="text"], input[type="hidden"]').forEach(function (inp) { inp.value = ''; });
+        clone.querySelectorAll('[data-qg-tags]').forEach(function (t) { t.innerHTML = ''; });
+        clone.querySelectorAll('[data-qg-dropdown]').forEach(function (d) { d.hidden = true; });
+        clone.querySelectorAll('[data-quick-gate-ms]').forEach(function (ms) {
+          ms.classList.remove('is-open');
+          initQuickGateMs(ms);
+        });
+        var rmBtn = clone.querySelector('[data-remove-quick-emp]');
+        if (rmBtn) {
+          rmBtn.addEventListener('click', function () {
+            clone.remove();
+            renumberCards();
+          });
+        }
+        cardsWrap.appendChild(clone);
+        renumberCards();
+      });
+    }
+    document.addEventListener('click', function (ev) {
+      if (!ev.target.closest('[data-quick-gate-ms]')) {
+        document.querySelectorAll('[data-quick-gate-ms].is-open').forEach(function (ms) {
+          ms.classList.remove('is-open');
+          var d = ms.querySelector('[data-qg-dropdown]');
+          if (d) d.hidden = true;
+        });
+      }
+    });
+  }
+
+  // Quick Attendance Mode Modal
+  var attModeDlg = document.getElementById('quick-att-mode-modal');
+  var openAttModeBtn = document.getElementById('open-quick-att-mode-modal');
+  if (openAttModeBtn && attModeDlg) {
+    openAttModeBtn.addEventListener('click', function () { openDlg(attModeDlg); });
+  }
+
+  // Dependent disabled/dimmed states (e.g. Chấm công không cần xếp lịch -> sub-checkbox)
+  var unschedSwitch = document.getElementById('emp_unscheduled_checkin');
+  var unschedSubWrap = document.getElementById('unscheduled-sub-wrap');
+  var unschedSubCb = document.getElementById('emp_unscheduled_auto_approve');
+  if (unschedSwitch && unschedSubWrap && unschedSubCb) {
+    function syncUnsched() {
+      var on = unschedSwitch.checked;
+      unschedSubWrap.classList.toggle('is-disabled', !on);
+      unschedSubCb.disabled = !on;
+    }
+    unschedSwitch.addEventListener('change', syncUnsched);
+    syncUnsched();
+  }
+
+  // Dependent readOnly + dim for minute inputs on checkbox rows
+  [
+    ['emp_late_enabled', 'emp_late_grace_minutes'],
+    ['emp_early_leave_enabled', 'emp_early_leave_grace_minutes'],
+    ['emp_ot_before_enabled', 'emp_overtime_before_minutes'],
+    ['emp_ot_after_enabled', 'emp_overtime_after_minutes']
+  ].forEach(function (pair) {
+    var cb = document.querySelector('input[name="' + pair[0] + '"]');
+    var inp = document.querySelector('input[name="' + pair[1] + '"]');
+    if (!cb || !inp) return;
+    function syncNum() {
+      inp.readOnly = !cb.checked;
+      inp.style.opacity = cb.checked ? '1' : '0.45';
+      inp.style.backgroundColor = cb.checked ? '#fff' : '#f0f1f3';
+    }
+    cb.addEventListener('change', syncNum);
+    syncNum();
+  });
+
+  // Payroll sub-views (Mẫu lương / Phụ cấp / Giảm trừ)
+  var payViews = {
+    main: document.getElementById('pay-main-view'),
+    templates: document.getElementById('pay-templates-view'),
+    allowances: document.getElementById('pay-allowances-view'),
+    deductions: document.getElementById('pay-deductions-view')
+  };
+  function showPayView(key) {
+    Object.keys(payViews).forEach(function (k) {
+      if (payViews[k]) payViews[k].hidden = (k !== key);
+    });
+  }
+  document.querySelectorAll('[data-open-pay-view]').forEach(function (btn) {
+    btn.addEventListener('click', function () { showPayView(btn.dataset.openPayView); });
+  });
+  document.querySelectorAll('[data-back-pay-main]').forEach(function (btn) {
+    btn.addEventListener('click', function () { showPayView('main'); });
+  });
+
+  // Template modal (KiotViet Cập nhật mẫu áp dụng)
+  var tplDlg = document.getElementById('tpl-modal');
+  var tplForm = document.getElementById('tpl-modal-form');
+  var openAddTpl = document.getElementById('open-add-tpl-modal');
+  var tplBen = document.getElementById('tpl-ben');
+  var tplBonusExtra = document.getElementById('tpl-bonus-extra');
+  var tplCen = document.getElementById('tpl-cen');
+  var tplCommExtra = document.getElementById('tpl-comm-extra');
+  var tplAen = document.getElementById('tpl-aen');
+  var tplAllowExtra = document.getElementById('tpl-allow-extra');
+  var tplDen = document.getElementById('tpl-den');
+  var tplDedExtra = document.getElementById('tpl-ded-extra');
+  var tplAllowTbody = document.getElementById('tpl-allow-tbody');
+  var tplDedTbody = document.getElementById('tpl-ded-tbody');
+  var tplDelBtn = document.getElementById('tpl-modal-delete-btn');
+  var allowCatalogOpts = {{ (allowances_catalog or [])|tojson }};
+  var dedCatalogOpts = {{ (deductions_catalog or [])|tojson }};
+  var allowTypeChoices = [
+    'Phụ cấp cố định theo ngày',
+    'Phụ cấp hàng tháng cố định',
+    'Phụ cấp theo ca làm việc'
+  ];
+  var dedTypeChoices = [
+    'Đi muộn',
+    'Về sớm',
+    'Cố định'
+  ];
+  var dedRuleChoices = [
+    'Theo số lần',
+    'Theo hệ số lương'
+  ];
+  var trashIconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+
+  function buildSelectHtml(options, selectedVal) {
+    var list = options.slice();
+    if (selectedVal && list.indexOf(selectedVal) === -1) list.unshift(selectedVal);
+    return list.map(function (opt) {
+      var esc = String(opt).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      return '<option value="' + esc + '"' + (opt === selectedVal ? ' selected' : '') + '>' + esc + '</option>';
+    }).join('');
+  }
+
+  function addTplAllowRow(row) {
+    if (!tplAllowTbody) return;
+    var firstAllow = allowCatalogOpts[0];
+    var r = row || {
+      name: (firstAllow && firstAllow.name) || '',
+      type: (firstAllow && firstAllow.type) || allowTypeChoices[0],
+      amount: (firstAllow && firstAllow.amount) || 0
+    };
+    var names = allowCatalogOpts.map(function (x) { return x.name; });
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><select class="tpl-allow-name">' + buildSelectHtml(names, r.name || '') + '</select></td>' +
+      '<td><div class="kv-tpl-type-wrap"><select class="tpl-allow-type">' + buildSelectHtml(allowTypeChoices, r.type || allowTypeChoices[0]) + '</select><span class="kv-tpl-info-dot" title="Loại phụ cấp áp dụng trong bảng lương">i</span></div></td>' +
+      '<td><input type="number" class="tpl-allow-amt" min="0" step="1000" value="' + (Number(r.amount) || 0) + '"></td>' +
+      '<td style="text-align:center;"><button type="button" class="kv-tpl-row-del" title="Xóa dòng" aria-label="Xóa dòng">' + trashIconSvg + '</button></td>';
+    tr.querySelector('.tpl-allow-name').addEventListener('change', function (e) {
+      var found = allowCatalogOpts.find(function (x) { return x.name === e.target.value; });
+      if (!found) return;
+      tr.querySelector('.tpl-allow-type').value = found.type || allowTypeChoices[0];
+      tr.querySelector('.tpl-allow-amt').value = String(found.amount || 0);
+    });
+    tr.querySelector('.kv-tpl-row-del').addEventListener('click', function () { tr.remove(); });
+    tplAllowTbody.appendChild(tr);
+  }
+
+  function addTplDedRow(row) {
+    if (!tplDedTbody) return;
+    var firstDed = dedCatalogOpts[0];
+    var defaultType = (firstDed && firstDed.type) || 'Đi muộn';
+    if (dedTypeChoices.indexOf(defaultType) === -1) defaultType = 'Đi muộn';
+    var defaultRule = (firstDed && firstDed.condition === 'salary_coef') ? 'Theo hệ số lương' : 'Theo số lần';
+    var r = row || {
+      name: (firstDed && firstDed.name) || '',
+      type: defaultType,
+      rule: defaultRule,
+      amount: (firstDed && firstDed.amount) || 0
+    };
+    var rowType = (r.type && dedTypeChoices.indexOf(r.type) !== -1) ? r.type : 'Đi muộn';
+    var rowRule = (r.rule === 'Theo hệ số lương') ? 'Theo hệ số lương' : 'Theo số lần';
+    var names = dedCatalogOpts.map(function (x) { return x.name; });
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><select class="tpl-ded-name">' + buildSelectHtml(names, r.name || '') + '</select></td>' +
+      '<td><select class="tpl-ded-type">' + buildSelectHtml(dedTypeChoices, rowType) + '</select></td>' +
+      '<td><select class="tpl-ded-rule">' + buildSelectHtml(dedRuleChoices, rowRule) + '</select></td>' +
+      '<td><input type="number" class="tpl-ded-amt" min="0" step="1000" value="' + (Number(r.amount) || 0) + '"></td>' +
+      '<td style="text-align:center;"><button type="button" class="kv-tpl-row-del" title="Xóa dòng" aria-label="Xóa dòng">' + trashIconSvg + '</button></td>';
+
+    var nameSel = tr.querySelector('.tpl-ded-name');
+    var typeSel = tr.querySelector('.tpl-ded-type');
+    var ruleSel = tr.querySelector('.tpl-ded-rule');
+    var amtInp = tr.querySelector('.tpl-ded-amt');
+
+    function syncTplDedRowState() {
+      var isFixed = (typeSel.value === 'Cố định');
+      ruleSel.hidden = isFixed;
+      ruleSel.disabled = isFixed;
+      var isCoef = (!isFixed && ruleSel.value === 'Theo hệ số lương');
+      amtInp.hidden = isCoef;
+      amtInp.disabled = isCoef;
+    }
+
+    nameSel.addEventListener('change', function (e) {
+      var found = dedCatalogOpts.find(function (x) { return x.name === e.target.value; });
+      if (!found) return;
+      var fType = (found.type && dedTypeChoices.indexOf(found.type) !== -1) ? found.type : 'Đi muộn';
+      typeSel.value = fType;
+      ruleSel.value = (found.condition === 'salary_coef') ? 'Theo hệ số lương' : 'Theo số lần';
+      amtInp.value = String(found.amount || 0);
+      syncTplDedRowState();
+    });
+    typeSel.addEventListener('change', syncTplDedRowState);
+    ruleSel.addEventListener('change', syncTplDedRowState);
+    tr.querySelector('.kv-tpl-row-del').addEventListener('click', function () { tr.remove(); });
+    syncTplDedRowState();
+    tplDedTbody.appendChild(tr);
+  }
+
+  function syncTplExtras() {
+    if (tplBonusExtra && tplBen) tplBonusExtra.hidden = !tplBen.checked;
+    if (tplCommExtra && tplCen) tplCommExtra.hidden = !tplCen.checked;
+    if (tplAllowExtra && tplAen) {
+      tplAllowExtra.hidden = !tplAen.checked;
+      if (tplAen.checked && tplAllowTbody && !tplAllowTbody.children.length) addTplAllowRow();
+    }
+    if (tplDedExtra && tplDen) {
+      tplDedExtra.hidden = !tplDen.checked;
+      if (tplDen.checked && tplDedTbody && !tplDedTbody.children.length) addTplDedRow();
+    }
+  }
+  [tplBen, tplCen, tplAen, tplDen].forEach(function (el) {
+    if (el) el.addEventListener('change', syncTplExtras);
+  });
+  var addAllowRowBtn = document.getElementById('tpl-add-allow-row');
+  if (addAllowRowBtn) addAllowRowBtn.addEventListener('click', function () { addTplAllowRow(); });
+  var addDedRowBtn = document.getElementById('tpl-add-ded-row');
+  if (addDedRowBtn) addDedRowBtn.addEventListener('click', function () { addTplDedRow(); });
+
+  if (tplForm) {
+    tplForm.addEventListener('submit', function () {
+      var allowRows = [];
+      var allowTotal = 0;
+      if (tplAllowTbody && tplAen && tplAen.checked) {
+        Array.prototype.forEach.call(tplAllowTbody.querySelectorAll('tr'), function (tr) {
+          var amt = Math.max(0, Number(tr.querySelector('.tpl-allow-amt').value) || 0);
+          allowTotal += amt;
+          allowRows.push({
+            name: tr.querySelector('.tpl-allow-name').value,
+            type: tr.querySelector('.tpl-allow-type').value,
+            amount: amt
+          });
+        });
+      }
+      var dedRows = [];
+      var dedTotal = 0;
+      if (tplDedTbody && tplDen && tplDen.checked) {
+        Array.prototype.forEach.call(tplDedTbody.querySelectorAll('tr'), function (tr) {
+          var dtype = tr.querySelector('.tpl-ded-type').value;
+          var druleEl = tr.querySelector('.tpl-ded-rule');
+          var drule = (dtype === 'Cố định') ? 'Cố định' : (druleEl ? druleEl.value : 'Theo số lần');
+          var amtEl = tr.querySelector('.tpl-ded-amt');
+          var amt = (drule === 'Theo hệ số lương') ? 0 : Math.max(0, Number(amtEl.value) || 0);
+          dedTotal += amt;
+          dedRows.push({
+            name: tr.querySelector('.tpl-ded-name').value,
+            type: dtype,
+            rule: drule,
+            amount: amt
+          });
+        });
+      }
+      document.getElementById('tpl-aamt').value = String(allowTotal);
+      document.getElementById('tpl-damt').value = String(dedTotal);
+      document.getElementById('tpl-allowances-json').value = JSON.stringify(allowRows);
+      document.getElementById('tpl-deductions-json').value = JSON.stringify(dedRows);
+    });
+  }
+
+  if (tplDelBtn) {
+    tplDelBtn.addEventListener('click', function () {
+      var tid = document.getElementById('tpl-id').value;
+      var tname = document.getElementById('tpl-name').value || 'mẫu lương này';
+      if (!tid) return;
+      if (!window.confirm('Xóa mẫu lương "' + tname + '"?')) return;
+      var delForm = document.getElementById('catalog-delete-form');
+      if (delForm) {
+        document.getElementById('cat-del-action').value = 'delete_salary_template';
+        document.getElementById('cat-del-tpl-id').value = tid;
+        delForm.submit();
+      }
+    });
+  }
+
+  if (tplDlg) {
+    if (openAddTpl) {
+      openAddTpl.addEventListener('click', function () {
+        document.getElementById('tpl-modal-title').textContent = 'Thêm mới mẫu áp dụng';
+        document.getElementById('tpl-id').value = '';
+        document.getElementById('tpl-name').value = '';
+        document.getElementById('tpl-stype').value = 'shift';
+        document.getElementById('tpl-samount').value = '300000';
+        document.getElementById('tpl-note').value = '';
+        if (tplBen) tplBen.checked = false;
+        document.getElementById('tpl-btype').value = 'Theo doanh thu';
+        document.getElementById('tpl-bamt').value = '0';
+        if (tplCen) tplCen.checked = false;
+        document.getElementById('tpl-ctype').value = 'Theo dịch vụ';
+        document.getElementById('tpl-crate').value = '0';
+        if (tplAen) tplAen.checked = false;
+        if (tplAllowTbody) tplAllowTbody.innerHTML = '';
+        if (tplDen) tplDen.checked = false;
+        if (tplDedTbody) tplDedTbody.innerHTML = '';
+        if (tplDelBtn) tplDelBtn.hidden = true;
+        syncTplExtras();
+        openDlg(tplDlg);
+      });
+    }
+    document.querySelectorAll('[data-edit-tpl]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.getElementById('tpl-modal-title').textContent = 'Cập nhật mẫu áp dụng';
+        document.getElementById('tpl-id').value = btn.dataset.id || '';
+        document.getElementById('tpl-name').value = btn.dataset.name || '';
+        document.getElementById('tpl-stype').value = btn.dataset.salaryType || 'shift';
+        document.getElementById('tpl-samount').value = btn.dataset.salaryAmount || '300000';
+        document.getElementById('tpl-note').value = btn.dataset.note || '';
+        if (tplBen) tplBen.checked = btn.dataset.bonusEnabled === '1';
+        document.getElementById('tpl-btype').value = btn.dataset.bonusType || 'Theo doanh thu';
+        document.getElementById('tpl-bamt').value = btn.dataset.bonusAmount || '0';
+        if (tplCen) tplCen.checked = btn.dataset.commissionEnabled === '1';
+        document.getElementById('tpl-ctype').value = btn.dataset.commissionType || 'Theo dịch vụ';
+        document.getElementById('tpl-crate').value = btn.dataset.commissionRate || '0';
+
+        if (tplAllowTbody) tplAllowTbody.innerHTML = '';
+        var aRows = [];
+        try { aRows = JSON.parse(btn.dataset.allowances || '[]'); } catch (e) { aRows = []; }
+        if (!aRows.length && btn.dataset.allowanceEnabled === '1' && Number(btn.dataset.allowanceAmount || 0) > 0) {
+          aRows = [{ name: 'Phụ cấp ăn ca', type: 'Phụ cấp cố định hàng tháng', amount: Number(btn.dataset.allowanceAmount) }];
+        }
+        aRows.forEach(addTplAllowRow);
+        if (tplAen) tplAen.checked = btn.dataset.allowanceEnabled === '1';
+
+        if (tplDedTbody) tplDedTbody.innerHTML = '';
+        var dRows = [];
+        try { dRows = JSON.parse(btn.dataset.deductions || '[]'); } catch (e) { dRows = []; }
+        if (!dRows.length && btn.dataset.deductionEnabled === '1' && Number(btn.dataset.deductionAmount || 0) > 0) {
+          dRows = [{ name: 'đi muộn', type: 'Đi muộn', rule: 'Theo block 30 phút', amount: Number(btn.dataset.deductionAmount) }];
+        }
+        dRows.forEach(addTplDedRow);
+        if (tplDen) tplDen.checked = btn.dataset.deductionEnabled === '1';
+
+        if (tplDelBtn) tplDelBtn.hidden = !btn.dataset.id;
+        syncTplExtras();
+        openDlg(tplDlg);
+      });
+    });
+  }
+
+  // Allowance & Deduction modal
+  var catDlg = document.getElementById('catalog-item-modal');
+  var catForm = document.getElementById('catalog-item-form');
+  var catTypeWrap = document.getElementById('cat-type-select-wrap');
+  var catDedTypeWrap = document.getElementById('cat-ded-type-wrap');
+  var catDedCondWrap = document.getElementById('cat-ded-cond-wrap');
+  var catBlockMins = document.getElementById('cat-block-mins');
+  var catMinWrap = document.getElementById('cat-min-hours-wrap');
+  var catMinEn = document.getElementById('cat-min-hours-en');
+  var catMinInp = document.getElementById('cat-min-hours');
+  var catTypeInfo = document.getElementById('cat-type-info');
+  var catAmountWrap = document.getElementById('cat-amount-wrap');
+  var catBenefitWrap = document.getElementById('cat-benefit-wrap');
+  var catShiftWrap = document.getElementById('cat-shift-allow-wrap');
+  var catShiftTbody = document.getElementById('cat-shift-allow-tbody');
+  var catShiftJson = document.getElementById('cat-shift-allow-json');
+  var catAddShiftBtn = document.getElementById('cat-add-shift-allow-row');
+  var catSel = document.getElementById('cat-type');
+  var shiftNamesCatalog = [
+    {% for s in (shifts or []) %}
+      {{ s.name|tojson }}{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
+  var currentCatKind = 'allowance';
+  function addCatShiftRow(row) {
+    if (!catShiftTbody) return;
+    var r = row || { shift_name: '', amount: 0 };
+    var optsHtml = '<option value="">Chọn ca</option>' + shiftNamesCatalog.map(function (sn) {
+      var esc = String(sn).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      return '<option value="' + esc + '"' + (sn === r.shift_name ? ' selected' : '') + '>' + esc + '</option>';
+    }).join('');
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><select class="cat-shift-name">' + optsHtml + '</select></td>' +
+      '<td><input type="number" class="cat-shift-amt" min="0" step="1000" value="' + (Number(r.amount) || 0) + '"></td>' +
+      '<td style="text-align:center;"><button type="button" class="kv-tpl-row-del" title="Xóa ca" aria-label="Xóa ca">' + trashIconSvg + '</button></td>';
+    tr.querySelector('.kv-tpl-row-del').addEventListener('click', function () { tr.remove(); });
+    catShiftTbody.appendChild(tr);
+  }
+  if (catAddShiftBtn) catAddShiftBtn.addEventListener('click', function () { addCatShiftRow(); });
+  function syncCatMinHours() {
+    if (catMinInp && catMinEn) catMinInp.disabled = !catMinEn.checked;
+  }
+  function syncAllowTypeUI() {
+    if (currentCatKind !== 'allowance' || !catSel) return;
+    var t = catSel.value || '';
+    var isDaily = (t === 'Phụ cấp cố định theo ngày');
+    var isShift = (t === 'Phụ cấp theo ca làm việc');
+    var isMonthlyOrStd = !isDaily && !isShift;
+    if (catMinWrap) catMinWrap.hidden = !isDaily;
+    if (catAmountWrap) catAmountWrap.hidden = isShift;
+    if (catBenefitWrap) catBenefitWrap.hidden = !isMonthlyOrStd;
+    if (catShiftWrap) {
+      catShiftWrap.hidden = !isShift;
+      if (isShift && catShiftTbody && !catShiftTbody.children.length) addCatShiftRow();
+    }
+  }
+  if (catSel) catSel.addEventListener('change', syncAllowTypeUI);
+  function syncDedCondition() {
+    var checkedType = document.querySelector('input[name="item_ded_type"]:checked');
+    var isFixed = checkedType && checkedType.value === 'Cố định';
+    if (catDedCondWrap && currentCatKind === 'deduction') {
+      catDedCondWrap.hidden = isFixed;
+    }
+    var checkedCond = document.querySelector('input[name="item_condition"]:checked');
+    var hideAmt = (currentCatKind === 'deduction') && !isFixed && checkedCond && checkedCond.value === 'salary_coef';
+    if (catAmountWrap) catAmountWrap.hidden = hideAmt;
+  }
+  if (catMinEn) catMinEn.addEventListener('change', syncCatMinHours);
+  document.querySelectorAll('input[name="item_ded_type"], input[name="item_condition"]').forEach(function (r) {
+    r.addEventListener('change', syncDedCondition);
+  });
+  if (catForm) {
+    catForm.addEventListener('submit', function () {
+      if (currentCatKind === 'deduction' && catSel) {
+        var checkedType = document.querySelector('input[name="item_ded_type"]:checked');
+        var val = checkedType ? checkedType.value : 'Đi muộn';
+        catSel.innerHTML = '<option value="' + val + '" selected>' + val + '</option>';
+        catSel.value = val;
+      } else if (currentCatKind === 'allowance' && catShiftJson && catShiftTbody) {
+        var rows = [];
+        Array.prototype.forEach.call(catShiftTbody.querySelectorAll('tr'), function (tr) {
+          var sname = tr.querySelector('.cat-shift-name').value;
+          var samt = Math.max(0, Number(tr.querySelector('.cat-shift-amt').value) || 0);
+          if (sname) rows.push({ shift_name: sname, amount: samt });
+        });
+        catShiftJson.value = JSON.stringify(rows);
+      }
+    });
+  }
+  function openCatalogModal(kind, item) {
+    if (!catDlg) return;
+    currentCatKind = kind;
+    var isAllow = kind === 'allowance';
+    document.getElementById('cat-action').value = isAllow ? 'save_allowance' : 'save_deduction';
+    document.getElementById('cat-modal-title').textContent = (item ? 'Cập nhật ' : 'Thêm mới ') + (isAllow ? 'loại phụ cấp' : 'loại giảm trừ');
+    document.getElementById('cat-name-label').textContent = isAllow ? 'Tên loại phụ cấp' : 'Tên loại giảm trừ';
+    document.getElementById('cat-amount-label').textContent = isAllow ? 'Mức phụ cấp' : 'Khoản giảm trừ';
+    if (catTypeWrap) catTypeWrap.hidden = !isAllow;
+    if (catTypeInfo) catTypeInfo.hidden = !isAllow;
+    if (catMinWrap) catMinWrap.hidden = !isAllow;
+    if (catDedTypeWrap) catDedTypeWrap.hidden = isAllow;
+    if (catDedCondWrap) catDedCondWrap.hidden = isAllow;
+
+    if (isAllow) {
+      if (catAmountWrap) catAmountWrap.hidden = false;
+      var opts = ['Phụ cấp cố định theo ngày', 'Phụ cấp hàng tháng cố định', 'Phụ cấp theo ca làm việc'];
+      catSel.innerHTML = '';
+      opts.forEach(function (o) {
+        var opt = document.createElement('option');
+        opt.value = o;
+        opt.textContent = o;
+        catSel.appendChild(opt);
+      });
+      if (item && item.type) catSel.value = item.type;
+      var bType = (item && item.benefitType) ? item.benefitType : 'vnd';
+      document.querySelectorAll('input[name="item_benefit_type"]').forEach(function (r) {
+        r.checked = (r.value === bType);
+      });
+      if (catShiftTbody) catShiftTbody.innerHTML = '';
+      if (item && item.shiftAllowances && item.shiftAllowances.length) {
+        item.shiftAllowances.forEach(addCatShiftRow);
+      }
+      if (catMinEn) catMinEn.checked = Boolean(item && item.minHoursEnabled);
+      if (catMinInp) catMinInp.value = (item && item.minHours) ? item.minHours : '';
+      syncCatMinHours();
+      syncAllowTypeUI();
+    } else {
+      if (catBenefitWrap) catBenefitWrap.hidden = true;
+      if (catShiftWrap) catShiftWrap.hidden = true;
+      var rawType = (item && item.type) ? item.type : 'Đi muộn';
+      var mappedType = (rawType.indexOf('Về sớm') !== -1 && rawType.indexOf('Đi muộn') === -1)
+        ? 'Về sớm'
+        : (rawType === 'Cố định' || rawType === 'Vi phạm nội quy' || rawType === 'Nghỉ không phép' ? 'Cố định' : 'Đi muộn');
+      document.querySelectorAll('input[name="item_ded_type"]').forEach(function (r) {
+        r.checked = (r.value === mappedType);
+      });
+      var cond = (item && item.condition === 'salary_coef') ? 'salary_coef' : 'count';
+      document.querySelectorAll('input[name="item_condition"]').forEach(function (r) {
+        r.checked = (r.value === cond);
+      });
+      syncDedCondition();
+    }
+    document.getElementById('cat-id').value = item ? item.id : '';
+    document.getElementById('cat-name').value = item ? item.name : '';
+    document.getElementById('cat-amount').value = item ? item.amount : '0';
+    openDlg(catDlg);
+  }
+  var addAllowBtn = document.getElementById('open-add-allowance-modal');
+  if (addAllowBtn) addAllowBtn.addEventListener('click', function () { openCatalogModal('allowance', null); });
+  var addDedBtn = document.getElementById('open-add-deduction-modal');
+  if (addDedBtn) addDedBtn.addEventListener('click', function () { openCatalogModal('deduction', null); });
+  document.querySelectorAll('[data-edit-catalog]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var sAllow = [];
+      try { sAllow = JSON.parse(btn.dataset.shiftAllowances || '[]'); } catch (e) { sAllow = []; }
+      openCatalogModal(btn.dataset.editCatalog, {
+        id: btn.dataset.id,
+        name: btn.dataset.name,
+        type: btn.dataset.type,
+        amount: btn.dataset.amount,
+        benefitType: btn.dataset.benefitType || 'vnd',
+        minHoursEnabled: btn.dataset.minHoursEnabled === '1',
+        minHours: btn.dataset.minHours || '',
+        shiftAllowances: sAllow,
+        condition: btn.dataset.condition || 'count'
+      });
+    });
+  });
+
+  // Nhân viên áp dụng mẫu lương modal
+  var tplStaffData = [
+    {% for emp in (enriched_staff if enriched_staff is defined else []) %}
+      {id: "{{ emp.id }}", name: {{ (emp.fullname or emp.username)|tojson }}, code: {{ emp.code|tojson }}, tpl: {{ (emp.salary_template or '')|tojson }} }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
+  var tplStaffDlg = document.getElementById('tpl-staff-modal');
+  var tplStaffTbody = document.getElementById('tpl-staff-tbody');
+  var tplStaffInputs = document.getElementById('tpl-staff-hidden-inputs');
+  var tplStaffPicker = document.getElementById('tpl-staff-picker');
+  var tplStaffSel = document.getElementById('tpl-staff-select');
+  var currentTplAssignedIds = [];
+
+  function renderTplStaffTable() {
+    if (!tplStaffTbody || !tplStaffInputs) return;
+    tplStaffTbody.innerHTML = '';
+    tplStaffInputs.innerHTML = '';
+    var idx = 0;
+    currentTplAssignedIds.forEach(function (uid) {
+      var emp = tplStaffData.find(function (e) { return e.id === String(uid); });
+      if (!emp) return;
+      idx += 1;
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + idx + '</td><td>' + emp.name + '</td><td>' + emp.code + '</td><td style="text-align:center;"><button type="button" class="kv-icon-edit-btn" data-rm-tpl-uid="' + emp.id + '" title="Gỡ nhân viên">🗑</button></td>';
+      tplStaffTbody.appendChild(tr);
+
+      var hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.name = 'user_ids';
+      hid.value = emp.id;
+      tplStaffInputs.appendChild(hid);
+    });
+    if (idx === 0) {
+      tplStaffTbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:18px; color:#7b8594;">Chưa có nhân viên nào áp dụng mẫu này</td></tr>';
+    }
+    tplStaffTbody.querySelectorAll('[data-rm-tpl-uid]').forEach(function (rm) {
+      rm.addEventListener('click', function () {
+        currentTplAssignedIds = currentTplAssignedIds.filter(function (id) { return id !== rm.dataset.rmTplUid; });
+        renderTplStaffTable();
+      });
+    });
+  }
+
+  document.querySelectorAll('[data-open-tpl-staff]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!tplStaffDlg) return;
+      var tname = btn.dataset.tplName || '';
+      document.getElementById('tpl-staff-tpl-name').value = tname;
+      document.getElementById('tpl-staff-sub').textContent = tname;
+      currentTplAssignedIds = tplStaffData.filter(function (e) { return e.tpl === tname; }).map(function (e) { return e.id; });
+      if (tplStaffPicker) tplStaffPicker.hidden = true;
+      renderTplStaffTable();
+      openDlg(tplStaffDlg);
+    });
+  });
+
+  var showAddTplStaff = document.getElementById('btn-show-add-tpl-staff');
+  if (showAddTplStaff && tplStaffPicker) {
+    showAddTplStaff.addEventListener('click', function () {
+      tplStaffPicker.hidden = !tplStaffPicker.hidden;
+    });
+  }
+  var addTplStaffBtn = document.getElementById('btn-add-tpl-staff-row');
+  if (addTplStaffBtn && tplStaffSel) {
+    addTplStaffBtn.addEventListener('click', function () {
+      var val = tplStaffSel.value;
+      if (val && currentTplAssignedIds.indexOf(val) === -1) {
+        currentTplAssignedIds.push(val);
+        renderTplStaffTable();
+      }
+      tplStaffSel.value = '';
+    });
+  }
+
+  // Delete catalog item (avoid nested forms)
+  var catDelForm = document.getElementById('catalog-delete-form');
+  document.querySelectorAll('[data-delete-catalog]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!catDelForm) return;
+      if (!confirm('Xóa "' + (btn.dataset.name || '') + '"?')) return;
+      document.getElementById('cat-del-action').value = btn.dataset.deleteCatalog;
+      document.getElementById('cat-del-tpl-id').value = btn.dataset.id || '';
+      document.getElementById('cat-del-item-id').value = btn.dataset.id || '';
+      catDelForm.submit();
+    });
+  });
+
+  // Shifts sub-view & Add/Edit Shift Modal
+  var attMainView = document.getElementById('att-main-view');
+  var attShiftsView = document.getElementById('att-shifts-view');
+  var openShiftsBtn = document.getElementById('open-shifts-subview');
+  var backAttMainBtn = document.getElementById('back-to-att-main');
+  if (openShiftsBtn && attMainView && attShiftsView) {
+    openShiftsBtn.addEventListener('click', function () {
+      attMainView.hidden = true;
+      attShiftsView.hidden = false;
+    });
+  }
+  if (backAttMainBtn && attMainView && attShiftsView) {
+    backAttMainBtn.addEventListener('click', function () {
+      attShiftsView.hidden = true;
+      attMainView.hidden = false;
+    });
+  }
+
+  var shiftDlg = document.getElementById('shift-modal');
+  var openAddShift = document.getElementById('open-add-shift-modal');
+  if (shiftDlg) {
+    if (openAddShift) {
+      openAddShift.addEventListener('click', function () {
+        document.getElementById('shift-modal-title').textContent = 'Thêm ca làm việc';
+        document.getElementById('sh-id').value = '';
+        document.getElementById('sh-name').value = '';
+        document.getElementById('sh-start').value = '06:00';
+        document.getElementById('sh-end').value = '14:00';
+        document.getElementById('sh-ci-start').value = '05:00';
+        document.getElementById('sh-ci-end').value = '15:00';
+        shiftDlg.querySelectorAll('[data-sh-gate]').forEach(function (cb, idx) { cb.checked = idx === 0; });
+        openDlg(shiftDlg);
+      });
+    }
+    document.querySelectorAll('[data-edit-shift]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.getElementById('shift-modal-title').textContent = 'Cập nhật ca làm việc';
+        document.getElementById('sh-id').value = btn.dataset.id || '';
+        document.getElementById('sh-name').value = btn.dataset.name || '';
+        document.getElementById('sh-start').value = btn.dataset.start || '06:00';
+        document.getElementById('sh-end').value = btn.dataset.end || '14:00';
+        document.getElementById('sh-ci-start').value = btn.dataset.ciStart || '05:00';
+        document.getElementById('sh-ci-end').value = btn.dataset.ciEnd || '15:00';
+        var gates = (btn.dataset.gates || '').split(',').map(function (s) { return s.trim(); });
+        shiftDlg.querySelectorAll('[data-sh-gate]').forEach(function (cb) {
+          cb.checked = gates.indexOf(cb.value) !== -1;
+        });
+        openDlg(shiftDlg);
+      });
+    });
+  }
+
+  // Quick Check-in Method Modal
+  var ciMethodDlg = document.getElementById('quick-checkin-method-modal');
+  var openCiMethodBtn = document.getElementById('open-quick-checkin-method-modal');
+  if (openCiMethodBtn && ciMethodDlg) {
+    openCiMethodBtn.addEventListener('click', function () { openDlg(ciMethodDlg); });
+  }
+
+  // Quick Salary Modal
+  var qsDlg = document.getElementById('quick-salary-modal');
+  var openQsBtn = document.getElementById('open-quick-salary-modal');
+  if (qsDlg) {
+    if (openQsBtn) {
+      openQsBtn.addEventListener('click', function () { openDlg(qsDlg); });
+    }
+    if (qsDlg.hasAttribute('data-open-on-load')) {
+      openDlg(qsDlg);
+    }
+    var qsSearch = document.getElementById('qs-emp-search');
+    var qsGate = document.getElementById('qs-gate-filter');
+    var qsType = document.getElementById('qs-type-filter');
+    function filterQsRows() {
+      var q = (qsSearch ? qsSearch.value : '').trim().toLowerCase();
+      var g = (qsGate ? qsGate.value : '').trim().toLowerCase();
+      var t = (qsType ? qsType.value : '').trim();
+      document.querySelectorAll('#qs-emp-tbody tr.kv-qs-row').forEach(function (tr) {
+        var matchQ = !q || tr.dataset.qsName.indexOf(q) !== -1;
+        var matchG = !g || tr.dataset.qsGates.indexOf(g) !== -1;
+        var matchT = !t || tr.dataset.qsType === t;
+        tr.hidden = !(matchQ && matchG && matchT);
+        if (tr.hidden) {
+          var next = tr.nextElementSibling;
+          if (next && next.classList.contains('kv-qs-edit-row')) next.hidden = true;
+        }
+      });
+    }
+    if (qsSearch) qsSearch.addEventListener('input', filterQsRows);
+    if (qsGate) qsGate.addEventListener('change', filterQsRows);
+    if (qsType) qsType.addEventListener('change', filterQsRows);
+
+    qsDlg.querySelectorAll('[data-open-qs-edit]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.dataset.openQsEdit;
+        qsDlg.querySelectorAll('.kv-qs-edit-row').forEach(function (er) {
+          er.hidden = er.id !== ('qs-edit-row-' + id);
+        });
+      });
+    });
+    qsDlg.querySelectorAll('[data-close-qs-edit]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var er = document.getElementById('qs-edit-row-' + btn.dataset.closeQsEdit);
+        if (er) er.hidden = true;
+      });
+    });
+  }
+})();
+</script>

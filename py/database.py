@@ -25,7 +25,9 @@ PAYMENT_METHODS = {'cash': 'Tiền mặt', 'card': 'Thẻ', 'transfer': 'Chuyể
 
 
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
+    # timeout: khi làn vào và làn ra cùng ghi (BEGIN IMMEDIATE), yêu cầu sau chờ tới lượt
+    # thay vì lỗi "database is locked".
+    conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row  # cho phép truy cập cột theo tên
     return conn
 
@@ -61,12 +63,15 @@ def init_db():
                     "ALTER TABLE vehicle_types ADD COLUMN monthly_price INTEGER",
                     "ALTER TABLE vehicle_types ADD COLUMN grace_minutes INTEGER NOT NULL DEFAULT 0",
                     "ALTER TABLE vehicle_types ADD COLUMN daily_cap INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE vehicle_types ADD COLUMN wheel_group TEXT NOT NULL DEFAULT '2w'",
                     "ALTER TABLE parking_records ADD COLUMN slot_name TEXT",
                     "ALTER TABLE parking_slots ADD COLUMN maintenance_reason TEXT",
                     "ALTER TABLE parking_records ADD COLUMN vehicle_type_id INTEGER",
                     "ALTER TABLE parking_records ADD COLUMN vehicle_type_name TEXT",
                     "ALTER TABLE parking_records ADD COLUMN note TEXT",
                     "ALTER TABLE parking_records ADD COLUMN payment_method TEXT CHECK(payment_method IN ('cash','card','transfer'))",
+                    "ALTER TABLE parking_records ADD COLUMN entry_gate TEXT",
+                    "ALTER TABLE parking_records ADD COLUMN exit_gate TEXT",
                     "ALTER TABLE user_vehicles ADD COLUMN start_on TEXT",
                     "ALTER TABLE user_vehicles ADD COLUMN months INTEGER",
                     "ALTER TABLE user_vehicles ADD COLUMN paid_amount INTEGER",
@@ -99,7 +104,11 @@ def init_db():
                     "ALTER TABLE users ADD COLUMN allowance_amount INTEGER NOT NULL DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN deduction_enabled INTEGER NOT NULL DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN deduction_amount INTEGER NOT NULL DEFAULT 0",
-                    "ALTER TABLE users ADD COLUMN deduction_note TEXT"):
+                    "ALTER TABLE users ADD COLUMN deduction_note TEXT",
+                    "ALTER TABLE parking_zones ADD COLUMN operating_hours TEXT DEFAULT '24/7'",
+                    "ALTER TABLE parking_zones ADD COLUMN area_names TEXT",
+                    "ALTER TABLE parking_zones ADD COLUMN vehicle_type_ids TEXT",
+                    "ALTER TABLE parking_areas ADD COLUMN note TEXT"):
         try:
             conn.execute(col_sql)
         except sqlite3.OperationalError:
@@ -108,6 +117,11 @@ def init_db():
     conn.commit()
 
     conn.execute('CREATE INDEX IF NOT EXISTS idx_record_slot_status ON parking_records(slot_name,status)')
+    conn.execute(
+        "UPDATE vehicle_types SET wheel_group = '4w' "
+        "WHERE wheel_group = '2w' AND (LOWER(name) LIKE '%ô tô%' OR LOWER(name) LIKE '%o to%' "
+        "OR LOWER(name) LIKE '%xe tải%' OR LOWER(name) LIKE '%4 bánh%')"
+    )
 
     # Dữ liệu cũ: chưa có nhật ký thu tiền vé tháng -> lập từ các vé tháng đã đăng ký
     cur0 = conn.cursor()
@@ -155,6 +169,36 @@ def init_db():
         conn.execute("INSERT INTO settings (key, value) VALUES ('entry_mode', 'manual')")
         conn.commit()
 
+    # Bảng Lịch làm việc & Bảng tính lương nhân viên
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS employee_schedules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            work_date TEXT NOT NULL,
+            shift_name TEXT NOT NULL DEFAULT 'Ca sáng',
+            gate_name TEXT NOT NULL DEFAULT 'Cổng chính',
+            note TEXT DEFAULT '',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS employee_paysheets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            pay_cycle TEXT NOT NULL DEFAULT 'Hàng tháng',
+            work_period TEXT NOT NULL,
+            pay_branch TEXT NOT NULL DEFAULT 'Cổng chính',
+            total_salary INTEGER NOT NULL DEFAULT 0,
+            paid_amount INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'draft',
+            note TEXT DEFAULT '',
+            created_by TEXT DEFAULT '',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+
     conn.close()
     seed_pricing()
     # Seed and train the small offline assistant once; later starts retain admin edits.
@@ -199,7 +243,8 @@ def find_open_record(plate_number: str):
     return row
 
 
-def close_record(record_id: int, exit_image: str, fee: int, note: str = None, payment_method: str = None):
+def close_record(record_id: int, exit_image: str, fee: int, note: str = None,
+                 payment_method: str = None, exit_gate: str = None):
     """Đóng lượt gửi xe. Nếu có ghi chú lúc ra thì nối thêm vào ghi chú lúc vào (nếu có)."""
     if payment_method is not None and payment_method not in PAYMENT_METHODS:
         raise ValueError('Phương thức thanh toán không hợp lệ.')
@@ -214,14 +259,15 @@ def close_record(record_id: int, exit_image: str, fee: int, note: str = None, pa
             _slot_record(conn, slot, record_id)
         conn.execute(
         """UPDATE parking_records
-           SET exit_time = ?, exit_image = ?, fee = ?, payment_method = ?, status = 'OUT',
+           SET exit_time = ?, exit_image = ?, fee = ?, payment_method = ?, exit_gate = ?, status = 'OUT',
                note = CASE
                         WHEN ? IS NULL THEN note
                         WHEN note IS NULL OR note = '' THEN 'Ra: ' || ?
                         ELSE note || ' | Ra: ' || ?
                       END
            WHERE id = ?""",
-        (datetime.now().isoformat(timespec='seconds'), exit_image, fee, payment_method if fee > 0 else None,
+        (datetime.now().isoformat(timespec='seconds'), exit_image, fee,
+         payment_method if fee > 0 else None, exit_gate or None,
          note or None, note, note, record_id)
         )
         if record['slot_name']:
@@ -247,10 +293,13 @@ def get_all_records():
     return rows
 
 
-def count_open() -> int:
+def count_open(gate_name: str = None) -> int:
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) AS c FROM parking_records WHERE status = 'IN'")
+    if gate_name:
+        cur.execute("SELECT COUNT(*) AS c FROM parking_records WHERE status = 'IN' AND entry_gate = ?", (gate_name,))
+    else:
+        cur.execute("SELECT COUNT(*) AS c FROM parking_records WHERE status = 'IN'")
     n = cur.fetchone()['c']
     conn.close()
     return n
@@ -280,8 +329,9 @@ def get_areas():
         "LEFT JOIN vehicle_types v ON v.id = a.vehicle_type_id ORDER BY a.id")
 
 
-def save_area(area_id, name, vehicle_type_id=None, slot_count=0):
+def save_area(area_id, name, vehicle_type_id=None, slot_count=0, note=''):
     name = (name or '').strip()
+    note_val = (note or '').strip()[:255]
     if not name or len(name) > 60 or any(ord(c) < 32 for c in name):
         raise ValueError('Tên khu phải có từ 1 đến 60 ký tự.')
     with _parking_transaction() as conn:
@@ -300,12 +350,12 @@ def save_area(area_id, name, vehicle_type_id=None, slot_count=0):
                     record = _slot_record(conn, slot)
                     if record['vehicle_type_id'] != vehicle_type_id:
                         raise ValueError('Khu còn xe thuộc loại khác. Hãy xử lý các xe đó trước khi đổi phân khu.')
-            conn.execute('UPDATE parking_areas SET name=?, vehicle_type_id=? WHERE id=?', (name, vehicle_type_id, area_id))
+            conn.execute('UPDATE parking_areas SET name=?, vehicle_type_id=?, note=? WHERE id=?', (name, vehicle_type_id, note_val, area_id))
             conn.execute('UPDATE parking_slots SET area=? WHERE area=?', (name, area['name']))
             return area_id
         if not isinstance(slot_count, int) or not 0 <= slot_count <= 1000:
             raise ValueError('Số lượng ô phải là số nguyên từ 1 đến 1000.')
-        new_id = conn.execute('INSERT INTO parking_areas (name,vehicle_type_id) VALUES (?,?)', (name, vehicle_type_id)).lastrowid
+        new_id = conn.execute('INSERT INTO parking_areas (name,vehicle_type_id,note) VALUES (?,?,?)', (name, vehicle_type_id, note_val)).lastrowid
         import re
         import unicodedata
         ascii_name = unicodedata.normalize('NFKD', name.replace('đ', 'D').replace('Đ', 'D')).encode('ascii', 'ignore').decode().upper()
@@ -500,7 +550,7 @@ def remove_parked_vehicle(slot_name, expected_record_id, reason, actor):
         conn.execute("UPDATE parking_slots SET status='available',plate_number=NULL,maintenance_reason=NULL WHERE slot_name=?", (slot_name,))
 
 
-def create_parking_entry(plate, image, slot_name, vehicle_type_id, vehicle_type_name, note=None):
+def create_parking_entry(plate, image, slot_name, vehicle_type_id, vehicle_type_name, note=None, entry_gate=None):
     with _parking_transaction() as conn:
         if not conn.execute('SELECT id FROM vehicle_types WHERE id=?', (vehicle_type_id,)).fetchone():
             raise ValueError('Loại xe đã bị thay đổi hoặc xóa. Hãy tải lại trang.')
@@ -520,9 +570,9 @@ def create_parking_entry(plate, image, slot_name, vehicle_type_id, vehicle_type_
         if slot is None:
             raise ValueError('Không còn ô trống phù hợp với loại xe đã chọn.')
         cur = conn.execute(
-            "INSERT INTO parking_records(plate_number,entry_time,entry_image,slot_name,vehicle_type_id,vehicle_type_name,note,status) "
-            "VALUES (?,?,?,?,?,?,?,'IN')",
-            (plate, datetime.now().isoformat(timespec='seconds'), image, slot['slot_name'], vehicle_type_id, vehicle_type_name, note or None))
+            "INSERT INTO parking_records(plate_number,entry_time,entry_image,slot_name,vehicle_type_id,vehicle_type_name,note,entry_gate,status) "
+            "VALUES (?,?,?,?,?,?,?,?,'IN')",
+            (plate, datetime.now().isoformat(timespec='seconds'), image, slot['slot_name'], vehicle_type_id, vehicle_type_name, note or None, entry_gate or None))
         conn.execute("UPDATE parking_slots SET status='occupied',plate_number=?,maintenance_reason=NULL WHERE slot_name=?",
                      (plate, slot['slot_name']))
         return cur.lastrowid, slot['slot_name']
@@ -828,28 +878,36 @@ def delete_user_vehicle(vehicle_id: int):
 # THỐNG KÊ
 # ============================================================
 
-def get_records_between(start_date: str, end_date: str):
+def get_records_between(start_date: str, end_date: str, gate_name: str = None):
     """Toàn bộ lượt xe có mặt (vào hoặc ra) trong khoảng ngày [start_date, end_date].
     Cùng công thức với câu đếm period_records trong get_statistics() để số liệu khớp nhau."""
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute(
-        """SELECT * FROM parking_records
-           WHERE substr(entry_time, 1, 10) BETWEEN ?1 AND ?2
-              OR (status IN ('OUT','DELETED') AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2)
-           ORDER BY entry_time DESC""",
-        (start_date, end_date)
-    )
+    if gate_name:
+        cur.execute(
+            """SELECT * FROM parking_records
+               WHERE (substr(entry_time, 1, 10) BETWEEN ?1 AND ?2 AND entry_gate = ?3)
+                  OR (status IN ('OUT','DELETED') AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2 AND exit_gate = ?3)
+               ORDER BY entry_time DESC""",
+            (start_date, end_date, gate_name)
+        )
+    else:
+        cur.execute(
+            """SELECT * FROM parking_records
+               WHERE substr(entry_time, 1, 10) BETWEEN ?1 AND ?2
+                  OR (status IN ('OUT','DELETED') AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2)
+               ORDER BY entry_time DESC""",
+            (start_date, end_date)
+        )
     rows = cur.fetchall()
     conn.close()
     return rows
 
 
-def get_statistics(start_date: str = None, end_date: str = None):
+def get_statistics(start_date: str = None, end_date: str = None, gate_name: str = None):
     """Thống kê doanh thu & lượt xe.
-    - Tổng doanh thu: toàn thời gian = phí gửi xe (xe đã ra) + tiền vé tháng đã thu.
-    - Các số theo kỳ: tính cho khoảng ngày [start_date, end_date] (YYYY-MM-DD, gồm cả 2 đầu);
-      mặc định là hôm nay."""
+    - Nếu gate_name = None (Trung tâm): thống kê toàn bãi.
+    - Nếu gate_name có giá trị: chỉ thống kê lượt vào/ra và doanh thu theo cổng đó."""
     today_str = datetime.now().strftime('%Y-%m-%d')
     start_date = start_date or today_str
     end_date = end_date or start_date
@@ -861,27 +919,50 @@ def get_statistics(start_date: str = None, end_date: str = None):
         cur.execute(sql, params)
         return cur.fetchone()[0]
 
-    # ----- Toàn thời gian -----
-    parking_revenue = one("SELECT COALESCE(SUM(fee), 0) FROM parking_records WHERE status = 'OUT'")
-    month_revenue = one("SELECT COALESCE(SUM(amount), 0) FROM ticket_payments")
+    if gate_name:
+        parking_revenue = one(
+            "SELECT COALESCE(SUM(fee), 0) FROM parking_records WHERE status = 'OUT' AND exit_gate = ?",
+            (gate_name,))
+        month_revenue = 0
 
-    # ----- Theo kỳ -----
-    period_entries = one(
-        "SELECT COUNT(*) FROM parking_records WHERE substr(entry_time, 1, 10) BETWEEN ? AND ?",
-        (start_date, end_date))
-    period_exits = one(
-        "SELECT COUNT(*) FROM parking_records WHERE status = 'OUT' "
-        "AND substr(exit_time, 1, 10) BETWEEN ? AND ?", (start_date, end_date))
-    # Tổng lượt xe: lượt có xe vào HOẶC xe ra trong kỳ (mỗi lượt đếm 1 lần)
-    period_records = one(
-        "SELECT COUNT(*) FROM parking_records WHERE substr(entry_time, 1, 10) BETWEEN ?1 AND ?2 "
-        "OR (status IN ('OUT','DELETED') AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2)", (start_date, end_date))
-    period_parking_revenue = one(
-        "SELECT COALESCE(SUM(fee), 0) FROM parking_records WHERE status = 'OUT' "
-        "AND substr(exit_time, 1, 10) BETWEEN ? AND ?", (start_date, end_date))
-    period_month_revenue = one(
-        "SELECT COALESCE(SUM(amount), 0) FROM ticket_payments WHERE paid_on BETWEEN ? AND ?",
-        (start_date, end_date))
+        period_entries = one(
+            "SELECT COUNT(*) FROM parking_records WHERE substr(entry_time, 1, 10) BETWEEN ? AND ? AND entry_gate = ?",
+            (start_date, end_date, gate_name))
+        period_exits = one(
+            "SELECT COUNT(*) FROM parking_records WHERE status = 'OUT' "
+            "AND substr(exit_time, 1, 10) BETWEEN ? AND ? AND exit_gate = ?",
+            (start_date, end_date, gate_name))
+        period_records = one(
+            "SELECT COUNT(*) FROM parking_records WHERE (substr(entry_time, 1, 10) BETWEEN ?1 AND ?2 AND entry_gate = ?3) "
+            "OR (status IN ('OUT','DELETED') AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2 AND exit_gate = ?3)",
+            (start_date, end_date, gate_name))
+        period_parking_revenue = one(
+            "SELECT COALESCE(SUM(fee), 0) FROM parking_records WHERE status = 'OUT' "
+            "AND substr(exit_time, 1, 10) BETWEEN ? AND ? AND exit_gate = ?",
+            (start_date, end_date, gate_name))
+        period_month_revenue = 0
+    else:
+        # ----- Toàn thời gian -----
+        parking_revenue = one("SELECT COALESCE(SUM(fee), 0) FROM parking_records WHERE status = 'OUT'")
+        month_revenue = one("SELECT COALESCE(SUM(amount), 0) FROM ticket_payments")
+
+        # ----- Theo kỳ -----
+        period_entries = one(
+            "SELECT COUNT(*) FROM parking_records WHERE substr(entry_time, 1, 10) BETWEEN ? AND ?",
+            (start_date, end_date))
+        period_exits = one(
+            "SELECT COUNT(*) FROM parking_records WHERE status = 'OUT' "
+            "AND substr(exit_time, 1, 10) BETWEEN ? AND ?", (start_date, end_date))
+        # Tổng lượt xe: lượt có xe vào HOẶC xe ra trong kỳ (mỗi lượt đếm 1 lần)
+        period_records = one(
+            "SELECT COUNT(*) FROM parking_records WHERE substr(entry_time, 1, 10) BETWEEN ?1 AND ?2 "
+            "OR (status IN ('OUT','DELETED') AND substr(exit_time, 1, 10) BETWEEN ?1 AND ?2)", (start_date, end_date))
+        period_parking_revenue = one(
+            "SELECT COALESCE(SUM(fee), 0) FROM parking_records WHERE status = 'OUT' "
+            "AND substr(exit_time, 1, 10) BETWEEN ? AND ?", (start_date, end_date))
+        period_month_revenue = one(
+            "SELECT COALESCE(SUM(amount), 0) FROM ticket_payments WHERE paid_on BETWEEN ? AND ?",
+            (start_date, end_date))
 
     conn.close()
 
@@ -896,6 +977,114 @@ def get_statistics(start_date: str = None, end_date: str = None):
         'period_parking_revenue': period_parking_revenue,
         'period_month_revenue': period_month_revenue,
     }
+
+
+def _gate_sql_condition(col: str, gate_names: list):
+    """Tạo điều kiện SQL lọc theo danh sách cổng (hỗ trợ 'Tất cả các cổng' = NULL/''/'Trung tâm'/'Tất cả các cổng')."""
+    include_central = 'Tất cả các cổng' in gate_names or 'Trung tâm' in gate_names
+    specific = [g for g in gate_names if g not in ('Tất cả các cổng', 'Trung tâm')]
+    parts = []
+    params = []
+    if specific:
+        placeholders = ','.join('?' for _ in specific)
+        parts.append(f"{col} IN ({placeholders})")
+        params.extend(specific)
+    if include_central:
+        parts.append(f"({col} IS NULL OR {col} = '' OR {col} IN ('Trung tâm', 'Tất cả các cổng'))")
+    if not parts:
+        return "1=0", []
+    return "(" + " OR ".join(parts) + ")", params
+
+
+def get_statistics_for_gates(start_date: str = None, end_date: str = None, gate_names=None):
+    """Thống kê doanh thu & lượt xe theo danh sách cổng được chọn (None = tất cả cổng)."""
+    if gate_names is None:
+        return get_statistics(start_date, end_date, gate_name=None)
+    if not gate_names:
+        return {
+            'parking_revenue': 0, 'month_revenue': 0, 'total_revenue': 0,
+            'period_entries': 0, 'period_exits': 0, 'period_records': 0,
+            'period_parking_revenue': 0, 'period_month_revenue': 0, 'period_revenue': 0,
+        }
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    start_date = start_date or today_str
+    end_date = end_date or start_date
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    def one(sql, params=()):
+        cur.execute(sql, params)
+        return cur.fetchone()[0]
+
+    in_cond, in_params = _gate_sql_condition('entry_gate', gate_names)
+    out_cond, out_params = _gate_sql_condition('exit_gate', gate_names)
+
+    parking_revenue = one(
+        f"SELECT COALESCE(SUM(fee), 0) FROM parking_records WHERE status = 'OUT' AND {out_cond}",
+        out_params
+    )
+    period_entries = one(
+        f"SELECT COUNT(*) FROM parking_records WHERE substr(entry_time, 1, 10) BETWEEN ? AND ? AND {in_cond}",
+        [start_date, end_date] + in_params
+    )
+    period_exits = one(
+        f"SELECT COUNT(*) FROM parking_records WHERE status = 'OUT' AND substr(exit_time, 1, 10) BETWEEN ? AND ? AND {out_cond}",
+        [start_date, end_date] + out_params
+    )
+    period_records = one(
+        f"SELECT COUNT(*) FROM parking_records WHERE (substr(entry_time, 1, 10) BETWEEN ? AND ? AND {in_cond}) "
+        f"OR (status IN ('OUT','DELETED') AND substr(exit_time, 1, 10) BETWEEN ? AND ? AND {out_cond})",
+        [start_date, end_date] + in_params + [start_date, end_date] + out_params
+    )
+    period_parking_revenue = one(
+        f"SELECT COALESCE(SUM(fee), 0) FROM parking_records WHERE status = 'OUT' "
+        f"AND substr(exit_time, 1, 10) BETWEEN ? AND ? AND {out_cond}",
+        [start_date, end_date] + out_params
+    )
+
+    if 'Tất cả các cổng' in gate_names or 'Trung tâm' in gate_names:
+        month_revenue = one("SELECT COALESCE(SUM(amount), 0) FROM ticket_payments")
+        period_month_revenue = one(
+            "SELECT COALESCE(SUM(amount), 0) FROM ticket_payments WHERE paid_on BETWEEN ? AND ?",
+            (start_date, end_date)
+        )
+    else:
+        month_revenue = 0
+        period_month_revenue = 0
+
+    conn.close()
+    return {
+        'parking_revenue': parking_revenue,
+        'month_revenue': month_revenue,
+        'total_revenue': parking_revenue + month_revenue,
+        'period_entries': period_entries,
+        'period_exits': period_exits,
+        'period_records': period_records,
+        'period_parking_revenue': period_parking_revenue,
+        'period_month_revenue': period_month_revenue,
+        'period_revenue': period_parking_revenue + period_month_revenue,
+    }
+
+
+def get_recent_records_for_gates(gate_names=None, limit: int = 8):
+    """Lấy danh sách lượt xe gần đây theo danh sách cổng được chọn (None = tất cả cổng)."""
+    if gate_names is not None and not gate_names:
+        return []
+    conn = get_connection()
+    if gate_names is None:
+        rows = conn.execute(
+            "SELECT * FROM parking_records ORDER BY entry_time DESC LIMIT ?", (limit,)
+        ).fetchall()
+    else:
+        in_cond, in_params = _gate_sql_condition('entry_gate', gate_names)
+        out_cond, out_params = _gate_sql_condition('exit_gate', gate_names)
+        rows = conn.execute(
+            f"SELECT * FROM parking_records WHERE {in_cond} OR {out_cond} ORDER BY entry_time DESC LIMIT ?",
+            in_params + out_params + [limit]
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 # ============================================================
@@ -945,22 +1134,30 @@ def get_parking_zones(status: str = '', q: str = ''):
 
 
 def save_parking_zone(zone_id, name: str, zone_type: str = 'gate_inout', location: str = '',
-                      vehicle_type_id=None, capacity: int = 0, status: str = 'active', note: str = ''):
+                      vehicle_type_id=None, capacity: int = 0, status: str = 'active', note: str = '',
+                      operating_hours: str = '24/7', area_names: str = '', vehicle_type_ids: str = ''):
     conn = get_connection()
+    hours = (operating_hours or '24/7').strip() or '24/7'
+    areas_csv = ','.join(a.strip() for a in (area_names or '').split(',') if a.strip())
+    vt_ids_list = [x.strip() for x in (vehicle_type_ids or '').split(',') if x.strip().isdigit()]
+    if not vt_ids_list and vehicle_type_id:
+        vt_ids_list = [str(vehicle_type_id)]
+    vt_ids_csv = ','.join(dict.fromkeys(vt_ids_list))
+    single_vt_id = int(vt_ids_list[0]) if len(vt_ids_list) == 1 else None
     if zone_id:
         conn.execute(
             """UPDATE parking_zones
-               SET name = ?, zone_type = ?, location = ?, vehicle_type_id = ?,
-                   capacity = ?, status = ?, note = ?
+               SET name = ?, zone_type = ?, location = ?, area_names = ?, vehicle_type_id = ?, vehicle_type_ids = ?,
+                   capacity = ?, operating_hours = ?, status = ?, note = ?
                WHERE id = ?""",
-            (name, zone_type, location, vehicle_type_id, capacity, status, note, zone_id)
+            (name, zone_type, location, areas_csv, single_vt_id, vt_ids_csv, capacity, hours, status, note, zone_id)
         )
     else:
         conn.execute(
             """INSERT INTO parking_zones
-                   (name, zone_type, location, vehicle_type_id, capacity, status, note, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (name, zone_type, location, vehicle_type_id, capacity, status, note,
+                   (name, zone_type, location, area_names, vehicle_type_id, vehicle_type_ids, capacity, operating_hours, status, note, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (name, zone_type, location, areas_csv, single_vt_id, vt_ids_csv, capacity, hours, status, note,
              datetime.now().isoformat(timespec='seconds'))
         )
     conn.commit()
@@ -1040,6 +1237,26 @@ def add_manual_attendance(user_id: int, work_date: str, shift_name: str = 'Ca ng
     conn.close()
 
 
+def update_employee_attendance(att_id: int, shift_name: str, zone_name: str,
+                               check_in: str, check_out: str, status: str, note: str = ''):
+    conn = get_connection()
+    conn.execute(
+        """UPDATE employee_attendance
+           SET shift_name = ?, zone_name = ?, check_in = ?, check_out = ?, status = ?, note = ?
+           WHERE id = ?""",
+        (shift_name or 'Ca sáng', zone_name or '', check_in or None, check_out or None, status or 'completed', note or '', att_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_employee_attendance(att_id: int):
+    conn = get_connection()
+    conn.execute("DELETE FROM employee_attendance WHERE id = ?", (att_id,))
+    conn.commit()
+    conn.close()
+
+
 def get_employee_attendance(user_id: int = None, limit: int = 100):
     conn = get_connection()
     sql = """
@@ -1056,6 +1273,115 @@ def get_employee_attendance(user_id: int = None, limit: int = 100):
     rows = conn.execute(sql, params).fetchall()
     conn.close()
     return rows
+
+
+def get_employee_schedules(start_date: str = '', end_date: str = '', gate_name: str = ''):
+    conn = get_connection()
+    sql = """
+        SELECT s.*, u.fullname, u.username, u.employee_code
+        FROM employee_schedules s
+        JOIN users u ON u.id = s.user_id
+        WHERE 1=1
+    """
+    params = []
+    if start_date:
+        sql += " AND s.work_date >= ?"
+        params.append(start_date)
+    if end_date:
+        sql += " AND s.work_date <= ?"
+        params.append(end_date)
+    if gate_name:
+        sql += " AND LOWER(s.gate_name) = ?"
+        params.append(gate_name.strip().lower())
+    sql += " ORDER BY s.work_date ASC, s.id ASC"
+    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    conn.close()
+    return rows
+
+
+def add_employee_schedule(user_id: int, work_date: str, shift_name: str, gate_name: str, note: str = ''):
+    conn = get_connection()
+    cur = conn.execute(
+        """INSERT INTO employee_schedules (user_id, work_date, shift_name, gate_name, note)
+           VALUES (?, ?, ?, ?, ?)""",
+        (user_id, work_date, shift_name or 'Ca sáng', gate_name or 'Cổng chính', note or '')
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return new_id
+
+
+def update_employee_schedule(schedule_id: int, user_id: int, work_date: str, shift_name: str, gate_name: str, note: str = ''):
+    conn = get_connection()
+    conn.execute(
+        """UPDATE employee_schedules
+           SET user_id = ?, work_date = ?, shift_name = ?, gate_name = ?, note = ?
+           WHERE id = ?""",
+        (user_id, work_date, shift_name or 'Ca sáng', gate_name or 'Cổng chính', note or '', schedule_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_employee_schedule(schedule_id: int):
+    conn = get_connection()
+    conn.execute("DELETE FROM employee_schedules WHERE id = ?", (schedule_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_employee_paysheets(status_list=None, pay_branch: str = '', q: str = ''):
+    conn = get_connection()
+    sql = "SELECT * FROM employee_paysheets WHERE 1=1"
+    params = []
+    if status_list:
+        placeholders = ','.join('?' for _ in status_list)
+        sql += f" AND status IN ({placeholders})"
+        params.extend(status_list)
+    if pay_branch:
+        sql += " AND LOWER(pay_branch) = ?"
+        params.append(pay_branch.strip().lower())
+    if q:
+        like = f"%{q.strip().lower()}%"
+        sql += " AND (LOWER(code) LIKE ? OR LOWER(name) LIKE ?)"
+        params.extend([like, like])
+    sql += " ORDER BY id DESC"
+    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    conn.close()
+    return rows
+
+
+def create_employee_paysheet(name: str, pay_cycle: str, work_period: str, pay_branch: str,
+                             total_salary: int, status: str = 'provisional',
+                             note: str = '', created_by: str = ''):
+    conn = get_connection()
+    row = conn.execute("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM employee_paysheets").fetchone()
+    code = f"BL{int(row['next_id']):06d}"
+    cur = conn.execute(
+        """INSERT INTO employee_paysheets
+           (code, name, pay_cycle, work_period, pay_branch, total_salary, paid_amount, status, note, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)""",
+        (code, name, pay_cycle or 'Hàng tháng', work_period, pay_branch or 'Cổng chính',
+         int(total_salary or 0), status or 'provisional', note or '', created_by or '')
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return new_id, code
+
+
+def update_employee_paysheet_status(paysheet_id: int, status: str, paid_amount: int = None):
+    conn = get_connection()
+    if paid_amount is not None:
+        conn.execute(
+            "UPDATE employee_paysheets SET status = ?, paid_amount = ? WHERE id = ?",
+            (status, int(paid_amount), paysheet_id)
+        )
+    else:
+        conn.execute("UPDATE employee_paysheets SET status = ? WHERE id = ?", (status, paysheet_id))
+    conn.commit()
+    conn.close()
 
 
 # ----- Cài đặt riêng của từng người dùng -----
@@ -1190,17 +1516,18 @@ def vehicle_type_name_taken(name: str, exclude_id: int = None) -> bool:
 
 def save_vehicle_type(type_id, name, grace_minutes=0, daily_cap=0,
                       free_minutes=0, first_block_hours=0, first_block_amount=0,
-                      next_hour_amount=0, monthly_price=None):
+                      next_hour_amount=0, monthly_price=None, wheel_group='2w'):
+    wg = wheel_group if wheel_group in ('2w', '4w', 'other') else '2w'
     values = (name, grace_minutes, daily_cap, free_minutes, first_block_hours,
-              first_block_amount, next_hour_amount, monthly_price)
+              first_block_amount, next_hour_amount, monthly_price, wg)
     if type_id:
         _exec("UPDATE vehicle_types SET name=?, grace_minutes=?, daily_cap=?, free_minutes=?, "
-              "first_block_hours=?, first_block_amount=?, next_hour_amount=?, monthly_price=? WHERE id=?",
+              "first_block_hours=?, first_block_amount=?, next_hour_amount=?, monthly_price=?, wheel_group=? WHERE id=?",
               values + (type_id,))
     else:
         _exec("INSERT INTO vehicle_types (name, grace_minutes, daily_cap, free_minutes, "
-              "first_block_hours, first_block_amount, next_hour_amount, monthly_price) "
-              "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", values)
+              "first_block_hours, first_block_amount, next_hour_amount, monthly_price, wheel_group) "
+              "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", values)
 
 
 def delete_vehicle_type(type_id: int):

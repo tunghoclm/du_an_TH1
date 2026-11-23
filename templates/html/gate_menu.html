@@ -47,6 +47,7 @@
           <span class="lane-photo-tag" data-lane-cam-status="{{ direction }}">CHỜ BẬT</span>
         </div>
         <video class="lane-overview-video" data-lane-video="{{ direction }}" autoplay playsinline muted hidden></video>
+        <img class="lane-overview-video" data-lane-stream="{{ direction }}" alt="Camera IP làn {{ lane_name }}" hidden>
         <canvas class="lane-cam-overlay" data-lane-overlay="{{ direction }}" hidden></canvas>
         <img class="lane-photo-img" data-lane-preview="{{ direction }}" alt="Ảnh nhận diện làn {{ lane_name }}" hidden>
         <div class="lane-photo-empty" data-lane-cam-empty="{{ direction }}">
@@ -67,6 +68,7 @@
                   aria-pressed="false">Bật toàn cảnh</button>
         </div>
         <video class="lane-overview-video" data-overview-video="{{ direction }}" autoplay playsinline muted hidden></video>
+        <img class="lane-overview-video" data-overview-stream="{{ direction }}" alt="Toàn cảnh IP làn {{ lane_name }}" hidden>
         <div class="lane-photo-empty" data-overview-empty="{{ direction }}">
           {{ icon('camera', 24) }}
           <span>Toàn cảnh làn {{ lane_name }}</span>
@@ -77,10 +79,12 @@
     </div>
 
     <!-- Thanh điều khiển camera / tải ảnh trực tiếp trên làn -->
+    {% set all_cam_vals = [device_settings.entry_plate_camera, device_settings.exit_plate_camera, device_settings.entry_overview_camera, device_settings.exit_overview_camera] if device_settings else [] %}
     <div class="lane-controls-bar" data-lane-controls-camera="{{ direction }}">
       <select class="lane-cam-select"
               data-lane-camera-select="{{ direction }}"
               data-default-device="{{ device_settings[direction ~ '_plate_camera'] if device_settings else '' }}"
+              data-ip-cameras="{{ all_cam_vals|join('|') }}"
               aria-label="Chọn camera làn {{ lane_name }}">
         <option value="">Camera mặc định</option>
       </select>
@@ -164,109 +168,20 @@
     </div>
   </div>
 
-  <!-- 2 Làn Vào / Ra hoạt động song song -->
+  <!-- Làn Vào / Ra theo cấu hình cổng đang chọn -->
+  {% set gate_mode = selected_gate.zone_type if selected_gate else 'gate_inout' %}
   <div class="lanes-board" id="cabin-slot-grid">
-    {{ lane_card('entry', 'vào', 'entry', entry_record) }}
-    {{ lane_card('exit', 'ra', 'exit_gate', exit_record) }}
+    {% if gate_mode != 'gate_out' %}
+      {{ lane_card('entry', 'vào', 'entry', entry_record) }}
+    {% endif %}
+    {% if gate_mode != 'gate_in' %}
+      {{ lane_card('exit', 'ra', 'exit_gate', exit_record) }}
+    {% endif %}
   </div>
-
-  <!-- Danh sách xe đang trong bãi & lượt ra gần đây -->
-  <section class="lanes-activity" id="lanes-activity" aria-label="Danh sách xe đang gửi và lượt ra gần đây">
-    <div class="lanes-activity-head">
-      <div class="lanes-activity-tabs" role="tablist">
-        <button type="button" class="lanes-tab active" role="tab" aria-selected="true" data-lanes-tab="in">
-          Đang trong bãi <span class="lanes-tab-count">{{ open_records|length }}</span>
-        </button>
-        <button type="button" class="lanes-tab" role="tab" aria-selected="false" data-lanes-tab="out">
-          Lượt ra gần đây <span class="lanes-tab-count">{{ recent_exits|length }}</span>
-        </button>
-      </div>
-      <div class="lanes-activity-tools">
-        <input type="search" id="lanes-quick-filter" placeholder="Lọc nhanh biển số, ô đỗ..." aria-label="Lọc nhanh biển số hoặc ô đỗ">
-      </div>
-    </div>
-
-    <div class="lanes-table-wrap" data-lanes-panel="in">
-      {% if open_records %}
-      <table class="lanes-table">
-        <thead>
-          <tr>
-            <th>Biển số</th>
-            <th>Vị trí</th>
-            <th>Loại xe</th>
-            <th>Giờ vào</th>
-            <th>Thời gian</th>
-            <th>Tạm tính</th>
-            <th class="is-right">Thao tác</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in open_records %}
-          <tr class="lanes-row"
-              data-lane-item="{{ r.plate_number }} {{ r.slot_name or '' }} {{ r.vehicle_type_name or '' }}"
-              data-cabin-slot="Xe {{ r.plate_number }}"
-              data-area="entry"
-              data-status="occupied"
-              data-plate="{{ r.plate_number }}"
-              data-fee="{{ r.preview_fee }}"
-              data-action-url="{{ url_for('exit_gate', plate=r.plate_number) }}">
-            <td><strong class="lanes-plate-chip">{{ r.plate_number }}</strong></td>
-            <td><span class="lanes-slot-badge">{{ r.slot_name or '—' }}</span></td>
-            <td>{{ r.vehicle_type_name or '—' }}</td>
-            <td>{{ r.entry_time[11:19] }} <small>{{ r.entry_time[:10]|vdate }}</small></td>
-            <td>{{ r.preview_duration or '—' }}</td>
-            <td class="lanes-fee-cell">{{ r.preview_fee|vnd }}</td>
-            <td class="is-right">
-              <button type="button" class="lanes-row-btn" data-fill-exit-plate="{{ r.plate_number }}">Đưa vào làn ra</button>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-        <div class="lanes-empty-list">Hiện chưa có xe nào đang gửi trong bãi.</div>
-      {% endif %}
-    </div>
-
-    <div class="lanes-table-wrap" data-lanes-panel="out" hidden>
-      {% if recent_exits %}
-      <table class="lanes-table">
-        <thead>
-          <tr>
-            <th>Biển số</th>
-            <th>Vị trí</th>
-            <th>Loại xe</th>
-            <th>Giờ vào</th>
-            <th>Giờ ra</th>
-            <th>Đã thu</th>
-            <th class="is-right">Thao tác</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in recent_exits %}
-          <tr class="lanes-row" data-lane-item="{{ r.plate_number }} {{ r.slot_name or '' }} {{ r.vehicle_type_name or '' }}">
-            <td><strong class="lanes-plate-chip">{{ r.plate_number }}</strong></td>
-            <td><span class="lanes-slot-badge">{{ r.slot_name or '—' }}</span></td>
-            <td>{{ r.vehicle_type_name or '—' }}</td>
-            <td>{{ r.entry_time[11:19] }} <small>{{ r.entry_time[:10]|vdate }}</small></td>
-            <td>{{ r.exit_time[11:19] if r.exit_time else '—' }} <small>{{ r.exit_time[:10]|vdate if r.exit_time else '' }}</small></td>
-            <td class="lanes-fee-cell is-paid">{{ r.fee|vnd }}</td>
-            <td class="is-right">
-              <a href="{{ url_for('invoice_print', record_id=r.id) }}" target="_blank" rel="noopener" class="lanes-row-btn is-muted">In phiếu ↗</a>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-        <div class="lanes-empty-list">Chưa có lượt xe ra nào được ghi nhận.</div>
-      {% endif %}
-    </div>
-  </section>
 </section>
 
-<!-- Khung bên phải: Phiếu xe & Tra cứu nhanh -->
-<section class="cabin-ticket cabin-pane" aria-label="Thông tin phiếu xe">
+<!-- Khung bên phải: Lịch sử xe ra vào & Tra cứu nhanh -->
+<section class="cabin-ticket cabin-pane" aria-label="Lịch sử xe vào ra">
   <form class="lanes-quick-lookup" id="lanes-quick-lookup-form">
     <label for="lanes-plate-lookup">Tra cứu nhanh &amp; đưa vào làn ra</label>
     <div class="lanes-lookup-row">
@@ -275,69 +190,155 @@
     </div>
   </form>
 
-  <div class="cabin-ticket-content" id="lanes-ticket-content" aria-live="polite">
-    <div class="cabin-ticket-empty" id="cabin-ticket-empty" aria-hidden="true"></div>
-    {% for direction, lane_name, record in [('entry', 'vào', entry_record), ('exit', 'ra', exit_record)] %}
-    <article class="cabin-slot-detail" data-cabin-detail="Làn {{ lane_name }}" hidden>
-      <div class="cabin-detail-heading">
-        <span>Gần nhất · Làn {{ lane_name }}</span>
-        <span class="cabin-state {{ 'occupied' if record else 'available' }}">
-          {{ 'Đang gửi' if record and record.status == 'IN' else ('Đã thu phí' if record else 'Chưa có lượt xe') }}
-        </span>
+  <section class="lanes-activity lanes-history-pane" id="lanes-activity" aria-label="Lịch sử xe đang gửi và lượt ra gần đây">
+    <div class="lanes-activity-head">
+      <div class="lanes-activity-tabs" role="tablist">
+        <button type="button" class="lanes-tab active" role="tab" aria-selected="true" data-lanes-tab="in">
+          Đang trong bãi <span class="lanes-tab-count">{{ open_records|length }}</span>
+        </button>
+        <button type="button" class="lanes-tab" role="tab" aria-selected="false" data-lanes-tab="recent">
+          Vào / Ra gần đây <span class="lanes-tab-count">{{ recent_records|length }}</span>
+        </button>
       </div>
-      {% if record %}
-        <strong class="cabin-detail-plate">{{ record.plate_number }}</strong>
-        <dl>
-          <div><dt>Vị trí đỗ</dt><dd>{{ record.slot_name or '—' }}</dd></div>
-          <div><dt>Loại xe</dt><dd>{{ record.vehicle_type_name or '—' }}</dd></div>
-          <div><dt>Giờ vào</dt><dd>{{ record.entry_time[:10]|vdate }} · {{ record.entry_time[11:19] }}</dd></div>
-          {% if record.exit_time %}
-          <div><dt>Giờ ra</dt><dd>{{ record.exit_time[:10]|vdate }} · {{ record.exit_time[11:19] }}</dd></div>
-          {% elif record.preview_duration %}
-          <div><dt>Thời gian gửi</dt><dd>{{ record.preview_duration }}</dd></div>
-          {% endif %}
-        </dl>
+      <div class="lanes-activity-tools">
+        <input type="search" id="lanes-quick-filter" placeholder="Lọc nhanh biển số, ô đỗ..." aria-label="Lọc nhanh biển số hoặc ô đỗ">
+      </div>
+    </div>
+
+    <div class="lanes-history-scroll" data-lanes-panel="in">
+      {% if open_records %}
+      <div class="lanes-history-list">
+        {% for r in open_records %}
+        <article class="lanes-history-item"
+                 tabindex="0"
+                 role="button"
+                 aria-label="Xem chi tiết xe {{ r.plate_number }}"
+                 data-lane-item="{{ r.plate_number }} {{ r.slot_name or '' }} {{ r.vehicle_type_name or '' }}"
+                 data-history-detail
+                 data-record-id="{{ r.id }}"
+                 data-plate="{{ r.plate_number }}"
+                 data-slot="{{ r.slot_name or '—' }}"
+                 data-vehicle-type="{{ r.vehicle_type_name or '—' }}"
+                 data-status="IN"
+                 data-time-in="{{ r.entry_time[:10]|vdate }} · {{ r.entry_time[11:19] }}"
+                 data-time-out="—"
+                 data-duration="{{ r.preview_duration or '—' }}"
+                 data-fee="{{ r.preview_fee|vnd }}"
+                 data-note="{{ r.note or '' }}"
+                 data-image-in="{{ r.entry_image_url or '' }}"
+                 data-image-out=""
+                 data-invoice-url="">
+          <div class="lanes-history-top">
+            <div class="lanes-history-id">
+              <strong class="lanes-plate-chip">{{ r.plate_number }}</strong>
+              <span class="lanes-slot-badge">{{ r.slot_name or '—' }}</span>
+              <span class="lanes-type-text">{{ r.vehicle_type_name or '—' }}</span>
+            </div>
+            <span class="lanes-fee-cell">{{ r.preview_fee|vnd }}</span>
+          </div>
+          <div class="lanes-history-bottom">
+            <span class="lanes-time-text">Vào: {{ r.entry_time[11:19] }} · {{ r.entry_time[:10]|vdate }}{% if r.preview_duration %} · {{ r.preview_duration }}{% endif %}</span>
+            <button type="button" class="lanes-row-btn" data-fill-exit-plate="{{ r.plate_number }}">Đưa vào làn ra</button>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
       {% else %}
-        <div class="cabin-detail-placeholder">
-          {{ icon('car', 56) }}
-          <h2>Chưa có lượt ở làn {{ lane_name }}</h2>
-          <span>Thao tác trực tiếp trên khung Làn {{ lane_name }} bên trái.</span>
-        </div>
+        <div class="lanes-empty-list">Hiện chưa có xe nào đang gửi trong bãi.</div>
       {% endif %}
-    </article>
-    {% endfor %}
+    </div>
 
-    {% for r in open_records %}
-    <article class="cabin-slot-detail" data-cabin-detail="Xe {{ r.plate_number }}" hidden>
-      <div class="cabin-detail-heading">
-        <span>Xe đang gửi · {{ r.slot_name or 'Chưa gán ô' }}</span>
-        <span class="cabin-state occupied">Đang gửi</span>
+    <div class="lanes-history-scroll" data-lanes-panel="recent" hidden>
+      {% if recent_records %}
+      <div class="lanes-history-list">
+        {% for r in recent_records %}
+        {% set is_in = (r.status == 'IN') %}
+        <article class="lanes-history-item"
+                 tabindex="0"
+                 role="button"
+                 aria-label="Xem chi tiết xe {{ r.plate_number }}"
+                 data-lane-item="{{ r.plate_number }} {{ r.slot_name or '' }} {{ r.vehicle_type_name or '' }} {{ 'vào' if is_in else 'ra' }}"
+                 data-history-detail
+                 data-record-id="{{ r.id }}"
+                 data-plate="{{ r.plate_number }}"
+                 data-slot="{{ r.slot_name or '—' }}"
+                 data-vehicle-type="{{ r.vehicle_type_name or '—' }}"
+                 data-status="{{ r.status }}"
+                 data-time-in="{{ r.entry_time[:10]|vdate }} · {{ r.entry_time[11:19] }}"
+                 data-time-out="{{ (r.exit_time[:10]|vdate ~ ' · ' ~ r.exit_time[11:19]) if r.exit_time else '—' }}"
+                 data-duration="{{ r.preview_duration or '—' }}"
+                 data-fee="{{ (r.preview_fee if is_in else r.fee)|vnd }}"
+                 data-note="{{ r.note or '' }}"
+                 data-image-in="{{ r.entry_image_url or '' }}"
+                 data-image-out="{{ r.exit_image_url or '' }}"
+                 data-invoice-url="{{ url_for('invoice_print', record_id=r.id) if not is_in else '' }}">
+          <div class="lanes-history-top">
+            <div class="lanes-history-id">
+              <span class="lanes-dir-badge {{ 'is-in' if is_in else 'is-out' }}">{{ 'VÀO' if is_in else 'RA' }}</span>
+              <strong class="lanes-plate-chip">{{ r.plate_number }}</strong>
+              <span class="lanes-slot-badge">{{ r.slot_name or '—' }}</span>
+              <span class="lanes-type-text">{{ r.vehicle_type_name or '—' }}</span>
+            </div>
+            <span class="lanes-fee-cell{{ '' if is_in else ' is-paid' }}">{{ (r.preview_fee if is_in else r.fee)|vnd }}</span>
+          </div>
+          <div class="lanes-history-bottom">
+            {% if is_in %}
+              <span class="lanes-time-text">Vào: {{ r.entry_time[11:19] }} · {{ r.entry_time[:10]|vdate }}{% if r.preview_duration %} · {{ r.preview_duration }}{% endif %}</span>
+              <button type="button" class="lanes-row-btn" data-fill-exit-plate="{{ r.plate_number }}">Đưa vào làn ra</button>
+            {% else %}
+              <span class="lanes-time-text">Vào {{ r.entry_time[11:19] }} → Ra {{ r.exit_time[11:19] if r.exit_time else '—' }} · {{ r.exit_time[:10]|vdate if r.exit_time else '' }}</span>
+              <a href="{{ url_for('invoice_print', record_id=r.id) }}" target="_blank" rel="noopener" class="lanes-row-btn is-muted">In phiếu ↗</a>
+            {% endif %}
+          </div>
+        </article>
+        {% endfor %}
       </div>
-      <strong class="cabin-detail-plate">{{ r.plate_number }}</strong>
-      <dl>
-        <div><dt>Vị trí đỗ</dt><dd>{{ r.slot_name or '—' }}</dd></div>
-        <div><dt>Loại xe</dt><dd>{{ r.vehicle_type_name or '—' }}</dd></div>
-        <div><dt>Giờ vào</dt><dd>{{ r.entry_time[:10]|vdate }} · {{ r.entry_time[11:19] }}</dd></div>
-        <div><dt>Thời gian gửi</dt><dd>{{ r.preview_duration or '—' }}</dd></div>
-      </dl>
-      <p class="cabin-detail-hint">Nhấn "Đưa vào làn ra" để điền biển số sang Làn ra bên trái.</p>
-    </article>
-    {% endfor %}
-  </div>
+      {% else %}
+        <div class="lanes-empty-list">Chưa có lượt xe vào / ra nào được ghi nhận.</div>
+      {% endif %}
+    </div>
+  </section>
 
-  <footer class="cabin-ticket-footer">
-    <div class="cabin-ticket-meta">
-      <span class="cabin-total">
-        <span id="cabin-total-label">Tổng tiền</span>
-        <span class="cabin-count-badge" id="cabin-total-count">0</span>
-        <strong id="cabin-total">0</strong>
-      </span>
-    </div>
-    <div class="cabin-ticket-actions">
-      <button type="button" class="cabin-secondary-action" id="cabin-exit-action" disabled>{{ icon('bell-solid', 16) }}<span>xe ra</span></button>
-      <button type="button" class="cabin-primary-action" id="cabin-primary-action" disabled>{{ icon('money', 18) }}<span id="cabin-primary-label">Thanh toán</span></button>
-    </div>
+  <footer class="lanes-history-footer">
+    <a href="{{ url_for('history') }}" target="_blank" rel="noopener">Xem toàn bộ lịch sử xe ra vào ↗</a>
   </footer>
 </section>
+<dialog id="lanes-detail-dialog" class="lanes-detail-dialog" aria-labelledby="lanes-detail-title">
+  <div class="lanes-detail-head">
+    <div class="lanes-detail-title-wrap">
+      <h3 id="lanes-detail-title">Chi tiết lượt gửi xe</h3>
+      <span class="lanes-detail-status" id="lanes-detail-status"></span>
+    </div>
+    <button type="button" class="lanes-detail-x" id="lanes-detail-close" aria-label="Đóng">×</button>
+  </div>
+  <div class="lanes-detail-body">
+    <div class="lanes-detail-photos">
+      <div class="lanes-detail-photo">
+        <span>Ảnh xe vào</span>
+        <img id="lanes-detail-img-in" alt="Ảnh xe vào" hidden>
+        <div class="lanes-detail-photo-empty" id="lanes-detail-empty-in">Không có ảnh xe vào</div>
+      </div>
+      <div class="lanes-detail-photo">
+        <span>Ảnh xe ra</span>
+        <img id="lanes-detail-img-out" alt="Ảnh xe ra" hidden>
+        <div class="lanes-detail-photo-empty" id="lanes-detail-empty-out">Chưa có ảnh xe ra</div>
+      </div>
+    </div>
+    <dl class="lanes-detail-grid">
+      <div><dt>Biển số xe</dt><dd id="lanes-detail-plate" class="is-plate">—</dd></div>
+      <div><dt>Vị trí ô đỗ</dt><dd id="lanes-detail-slot">—</dd></div>
+      <div><dt>Loại phương tiện</dt><dd id="lanes-detail-type">—</dd></div>
+      <div><dt id="lanes-detail-fee-label">Phí gửi xe</dt><dd id="lanes-detail-fee" class="is-fee">—</dd></div>
+      <div><dt>Thời gian vào</dt><dd id="lanes-detail-in">—</dd></div>
+      <div><dt id="lanes-detail-out-label">Thời gian ra</dt><dd id="lanes-detail-out">—</dd></div>
+      <div class="is-full"><dt>Ghi chú</dt><dd id="lanes-detail-note">—</dd></div>
+    </dl>
+  </div>
+  <footer class="lanes-detail-foot">
+    <button type="button" class="lanes-row-btn" id="lanes-detail-fill-exit" hidden>Đưa vào làn ra</button>
+    <a href="#" target="_blank" rel="noopener" class="lanes-row-btn" id="lanes-detail-print" hidden>In phiếu ↗</a>
+    <button type="button" class="lanes-secondary-btn" id="lanes-detail-close-btn">Đóng</button>
+  </footer>
+</dialog>
 <iframe id="lanes-print-frame" title="In hóa đơn" hidden></iframe>
 {% endblock %}

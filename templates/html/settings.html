@@ -1,11 +1,12 @@
 {% extends "_layout.html" %}
 {% set active_page = 'settings' %}
-{% block title %}{{ 'Thông tin bãi xe' if settings_section == 'store' else ('Tài khoản VietQR' if settings_section == 'payment' else 'Cổng kết nối & Camera') }} — Smart Parking{% endblock %}
+{% block title %}{{ 'Thông tin bãi xe' if settings_section == 'store' else ('Cài đặt cổng' if settings_section == 'gates' else ('Tài khoản VietQR' if settings_section == 'payment' else 'Camera, Barrier & Máy in')) }} — Smart Parking{% endblock %}
 {% block breadcrumb %}Thiết lập{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="/css/users.css">
 <link rel="stylesheet" href="/css/customers.css">
 <link rel="stylesheet" href="/css/settings-kv.css">
+<link rel="stylesheet" href="/css/employees.css">
 {% endblock %}
 
 {% block content %}
@@ -28,7 +29,7 @@
          {% if settings_section == 'devices' %}aria-current="page"{% endif %}>
         <span class="kv-sidebar-link-main">
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-          <span>Cổng kết nối &amp; Camera</span>
+          <span>Camera, Barrier &amp; Máy in</span>
         </span>
       </a>
 
@@ -53,16 +54,17 @@
           <span>Thông tin bãi xe</span>
         </span>
       </a>
+      <a href="{{ url_for('settings', section='gates') }}"
+         class="kv-sidebar-link{% if settings_section == 'gates' %} active{% endif %}"
+         {% if settings_section == 'gates' %}aria-current="page"{% endif %}>
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"/><path d="M2 20h20"/><path d="M8 10h8"/><path d="M12 4v16"/></svg>
+          <span>Cài đặt cổng</span>
+        </span>
+      </a>
 
       <div class="kv-sidebar-divider"></div>
       <div class="kv-sidebar-group-title">Quản lý</div>
-      <a href="{{ url_for('pricing') }}" class="kv-sidebar-link">
-        <span class="kv-sidebar-link-main">
-          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-          <span>Bảng giá &amp; Gói vé</span>
-        </span>
-        <span class="kv-sidebar-ext" aria-hidden="true">↗</span>
-      </a>
       <a href="{{ url_for('customers') }}" class="kv-sidebar-link">
         <span class="kv-sidebar-link-main">
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
@@ -94,6 +96,8 @@
         {% include '_settings_payment.html' %}
       {% elif settings_section == 'store' %}
         {% include '_settings_store.html' %}
+      {% elif settings_section == 'gates' %}
+        {% include '_settings_gates.html' %}
       {% else %}
         {% include '_settings_devices.html' %}
       {% endif %}
@@ -103,10 +107,21 @@
       </div>
     </main>
 
-    <!-- Cột phải: Mục lục neo nhanh -->
+    <!-- Cột phải: Mục lục neo nhanh / Gợi ý giống KiotViet -->
     <aside class="kv-settings-toc" aria-label="Mục lục thiết lập">
-      <div class="kv-toc-title">Trong mục này</div>
-      <nav class="kv-toc-list" id="kv-toc-list"></nav>
+      {% if settings_section == 'gates' %}
+        <div class="kv-right-tip-box">
+          <div class="kv-right-tip-head">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+            <span>Gợi ý</span>
+          </div>
+          <p>Thiết lập các cổng để phân tách làn vào/ra, phân công nhân viên trực ca và theo dõi doanh thu theo từng cổng tại bãi xe.</p>
+          <p class="kv-right-tip-sub">Chọn <strong>Tất cả các cổng</strong> ở góc trên bên phải để xem toàn bộ cổng; <strong>Cổng chính</strong> là cổng mặc định của bãi xe.</p>
+        </div>
+      {% else %}
+        <div class="kv-toc-title">Trong mục này</div>
+        <nav class="kv-toc-list" id="kv-toc-list"></nav>
+      {% endif %}
     </aside>
   </div>
 </div>
@@ -175,6 +190,174 @@
   if (editStoreBtn) {
     editStoreBtn.addEventListener('click', function () {
       openDlg(document.getElementById('edit-store-dialog'));
+    });
+  }
+
+  var gateDlg = document.getElementById('gate-dialog');
+  var gateTitle = document.getElementById('gate-dialog-title');
+  var gateIdInput = document.getElementById('gate-id');
+  var gateCentralInput = document.getElementById('gate-is-central');
+  var gateNameInput = document.getElementById('gate-name');
+  var gateLaneInput = document.getElementById('gate-lane-type');
+  var gateLocationInput = document.getElementById('gate-location');
+  var gateHoursInput = document.getElementById('gate-hours');
+  var gateStatusInput = document.getElementById('gate-status');
+  var gateNoteInput = document.getElementById('gate-note');
+  var gateVtCheckboxes = Array.prototype.slice.call(document.querySelectorAll('#gate-vt-group input[name="vehicle_type_ids"]'));
+
+  function setSelectedVehicleTypes(csv) {
+    var set = {};
+    (csv || '').split(',').forEach(function (x) {
+      var t = x.trim();
+      if (t) set[t] = true;
+    });
+    gateVtCheckboxes.forEach(function (cb) {
+      cb.checked = !!set[cb.value];
+    });
+  }
+
+  document.querySelectorAll('[data-vt-preset]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var mode = btn.dataset.vtPreset;
+      if (mode === 'all') {
+        gateVtCheckboxes.forEach(function (cb) { cb.checked = false; });
+      } else {
+        gateVtCheckboxes.forEach(function (cb) { cb.checked = cb.dataset.wheel === mode; });
+      }
+    });
+  });
+
+  var addGateBtn = document.getElementById('open-add-gate');
+  if (addGateBtn && gateDlg) {
+    addGateBtn.addEventListener('click', function () {
+      if (gateTitle) gateTitle.textContent = 'Tạo cổng';
+      if (gateIdInput) gateIdInput.value = '';
+      if (gateCentralInput) gateCentralInput.value = '0';
+      if (gateNameInput) { gateNameInput.value = ''; gateNameInput.readOnly = false; }
+      if (gateLaneInput) gateLaneInput.value = 'gate_inout';
+      if (gateLocationInput) gateLocationInput.value = '';
+      setSelectedVehicleTypes('');
+      if (gateHoursInput) gateHoursInput.value = '24/7';
+      if (gateStatusInput) { gateStatusInput.value = 'active'; gateStatusInput.disabled = false; }
+      if (gateNoteInput) gateNoteInput.value = '';
+      openDlg(gateDlg);
+    });
+  }
+
+  document.querySelectorAll('[data-edit-gate]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!gateDlg) return;
+      var isCentral = btn.dataset.central === '1';
+      if (gateTitle) gateTitle.textContent = isCentral ? 'Cập nhật Cổng chính' : 'Cập nhật cổng';
+      if (gateIdInput) gateIdInput.value = btn.dataset.id || '';
+      if (gateCentralInput) gateCentralInput.value = isCentral ? '1' : '0';
+      if (gateNameInput) { gateNameInput.value = btn.dataset.name || ''; gateNameInput.readOnly = isCentral; }
+      if (gateLaneInput) gateLaneInput.value = btn.dataset.zone_type || 'gate_inout';
+      if (gateLocationInput) gateLocationInput.value = btn.dataset.location || '';
+      setSelectedVehicleTypes(btn.dataset.vehicle_type_ids || btn.dataset.vehicle_type_id || '');
+      if (gateHoursInput) gateHoursInput.value = btn.dataset.operating_hours || '24/7';
+      if (gateStatusInput) { gateStatusInput.value = btn.dataset.status || 'active'; gateStatusInput.disabled = isCentral; }
+      if (gateNoteInput) gateNoteInput.value = btn.dataset.note || '';
+      openDlg(gateDlg);
+    });
+  });
+
+  // Inline row expansion (KiotViet #branch style)
+  var gateRows = Array.prototype.slice.call(document.querySelectorAll('.kv-gate-row'));
+  function toggleGateRow(row) {
+    var key = row.dataset.gateRow;
+    var detailRow = document.querySelector('.kv-gate-detail-row[data-gate-detail="' + key + '"]');
+    if (!detailRow) return;
+    var willOpen = detailRow.hidden;
+    document.querySelectorAll('.kv-gate-detail-row').forEach(function (dr) { dr.hidden = true; });
+    gateRows.forEach(function (r) {
+      r.classList.remove('is-expanded');
+      r.setAttribute('aria-expanded', 'false');
+    });
+    if (willOpen) {
+      detailRow.hidden = false;
+      row.classList.add('is-expanded');
+      row.setAttribute('aria-expanded', 'true');
+    }
+  }
+  gateRows.forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('a, button, input, select, form')) return;
+      toggleGateRow(row);
+    });
+    row.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleGateRow(row);
+      }
+    });
+  });
+
+  // Detail card tabs (Thông tin / Nhân viên)
+  document.querySelectorAll('.kv-gate-detail-card').forEach(function (card) {
+    var tabs = card.querySelectorAll('[data-detail-tab]');
+    var panes = card.querySelectorAll('[data-detail-pane]');
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var target = tab.dataset.detailTab;
+        tabs.forEach(function (t) {
+          var active = t === tab;
+          t.classList.toggle('active', active);
+          t.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        panes.forEach(function (p) {
+          var active = p.dataset.detailPane === target;
+          p.hidden = !active;
+          p.classList.toggle('active', active);
+        });
+      });
+    });
+  });
+
+  // Column visibility options popover
+  var colBtn = document.getElementById('kv-col-options-btn');
+  var colPop = document.getElementById('kv-col-options-popover');
+  var gatesTable = document.getElementById('kv-gates-table');
+  if (colBtn && colPop && gatesTable) {
+    var colStorageKey = 'kv_gates_visible_cols';
+    function applyColVisibility(col, visible) {
+      gatesTable.querySelectorAll('[data-col="' + col + '"]').forEach(function (cell) {
+        cell.hidden = !visible;
+      });
+    }
+    try {
+      var savedCols = JSON.parse(localStorage.getItem(colStorageKey) || 'null');
+      if (savedCols && typeof savedCols === 'object') {
+        colPop.querySelectorAll('[data-col-toggle]').forEach(function (cb) {
+          var col = cb.dataset.colToggle;
+          if (Object.prototype.hasOwnProperty.call(savedCols, col)) {
+            cb.checked = !!savedCols[col];
+            applyColVisibility(col, cb.checked);
+          }
+        });
+      }
+    } catch (err) {}
+    colPop.querySelectorAll('[data-col-toggle]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        applyColVisibility(cb.dataset.colToggle, cb.checked);
+        var state = {};
+        colPop.querySelectorAll('[data-col-toggle]').forEach(function (item) {
+          state[item.dataset.colToggle] = item.checked;
+        });
+        try { localStorage.setItem(colStorageKey, JSON.stringify(state)); } catch (err) {}
+      });
+    });
+    colBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var nextHidden = !colPop.hidden;
+      colPop.hidden = nextHidden;
+      colBtn.setAttribute('aria-expanded', nextHidden ? 'false' : 'true');
+    });
+    document.addEventListener('click', function (e) {
+      if (!colPop.hidden && !colPop.contains(e.target) && e.target !== colBtn) {
+        colPop.hidden = true;
+        colBtn.setAttribute('aria-expanded', 'false');
+      }
     });
   }
 })();

@@ -118,13 +118,27 @@
     <div class="payment-strip">
       <div>
         <span>Số tiền cần thu</span>
-        <strong>{{ "{:,}".format(fee_preview.fee).replace(",", ".") }} VNĐ</strong>
+        <strong id="exit-fee-strong" data-base-fee="{{ fee_preview.fee }}">{{ "{:,}".format(fee_preview.fee).replace(",", ".") }} VNĐ</strong>
         <small>{{ fee_preview.note }}</small>
       </div>
       <span class="badge badge-green"><span></span>Sẵn sàng thu phí</span>
     </div>
     {% if fee_preview.fee > 0 %}
-    <input type="hidden" id="exit-payment-method" name="payment_method" value="{{ request.form.get('payment_method', 'cash') }}">
+    <div class="form-grid" style="margin-top:8px;grid-template-columns:1fr 1fr;gap:8px;">
+      <div class="form-field">
+        <label for="exit-payment-method">Hình thức thanh toán</label>
+        <select id="exit-payment-method" name="payment_method" data-default-payment-select>
+          <option value="cash" {% if request.form.get('payment_method', 'cash') == 'cash' %}selected{% endif %}>Tiền mặt</option>
+          <option value="transfer" {% if request.form.get('payment_method') == 'transfer' %}selected{% endif %}>Chuyển khoản</option>
+          <option value="card" {% if request.form.get('payment_method') == 'card' %}selected{% endif %}>Thẻ</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label for="exit-discount-input">Giảm giá (<span data-discount-unit-label>VND</span>)</label>
+        <input type="number" id="exit-discount-input" name="discount_value" min="0" value="0" placeholder="0" data-exit-discount-input>
+        <input type="hidden" name="discount_unit" value="vnd" data-exit-discount-unit>
+      </div>
+    </div>
     {% endif %}
 
   {% else %}

@@ -10,396 +10,642 @@
 {% block content %}
 {% set occ_rate = ((counts.occupied * 100 / counts.total)|round|int) if counts.total else 0 %}
 
-<div class="page-heading">
-  <div>
-    <h1>Tổng quan bãi xe</h1>
-    <p>Theo dõi công suất, lưu lượng xe và doanh thu thực tế ({{ range_label }})</p>
-  </div>
-  <div class="heading-actions">
-    <div class="segmented">
-      <a href="{{ url_for('index', range='today') }}" class="{% if range_key == 'today' %}selected{% endif %}">Hôm nay</a>
-      <a href="{{ url_for('index', range='7days') }}" class="{% if range_key == '7days' %}selected{% endif %}">7 ngày</a>
-      <a href="{{ url_for('index', range='30days') }}" class="{% if range_key == '30days' %}selected{% endif %}">30 ngày</a>
-    </div>
-    <form method="get" action="{{ url_for('index') }}" class="dashboard-filter-form">
-      <input type="hidden" name="range" value="custom">
-      <label class="date-control">
-        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
-        <input type="date" name="from" value="{{ date_from }}" max="{{ today_iso }}" onchange="this.form.to.value=this.value; this.form.submit();" aria-label="Chọn ngày xem báo cáo">
-        <input type="hidden" name="to" value="{{ date_to }}">
-      </label>
-    </form>
-  </div>
-</div>
-
-<section class="overview-banner">
-  <div>
-    <span class="banner-eyebrow">
-      <span class="live-dot"></span>
-      TRUNG TÂM ĐIỀU HÀNH
-    </span>
-    <h2>Mọi hoạt động, trong tầm kiểm soát.</h2>
-    <p>
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
-      Bãi đỗ xe Trung tâm Smart Parking
-      <span>·</span>
-      <span>Hệ thống hoạt động ổn định</span>
-      <span>·</span>
-      <span>{{ counts.available }} chỗ trống sẵn sàng</span>
-    </p>
-  </div>
-  <div class="banner-right">
-    <div>
-      <span class="capacity-number">
-        {{ occ_rate }}<small>%</small>
-      </span>
-      <span>Công suất hiện tại</span>
-    </div>
-    <a href="{{ url_for('gate') }}" class="btn btn-primary">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
-      Giám sát trực tiếp
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-    </a>
-  </div>
-  <div class="banner-decoration" aria-hidden="true">
-    <svg xmlns="http://www.w3.org/2000/svg" width="170" height="170" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
-  </div>
-</section>
-
-<div class="stats-grid six">
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Tổng số chỗ đỗ</span>
-      <span class="stat-icon blue">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
-      </span>
-    </div>
-    <strong>{{ counts.total }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      {{ area_stats|length }} khu vực đang vận hành
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Xe đang trong bãi</span>
-      <span class="stat-icon purple">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
-      </span>
-    </div>
-    <strong>{{ counts.occupied }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      {{ occ_rate }}% công suất hiện tại
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Chỗ trống</span>
-      <span class="stat-icon green">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
-      </span>
-    </div>
-    <strong>{{ counts.available }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Sẵn sàng đón xe · Bảo trì {{ counts.maintenance }} ô
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Lượt xe vào</span>
-      <span class="stat-icon blue">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      </span>
-    </div>
-    <strong>{{ stats.period_entries }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Lượt xe vào ({{ range_label }})
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Lượt xe ra</span>
-      <span class="stat-icon amber">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10"/><path d="M17 7v10H7"/></svg>
-      </span>
-    </div>
-    <strong>{{ stats.period_exits }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Tổng lượt: {{ stats.period_records }}
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Doanh thu</span>
-      <span class="stat-icon green">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
-      </span>
-    </div>
-    <strong>{{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Vé lượt: {{ "{:,}".format(stats.period_parking_revenue).replace(",", ".") }} ₫ · Vé tháng: {{ "{:,}".format(stats.period_month_revenue).replace(",", ".") }} ₫
-    </div>
-  </div>
-</div>
-
-<!-- BIỂU ĐỒ TRỰC QUAN -->
-<div class="dashboard-charts">
-  <section class="panel chart-card">
-    <div class="panel-heading">
-      <div>
-        <h2>Lưu lượng xe vào / ra</h2>
-        <p>Thống kê lượt xe theo kỳ đang chọn ({{ range_label }})</p>
-      </div>
-      <div class="chart-legend">
-        <span><i class="dot blue"></i>Xe vào ({{ stats.period_entries }})</span>
-        <span><i class="dot green"></i>Xe ra ({{ stats.period_exits }})</span>
-      </div>
-    </div>
-    {% set max_flow = [stats.period_entries, stats.period_exits, counts.occupied, 10]|max %}
-    {% set y_in = (190 - (stats.period_entries * 140 / max_flow))|round|int %}
-    {% set y_out = (190 - (stats.period_exits * 140 / max_flow))|round|int %}
-    {% set y_occ = (190 - (counts.occupied * 140 / max_flow))|round|int %}
-    <div style="width:100%;height:260px;padding:6px 4px 0;">
-      <svg viewBox="0 0 640 240" style="width:100%;height:100%;overflow:visible;">
-        <defs>
-          <linearGradient id="inFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stop-color="#0875f9" stop-opacity="0.24" />
-            <stop offset="95%" stop-color="#0875f9" stop-opacity="0.01" />
-          </linearGradient>
-          <linearGradient id="outFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stop-color="#1ca7ec" stop-opacity="0.2" />
-            <stop offset="95%" stop-color="#1ca7ec" stop-opacity="0.01" />
-          </linearGradient>
-        </defs>
-        <line x1="44" y1="40" x2="615" y2="40" stroke="#edf2f9" stroke-dasharray="3 3"/>
-        <line x1="44" y1="90" x2="615" y2="90" stroke="#edf2f9" stroke-dasharray="3 3"/>
-        <line x1="44" y1="140" x2="615" y2="140" stroke="#edf2f9" stroke-dasharray="3 3"/>
-        <line x1="44" y1="190" x2="615" y2="190" stroke="#edf2f9"/>
-        <text x="34" y="44" text-anchor="end" fill="#90a2ba" font-size="11">{{ max_flow }}</text>
-        <text x="34" y="94" text-anchor="end" fill="#90a2ba" font-size="11">{{ (max_flow * 0.66)|round|int }}</text>
-        <text x="34" y="144" text-anchor="end" fill="#90a2ba" font-size="11">{{ (max_flow * 0.33)|round|int }}</text>
-        <text x="34" y="194" text-anchor="end" fill="#90a2ba" font-size="11">0</text>
-
-        <path d="M 55 182 C 150 {{ (y_in + 185)//2 }}, 240 {{ y_occ }}, 335 {{ y_in }} C 430 {{ (y_in + y_occ)//2 }}, 520 {{ y_in }}, 605 {{ y_in }} L 605 190 L 55 190 Z" fill="url(#inFill)"/>
-        <path d="M 55 182 C 150 {{ (y_in + 185)//2 }}, 240 {{ y_occ }}, 335 {{ y_in }} C 430 {{ (y_in + y_occ)//2 }}, 520 {{ y_in }}, 605 {{ y_in }}" fill="none" stroke="#0875f9" stroke-width="2.5"/>
-
-        <path d="M 55 186 C 150 {{ (y_out + 188)//2 }}, 240 {{ (y_out + 180)//2 }}, 335 {{ y_out }} C 430 {{ (y_out + 175)//2 }}, 520 {{ y_out }}, 605 {{ y_out }} L 605 190 L 55 190 Z" fill="url(#outFill)"/>
-        <path d="M 55 186 C 150 {{ (y_out + 188)//2 }}, 240 {{ (y_out + 180)//2 }}, 335 {{ y_out }} C 430 {{ (y_out + 175)//2 }}, 520 {{ y_out }}, 605 {{ y_out }}" fill="none" stroke="#1ca7ec" stroke-width="2.5"/>
-
-        <circle cx="335" cy="{{ y_in }}" r="4.5" fill="#0875f9"/>
-        <circle cx="605" cy="{{ y_in }}" r="4.5" fill="#0875f9"/>
-        <circle cx="335" cy="{{ y_out }}" r="4.5" fill="#1ca7ec"/>
-        <circle cx="605" cy="{{ y_out }}" r="4.5" fill="#1ca7ec"/>
-
-        <text x="65" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">06:00</text>
-        <text x="195" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">09:00</text>
-        <text x="335" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">12:00</text>
-        <text x="470" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">17:00</text>
-        <text x="595" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">Hiện tại</text>
-      </svg>
-    </div>
-  </section>
-
-  <section class="panel chart-card">
-    <div class="panel-heading">
-      <div>
-        <h2>Doanh thu ({{ range_label }})</h2>
-        <p>Đơn vị: VNĐ · Tổng kỳ: {{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫</p>
-      </div>
-    </div>
-    {% set max_rev = [stats.period_parking_revenue, stats.period_month_revenue, stats.period_revenue, 10000]|max %}
-    {% set h_park = ((stats.period_parking_revenue * 135 / max_rev)|round|int) if stats.period_parking_revenue else 8 %}
-    {% set h_month = ((stats.period_month_revenue * 135 / max_rev)|round|int) if stats.period_month_revenue else 8 %}
-    {% set h_tot = ((stats.period_revenue * 135 / max_rev)|round|int) if stats.period_revenue else 8 %}
-    <div style="width:100%;height:260px;padding:6px 4px 0;">
-      <svg viewBox="0 0 420 240" style="width:100%;height:100%;overflow:visible;">
-        <line x1="40" y1="45" x2="395" y2="45" stroke="#edf2f9" stroke-dasharray="3 3"/>
-        <line x1="40" y1="95" x2="395" y2="95" stroke="#edf2f9" stroke-dasharray="3 3"/>
-        <line x1="40" y1="145" x2="395" y2="145" stroke="#edf2f9" stroke-dasharray="3 3"/>
-        <line x1="40" y1="190" x2="395" y2="190" stroke="#edf2f9"/>
-
-        <rect x="75" y="{{ 190 - h_park }}" width="52" height="{{ h_park }}" rx="7" fill="#0875f9"/>
-        <text x="101" y="{{ 182 - h_park }}" text-anchor="middle" fill="#10244b" font-size="11" font-weight="600">{{ "{:,}".format(stats.period_parking_revenue).replace(",", ".") }} ₫</text>
-        <text x="101" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">Vé lượt</text>
-
-        <rect x="190" y="{{ 190 - h_month }}" width="52" height="{{ h_month }}" rx="7" fill="#1ca7ec"/>
-        <text x="216" y="{{ 182 - h_month }}" text-anchor="middle" fill="#10244b" font-size="11" font-weight="600">{{ "{:,}".format(stats.period_month_revenue).replace(",", ".") }} ₫</text>
-        <text x="216" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">Vé tháng</text>
-
-        <rect x="305" y="{{ 190 - h_tot }}" width="52" height="{{ h_tot }}" rx="7" fill="#2cad78"/>
-        <text x="331" y="{{ 182 - h_tot }}" text-anchor="middle" fill="#10244b" font-size="11" font-weight="600">{{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫</text>
-        <text x="331" y="214" text-anchor="middle" fill="#90a2ba" font-size="11">Tổng kỳ</text>
-      </svg>
-    </div>
-  </section>
-</div>
-
-<div class="dashboard-bottom">
-  <section class="panel chart-card">
-    <div class="panel-heading">
-      <div>
-        <h2>Tình trạng khu vực</h2>
-        <p>Cập nhật công suất theo từng phân khu</p>
-      </div>
-      <a href="{{ url_for('parking') }}" class="btn btn-outline">Sơ đồ bãi xe</a>
-    </div>
-
-    <div class="area-list">
-      {% if area_stats %}
-        {% for area_name, area in area_stats.items() %}
-          {% set pct = (area.percent|round|int) if area.percent is defined else 0 %}
-          <div class="area-row">
-            <span class="area-icon area-{{ loop.index0 % 3 }}">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
-            </span>
-            <div>
-              <div>
-                <b>Khu {{ area_name }}</b>
-                <span><strong>{{ area.occupied }}</strong> / {{ area.total }} chỗ</span>
-              </div>
-              <div class="progress-track">
-                <div style="width: {{ pct }}%; background: {{ '#e89d29' if pct > 80 else '#0875f9' }};"></div>
-              </div>
-              <small>{{ area.available }} chỗ trống{% if area.maintenance %} · {{ area.maintenance }} bảo trì{% endif %}</small>
+<div class="kv-dash-sheet">
+  <div class="kv-dash-grid">
+    <!-- CỘT CHÍNH BÊN TRÁI -->
+    <div class="kv-dash-main">
+      <!-- Header -->
+      <div class="kv-dash-header">
+        <div class="kv-dash-title-wrap">
+          <h1>Tổng quan bãi xe</h1>
+        </div>
+        <div class="heading-actions">
+          <div class="kv-gate-filter" id="kv-dash-gate-filter">
+            <div class="kv-gate-filter-control" id="kv-dash-gate-control">
+              <input type="text"
+                     id="kv-dash-gate-input"
+                     role="combobox"
+                     aria-expanded="false"
+                     aria-controls="kv-dash-gate-listbox"
+                     autocomplete="off"
+                     value="{{ gate_filter_label }}"
+                     placeholder="Tất cả cổng"
+                     aria-label="Lọc theo cổng">
+              <button type="button" class="kv-gate-filter-chevron" id="kv-dash-gate-toggle" aria-label="Mở danh sách cổng" tabindex="-1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
             </div>
-            <b>{{ pct }}%</b>
+            <div class="kv-gate-filter-menu" id="kv-dash-gate-menu" role="menu" hidden>
+              <div class="kv-gate-filter-list" id="kv-dash-gate-listbox" role="listbox" aria-multiselectable="true">
+                {% for gname in gate_options %}
+                {% set is_sel = gname in selected_gates %}
+                <button type="button"
+                        class="kv-gate-filter-option{% if is_sel %} is-selected{% endif %}"
+                        role="option"
+                        aria-selected="{{ 'true' if is_sel else 'false' }}"
+                        data-gate-option="{{ gname }}">
+                  <span>{{ gname }}</span>
+                  <svg class="kv-gate-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                {% endfor %}
+                <div class="kv-gate-filter-empty" id="kv-dash-gate-empty" hidden>Không tìm thấy cổng phù hợp</div>
+              </div>
+              <div class="kv-gate-filter-footer">
+                <button type="button" class="kv-gate-reset-btn" id="kv-dash-gate-reset">Đặt lại</button>
+              </div>
+            </div>
           </div>
-        {% endfor %}
-      {% else %}
-        <div class="empty-inline">Chưa có khu vực đỗ xe nào được cấu hình.</div>
-      {% endif %}
-    </div>
-  </section>
 
-  <section class="panel chart-card">
-    <div class="panel-heading">
-      <div>
-        <h2>Cơ cấu công suất bãi xe</h2>
-        <p>Tỷ lệ lấp đầy vị trí đỗ hiện tại</p>
+          <div class="segmented" id="kv-dash-range-tabs">
+            <a href="{{ url_for('index', range='today') }}" data-range="today" class="{% if range_key == 'today' %}selected{% endif %}">Hôm nay</a>
+            <a href="{{ url_for('index', range='7days') }}" data-range="7days" class="{% if range_key == '7days' %}selected{% endif %}">7 ngày</a>
+            <a href="{{ url_for('index', range='30days') }}" data-range="30days" class="{% if range_key == '30days' %}selected{% endif %}">30 ngày</a>
+          </div>
+          <form method="get" action="{{ url_for('index') }}" class="dashboard-filter-form" id="kv-dash-date-form">
+            <input type="hidden" name="range" value="custom">
+            <input type="hidden" name="gates" id="kv-dash-gates-hidden" value="{{ 'all' if all_gates_selected else (selected_gates|join(',') if selected_gates else 'none') }}">
+            <label class="date-control">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
+              <input type="date" name="from" value="{{ date_from }}" max="{{ today_iso }}" onchange="this.form.to.value=this.value; this.form.submit();" aria-label="Chọn ngày xem báo cáo">
+              <input type="hidden" name="to" value="{{ date_to }}">
+            </label>
+          </form>
+        </div>
+      </div>
+
+      <!-- Hàng 1: 3 thẻ KPI tổng quan -->
+      <div class="kv-kpi-row">
+        <div class="kv-kpi-card is-blue">
+          <div class="kv-kpi-head">
+            <span>Doanh thu (<span data-dash="range_label">{{ range_label }}</span>)</span>
+            <small>VNĐ</small>
+          </div>
+          <div class="kv-kpi-hero">
+            <strong data-dash="period_revenue">{{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫</strong>
+            <span><span data-dash="period_exits">{{ stats.period_exits }}</span> lượt xe đã thanh toán</span>
+          </div>
+          <div class="kv-kpi-foot">
+            <div>
+              <span>Vé lượt</span>
+              <b data-dash="period_parking_revenue">{{ "{:,}".format(stats.period_parking_revenue).replace(",", ".") }} ₫</b>
+            </div>
+            <div>
+              <span>Vé tháng</span>
+              <b data-dash="period_month_revenue">{{ "{:,}".format(stats.period_month_revenue).replace(",", ".") }} ₫</b>
+            </div>
+          </div>
+        </div>
+
+        <div class="kv-kpi-card is-green">
+          <div class="kv-kpi-head">
+            <span>Lưu lượng xe (<span data-dash="range_label">{{ range_label }}</span>)</span>
+            <small>Lượt</small>
+          </div>
+          <div class="kv-kpi-hero">
+            <strong><span data-dash="period_records">{{ stats.period_records }}</span> lượt</strong>
+            <span><span data-dash="period_entries">{{ stats.period_entries }}</span> vào · <span data-dash="period_exits">{{ stats.period_exits }}</span> ra</span>
+          </div>
+          <div class="kv-kpi-foot">
+            <div>
+              <span>Xe vào bãi</span>
+              <b data-dash="period_entries">{{ stats.period_entries }}</b>
+            </div>
+            <div>
+              <span>Xe ra bãi</span>
+              <b data-dash="period_exits">{{ stats.period_exits }}</b>
+            </div>
+          </div>
+        </div>
+
+        <div class="kv-kpi-card is-amber">
+          <div class="kv-kpi-head">
+            <span>Tỷ lệ lấp đầy bãi xe</span>
+            <small>Hiện tại</small>
+          </div>
+          <div class="kv-kpi-hero">
+            <strong><span data-dash="occ_rate">{{ occ_rate }}</span>%</strong>
+            <span><span data-dash="counts_occupied">{{ counts.occupied }}</span>/<span data-dash="counts_total">{{ counts.total }}</span> vị trí đang có xe</span>
+          </div>
+          <div class="kv-kpi-foot">
+            <div>
+              <span>Chỗ còn trống</span>
+              <b><span data-dash="counts_available">{{ counts.available }}</span> ô</b>
+            </div>
+            <div>
+              <span>Đang bảo trì</span>
+              <b><span data-dash="counts_maintenance">{{ counts.maintenance }}</span> ô</b>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hàng 2: 2 biểu đồ Doanh thu & Lưu lượng -->
+      <div class="kv-dash-two-col">
+        <section class="kv-card">
+          <div class="kv-card-head">
+            <div>
+              <h2>Doanh thu theo nguồn</h2>
+              <p>Phân bổ vé lượt và vé tháng ({{ range_label }})</p>
+            </div>
+          </div>
+          <div class="kv-card-metric">
+            <strong data-dash="period_revenue">{{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫</strong>
+            <span>(<span data-dash="period_exits">{{ stats.period_exits }}</span> lượt ra)</span>
+          </div>
+          {% set max_rev = [stats.period_parking_revenue, stats.period_month_revenue, stats.period_revenue, 10000]|max %}
+          {% set h_park = ((stats.period_parking_revenue * 130 / max_rev)|round|int) if stats.period_parking_revenue else 8 %}
+          {% set h_month = ((stats.period_month_revenue * 130 / max_rev)|round|int) if stats.period_month_revenue else 8 %}
+          {% set h_tot = ((stats.period_revenue * 130 / max_rev)|round|int) if stats.period_revenue else 8 %}
+          <div style="width:100%;height:220px;">
+            <svg viewBox="0 0 420 220" style="width:100%;height:100%;overflow:visible;">
+              <line x1="30" y1="40" x2="395" y2="40" stroke="#edf2f9" stroke-dasharray="3 3"/>
+              <line x1="30" y1="90" x2="395" y2="90" stroke="#edf2f9" stroke-dasharray="3 3"/>
+              <line x1="30" y1="140" x2="395" y2="140" stroke="#edf2f9" stroke-dasharray="3 3"/>
+              <line x1="30" y1="180" x2="395" y2="180" stroke="#edf2f9"/>
+
+              <rect id="kv-bar-park" x="65" y="{{ 180 - h_park }}" width="52" height="{{ h_park }}" rx="6" fill="#0070f4"/>
+              <text id="kv-txt-park" x="91" y="{{ 172 - h_park }}" text-anchor="middle" fill="#15171a" font-size="11" font-weight="600">{{ "{:,}".format(stats.period_parking_revenue).replace(",", ".") }} ₫</text>
+              <text x="91" y="202" text-anchor="middle" fill="#7b8594" font-size="11">Vé lượt</text>
+
+              <rect id="kv-bar-month" x="184" y="{{ 180 - h_month }}" width="52" height="{{ h_month }}" rx="6" fill="#1ca7ec"/>
+              <text id="kv-txt-month" x="210" y="{{ 172 - h_month }}" text-anchor="middle" fill="#15171a" font-size="11" font-weight="600">{{ "{:,}".format(stats.period_month_revenue).replace(",", ".") }} ₫</text>
+              <text x="210" y="202" text-anchor="middle" fill="#7b8594" font-size="11">Vé tháng</text>
+
+              <rect id="kv-bar-total" x="303" y="{{ 180 - h_tot }}" width="52" height="{{ h_tot }}" rx="6" fill="#2cad78"/>
+              <text id="kv-txt-total" x="329" y="{{ 172 - h_tot }}" text-anchor="middle" fill="#15171a" font-size="11" font-weight="600">{{ "{:,}".format(stats.period_revenue).replace(",", ".") }} ₫</text>
+              <text x="329" y="202" text-anchor="middle" fill="#7b8594" font-size="11">Tổng kỳ</text>
+            </svg>
+          </div>
+        </section>
+
+        <section class="kv-card">
+          <div class="kv-card-head">
+            <div>
+              <h2>Lưu lượng xe vào / ra</h2>
+              <p>Biểu đồ xu hướng theo kỳ (<span data-dash="range_label">{{ range_label }}</span>)</p>
+            </div>
+            <div class="kv-chart-legend">
+              <span><i style="background:#0070f4;"></i>Vào</span>
+              <span><i style="background:#1ca7ec;"></i>Ra</span>
+            </div>
+          </div>
+          <div class="kv-card-metric">
+            <strong><span data-dash="period_records">{{ stats.period_records }}</span> lượt xe</strong>
+            <span>(<span data-dash="period_entries">{{ stats.period_entries }}</span> vào · <span data-dash="period_exits">{{ stats.period_exits }}</span> ra)</span>
+          </div>
+          {% set max_flow = [stats.period_entries, stats.period_exits, counts.occupied, 10]|max %}
+          {% set y_in = (180 - (stats.period_entries * 130 / max_flow))|round|int %}
+          {% set y_out = (180 - (stats.period_exits * 130 / max_flow))|round|int %}
+          {% set y_occ = (180 - (counts.occupied * 130 / max_flow))|round|int %}
+          <div style="width:100%;height:220px;">
+            <svg viewBox="0 0 540 220" style="width:100%;height:100%;overflow:visible;">
+              <defs>
+                <linearGradient id="inFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stop-color="#0070f4" stop-opacity="0.22" />
+                  <stop offset="95%" stop-color="#0070f4" stop-opacity="0.01" />
+                </linearGradient>
+                <linearGradient id="outFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stop-color="#1ca7ec" stop-opacity="0.18" />
+                  <stop offset="95%" stop-color="#1ca7ec" stop-opacity="0.01" />
+                </linearGradient>
+              </defs>
+              <line x1="36" y1="40" x2="520" y2="40" stroke="#edf2f9" stroke-dasharray="3 3"/>
+              <line x1="36" y1="86" x2="520" y2="86" stroke="#edf2f9" stroke-dasharray="3 3"/>
+              <line x1="36" y1="133" x2="520" y2="133" stroke="#edf2f9" stroke-dasharray="3 3"/>
+              <line x1="36" y1="180" x2="520" y2="180" stroke="#edf2f9"/>
+              <text id="kv-flow-y3" x="28" y="44" text-anchor="end" fill="#90a2ba" font-size="11">{{ max_flow }}</text>
+              <text id="kv-flow-y2" x="28" y="90" text-anchor="end" fill="#90a2ba" font-size="11">{{ (max_flow * 0.66)|round|int }}</text>
+              <text id="kv-flow-y1" x="28" y="137" text-anchor="end" fill="#90a2ba" font-size="11">{{ (max_flow * 0.33)|round|int }}</text>
+              <text x="28" y="184" text-anchor="end" fill="#90a2ba" font-size="11">0</text>
+
+              <path id="kv-flow-in-area" d="M 48 172 C 140 {{ (y_in + 175)//2 }}, 220 {{ y_occ }}, 290 {{ y_in }} C 370 {{ (y_in + y_occ)//2 }}, 440 {{ y_in }}, 510 {{ y_in }} L 510 180 L 48 180 Z" fill="url(#inFill)"/>
+              <path id="kv-flow-in-line" d="M 48 172 C 140 {{ (y_in + 175)//2 }}, 220 {{ y_occ }}, 290 {{ y_in }} C 370 {{ (y_in + y_occ)//2 }}, 440 {{ y_in }}, 510 {{ y_in }}" fill="none" stroke="#0070f4" stroke-width="2.5"/>
+
+              <path id="kv-flow-out-area" d="M 48 176 C 140 {{ (y_out + 178)//2 }}, 220 {{ (y_out + 170)//2 }}, 290 {{ y_out }} C 370 {{ (y_out + 165)//2 }}, 440 {{ y_out }}, 510 {{ y_out }} L 510 180 L 48 180 Z" fill="url(#outFill)"/>
+              <path id="kv-flow-out-line" d="M 48 176 C 140 {{ (y_out + 178)//2 }}, 220 {{ (y_out + 170)//2 }}, 290 {{ y_out }} C 370 {{ (y_out + 165)//2 }}, 440 {{ y_out }}, 510 {{ y_out }}" fill="none" stroke="#1ca7ec" stroke-width="2.5"/>
+
+              <circle id="kv-flow-in-c1" cx="290" cy="{{ y_in }}" r="4" fill="#0070f4"/>
+              <circle id="kv-flow-in-c2" cx="510" cy="{{ y_in }}" r="4" fill="#0070f4"/>
+              <circle id="kv-flow-out-c1" cx="290" cy="{{ y_out }}" r="4" fill="#1ca7ec"/>
+              <circle id="kv-flow-out-c2" cx="510" cy="{{ y_out }}" r="4" fill="#1ca7ec"/>
+
+              <text x="58" y="202" text-anchor="middle" fill="#90a2ba" font-size="11">06:00</text>
+              <text x="172" y="202" text-anchor="middle" fill="#90a2ba" font-size="11">09:00</text>
+              <text x="290" y="202" text-anchor="middle" fill="#90a2ba" font-size="11">12:00</text>
+              <text x="405" y="202" text-anchor="middle" fill="#90a2ba" font-size="11">17:00</text>
+              <text x="502" y="202" text-anchor="middle" fill="#90a2ba" font-size="11">Hiện tại</text>
+            </svg>
+          </div>
+        </section>
+      </div>
+
+      <!-- Hàng 3: Tình trạng khu vực & Cơ cấu công suất -->
+      <div class="kv-dash-two-col">
+        <section class="kv-card">
+          <div class="kv-card-head">
+            <div>
+              <h2>Tình trạng phân khu</h2>
+              <p>Công suất theo từng khu vực đỗ xe</p>
+            </div>
+            <a href="{{ url_for('parking') }}" class="btn btn-outline btn-sm">Sơ đồ bãi xe</a>
+          </div>
+          <div class="area-list" id="kv-dash-area-list">
+            {% if area_stats %}
+              {% for area_name, area in area_stats.items() %}
+                {% set pct = (area.percent|round|int) if area.percent is defined else 0 %}
+                <div class="area-row">
+                  <span class="area-icon area-{{ loop.index0 % 3 }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+                  </span>
+                  <div>
+                    <div>
+                      <b>Khu {{ area_name }}</b>
+                      <span><strong>{{ area.occupied }}</strong> / {{ area.total }} chỗ</span>
+                    </div>
+                    <div class="progress-track">
+                      <div style="width: {{ pct }}%; background: {{ '#e89d29' if pct > 80 else '#0070f4' }};"></div>
+                    </div>
+                    <small>{{ area.available }} chỗ trống{% if area.maintenance %} · {{ area.maintenance }} bảo trì{% endif %}</small>
+                  </div>
+                  <b>{{ pct }}%</b>
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="empty-inline">Chưa có khu vực đỗ xe nào được cấu hình.</div>
+            {% endif %}
+          </div>
+        </section>
+
+        <section class="kv-card">
+          <div class="kv-card-head">
+            <div>
+              <h2>Cơ cấu công suất bãi xe</h2>
+              <p>Tỷ lệ lấp đầy vị trí đỗ hiện tại</p>
+            </div>
+          </div>
+          {% set total_slots = counts.total if counts.total > 0 else 1 %}
+          {% set p_occ = ((counts.occupied * 100 / total_slots)|round|int) %}
+          {% set p_avail = ((counts.available * 100 / total_slots)|round|int) %}
+          {% set p_maint = (100 - p_occ - p_avail) if (counts.maintenance > 0) else 0 %}
+          <div class="donut-wrap">
+            <div class="donut-chart" style="display:flex;align-items:center;justify-content:center;">
+              <svg viewBox="0 0 200 200" width="180" height="180">
+                <circle cx="100" cy="100" r="68" fill="none" stroke="#edf2f9" stroke-width="20"/>
+                <circle id="kv-donut-avail" cx="100" cy="100" r="68" fill="none" stroke="#2cad78" stroke-width="20"
+                        stroke-dasharray="{{ (p_avail * 4.27)|round(1) }} 427.2"
+                        stroke-dashoffset="0"
+                        transform="rotate(-90 100 100)"/>
+                <circle id="kv-donut-occ" cx="100" cy="100" r="68" fill="none" stroke="#0070f4" stroke-width="20"
+                        stroke-dasharray="{{ (p_occ * 4.27)|round(1) }} 427.2"
+                        stroke-dashoffset="-{{ (p_avail * 4.27)|round(1) }}"
+                        transform="rotate(-90 100 100)"/>
+                <circle id="kv-donut-maint" cx="100" cy="100" r="68" fill="none" stroke="#e89d29" stroke-width="20"
+                        stroke-dasharray="{{ (p_maint * 4.27)|round(1) }} 427.2"
+                        stroke-dashoffset="-{{ ((p_avail + p_occ) * 4.27)|round(1) }}"
+                        transform="rotate(-90 100 100)"
+                        {% if counts.maintenance == 0 %}hidden{% endif %}/>
+              </svg>
+              <div class="donut-center">
+                <strong data-dash="counts_total">{{ counts.total }}</strong>
+                <span>Tổng chỗ</span>
+              </div>
+            </div>
+            <div class="donut-legend">
+              <div>
+                <span><i style="background: #0070f4;"></i>Đang có xe (<span data-dash="counts_occupied">{{ counts.occupied }}</span>)</span>
+                <b><span data-dash="p_occ">{{ p_occ }}</span>%</b>
+              </div>
+              <div>
+                <span><i style="background: #2cad78;"></i>Chỗ còn trống (<span data-dash="counts_available">{{ counts.available }}</span>)</span>
+                <b><span data-dash="p_avail">{{ p_avail }}</span>%</b>
+              </div>
+              <div>
+                <span><i style="background: #e89d29;"></i>Đang bảo trì (<span data-dash="counts_maintenance">{{ counts.maintenance }}</span>)</span>
+                <b><span data-dash="p_maint">{{ p_maint }}</span>%</b>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
-    {% set total_slots = counts.total if counts.total > 0 else 1 %}
-    {% set p_occ = ((counts.occupied * 100 / total_slots)|round|int) %}
-    {% set p_avail = ((counts.available * 100 / total_slots)|round|int) %}
-    {% set p_maint = (100 - p_occ - p_avail) if (counts.maintenance > 0) else 0 %}
-    <div class="donut-wrap">
-      <div class="donut-chart" style="display:flex;align-items:center;justify-content:center;">
-        <svg viewBox="0 0 200 200" width="200" height="200">
-          <circle cx="100" cy="100" r="68" fill="none" stroke="#edf2f9" stroke-width="20"/>
-          <circle cx="100" cy="100" r="68" fill="none" stroke="#2cad78" stroke-width="20"
-                  stroke-dasharray="{{ (p_avail * 4.27)|round(1) }} 427.2"
-                  stroke-dashoffset="0"
-                  transform="rotate(-90 100 100)"/>
-          <circle cx="100" cy="100" r="68" fill="none" stroke="#0875f9" stroke-width="20"
-                  stroke-dasharray="{{ (p_occ * 4.27)|round(1) }} 427.2"
-                  stroke-dashoffset="-{{ (p_avail * 4.27)|round(1) }}"
-                  transform="rotate(-90 100 100)"/>
-          {% if counts.maintenance > 0 %}
-          <circle cx="100" cy="100" r="68" fill="none" stroke="#e89d29" stroke-width="20"
-                  stroke-dasharray="{{ (p_maint * 4.27)|round(1) }} 427.2"
-                  stroke-dashoffset="-{{ ((p_avail + p_occ) * 4.27)|round(1) }}"
-                  transform="rotate(-90 100 100)"/>
+
+    <!-- SIDEBAR PHẢI: HOẠT ĐỘNG GẦN ĐÂY -->
+    <aside class="kv-dash-aside" aria-label="Hoạt động gần đây">
+      <section class="kv-feed-card">
+        <div class="kv-feed-head">
+          <h2>Hoạt động gần đây</h2>
+          <a href="{{ url_for('history') }}">Xem tất cả →</a>
+        </div>
+        <div class="kv-feed-list" id="kv-dash-feed-list">
+          {% if recent_records %}
+            {% for r in recent_records %}
+            {% set is_out = (r.status == 'OUT') %}
+            <div class="kv-feed-item">
+              <span class="kv-feed-dot {{ 'is-out' if is_out else 'is-in' }}">
+                {% if is_out %}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10"/><path d="M17 7v10H7"/></svg>
+                {% else %}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>
+                {% endif %}
+              </span>
+              <div class="kv-feed-body">
+                <div>
+                  Xe <strong>{{ r.plate_number }}</strong>
+                  {% if is_out %}
+                    đã ra bãi · <strong>{{ "{:,}".format(r.fee or 0).replace(",", ".") }} ₫</strong>
+                  {% else %}
+                    vào ô <strong>{{ r.slot_name or '—' }}</strong>
+                  {% endif %}
+                </div>
+                <div class="kv-feed-meta">
+                  <span>{{ (r.exit_gate if is_out else r.entry_gate) or 'Trung tâm' }}</span>
+                  <span>·</span>
+                  <span>{{ (r.exit_time if is_out else r.entry_time) or '—' }}</span>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="empty-inline">Chưa có hoạt động nào.</div>
           {% endif %}
-        </svg>
-        <div class="donut-center">
-          <strong>{{ counts.total }}</strong>
-          <span>Tổng chỗ</span>
         </div>
-      </div>
-      <div class="donut-legend">
-        <div>
-          <span><i style="background: #0875f9;"></i>Đang có xe ({{ counts.occupied }})</span>
-          <b>{{ p_occ }}%</b>
-        </div>
-        <div>
-          <span><i style="background: #2cad78;"></i>Chỗ còn trống ({{ counts.available }})</span>
-          <b>{{ p_avail }}%</b>
-        </div>
-        <div>
-          <span><i style="background: #e89d29;"></i>Đang bảo trì ({{ counts.maintenance }})</span>
-          <b>{{ p_maint }}%</b>
-        </div>
-      </div>
-    </div>
-  </section>
+      </section>
+    </aside>
+  </div>
 </div>
 
-<section class="panel data-panel">
-  <div class="panel-heading">
-    <h2>Hoạt động gần đây <span class="count-pill">{{ recent_records|length }}</span></h2>
-    <a href="{{ url_for('history') }}" class="btn btn-outline">Xem toàn bộ lịch sử</a>
-  </div>
-  <div class="table-toolbar">
-    <div class="search-input">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <input type="text" placeholder="Tìm kiếm biển số, vị trí ô..." data-table-search>
-    </div>
-    <div class="table-filters">
-      <a href="{{ url_for('entry') }}" class="btn btn-primary">Xe vào bãi</a>
-      <a href="{{ url_for('exit_gate') }}" class="btn btn-outline">Xe ra bãi</a>
-    </div>
-  </div>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Biển số</th>
-          <th>Vị trí ô</th>
-          <th>Giờ vào</th>
-          <th>Giờ ra</th>
-          <th>Phí thu</th>
-          <th>Trạng thái</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if recent_records %}
-          {% for r in recent_records %}
-          <tr>
-            <td><span class="plate">{{ r.plate_number }}</span></td>
-            <td><b>{{ r.slot_name or '—' }}</b></td>
-            <td>{{ r.entry_time or '—' }}</td>
-            <td>{{ r.exit_time or '—' }}</td>
-            <td>
-              {% if r.fee is not none %}
-                <b>{{ "{:,}".format(r.fee).replace(",", ".") }} ₫</b>
-              {% else %}
-                —
-              {% endif %}
-            </td>
-            <td>
-              {% if r.status == 'IN' %}
-                <span class="badge badge-blue"><span></span>Đang gửi</span>
-              {% elif r.status == 'OUT' %}
-                <span class="badge badge-green"><span></span>Đã ra bãi</span>
-              {% else %}
-                <span class="badge badge-red"><span></span>Đã xóa</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        {% else %}
-          <tr>
-            <td colspan="6" class="empty-cell">Chưa có dữ liệu lượt xe vào / ra.</td>
-          </tr>
-        {% endif %}
-      </tbody>
-    </table>
-  </div>
-  <div class="pagination">
-    <span>Hiển thị <b>{{ 1 if recent_records else 0 }}-{{ recent_records|length }}</b> trên <b>{{ recent_records|length }}</b> kết quả</span>
-    <div>
-      <span class="current-page">1 / 1</span>
-    </div>
-  </div>
-</section>
+<script>
+(function () {
+  'use strict';
+  var wrap = document.getElementById('kv-dash-gate-filter');
+  var control = document.getElementById('kv-dash-gate-control');
+  var input = document.getElementById('kv-dash-gate-input');
+  var toggleBtn = document.getElementById('kv-dash-gate-toggle');
+  var menu = document.getElementById('kv-dash-gate-menu');
+  var resetBtn = document.getElementById('kv-dash-gate-reset');
+  var emptyHint = document.getElementById('kv-dash-gate-empty');
+  var hiddenInput = document.getElementById('kv-dash-gates-hidden');
+  var feedList = document.getElementById('kv-dash-feed-list');
+  if (!wrap || !input || !menu) return;
+
+  var options = Array.prototype.slice.call(menu.querySelectorAll('[data-gate-option]'));
+  var allNames = options.map(function (el) { return el.dataset.gateOption; });
+  var selected = options.filter(function (el) { return el.classList.contains('is-selected'); })
+                        .map(function (el) { return el.dataset.gateOption; });
+  var isOpen = false;
+  var currentRange = {{ range_key|tojson }};
+  var currentFrom = {{ date_from|tojson }};
+  var currentTo = {{ date_to|tojson }};
+
+  function getSelectionLabel() {
+    if (selected.length === allNames.length) return 'Tất cả cổng';
+    if (selected.length === 0) return 'Chưa chọn cổng';
+    if (selected.length === 1) return selected[0];
+    return selected.length + ' cổng đã chọn';
+  }
+
+  function syncOptionUI() {
+    options.forEach(function (opt) {
+      var on = selected.indexOf(opt.dataset.gateOption) !== -1;
+      opt.classList.toggle('is-selected', on);
+      opt.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    if (hiddenInput) {
+      hiddenInput.value = selected.length === allNames.length ? 'all' : (selected.length ? selected.join(',') : 'none');
+    }
+    document.querySelectorAll('#kv-dash-range-tabs a[data-range]').forEach(function (a) {
+      var u = new URL(a.href, window.location.origin);
+      u.searchParams.set('gates', hiddenInput ? hiddenInput.value : 'all');
+      a.href = u.pathname + u.search;
+    });
+  }
+
+  function filterList(query) {
+    var q = (query || '').trim().toLowerCase();
+    var visible = 0;
+    options.forEach(function (opt) {
+      var match = !q || opt.dataset.gateOption.toLowerCase().indexOf(q) !== -1;
+      opt.hidden = !match;
+      if (match) visible += 1;
+    });
+    if (emptyHint) emptyHint.hidden = visible > 0;
+  }
+
+  function openMenu() {
+    isOpen = true;
+    menu.hidden = false;
+    wrap.classList.add('is-open');
+    input.setAttribute('aria-expanded', 'true');
+    filterList('');
+    input.select();
+  }
+
+  function closeMenu() {
+    if (!isOpen) return;
+    isOpen = false;
+    menu.hidden = true;
+    wrap.classList.remove('is-open');
+    input.setAttribute('aria-expanded', 'false');
+    input.value = getSelectionLabel();
+    filterList('');
+  }
+
+  function fmtMoney(n) {
+    return String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' ₫';
+  }
+
+  function escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function updateBar(rectId, txtId, val, maxVal) {
+    var rect = document.getElementById(rectId);
+    var txt = document.getElementById(txtId);
+    if (!rect || !txt) return;
+    var h = val > 0 ? Math.max(8, Math.round((val * 130) / maxVal)) : 8;
+    rect.setAttribute('y', String(180 - h));
+    rect.setAttribute('height', String(h));
+    txt.setAttribute('y', String(172 - h));
+    txt.textContent = fmtMoney(val);
+  }
+
+  function refreshDashboard() {
+    var gatesParam = selected.length === allNames.length ? 'all' : (selected.length ? selected.join(',') : 'none');
+    var url = new URL('/api/dashboard', window.location.origin);
+    url.searchParams.set('range', currentRange);
+    if (currentRange === 'custom') {
+      url.searchParams.set('from', currentFrom);
+      url.searchParams.set('to', currentTo);
+    }
+    url.searchParams.set('gates', gatesParam);
+
+    var pageUrl = new URL(window.location.href);
+    pageUrl.searchParams.set('gates', gatesParam);
+    try { window.history.replaceState(null, '', pageUrl.pathname + pageUrl.search); } catch (e) {}
+
+    fetch(url.toString(), { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.stats) return;
+        var st = data.stats;
+        document.querySelectorAll('[data-dash="period_revenue"]').forEach(function (el) { el.textContent = fmtMoney(st.period_revenue); });
+        document.querySelectorAll('[data-dash="period_parking_revenue"]').forEach(function (el) { el.textContent = fmtMoney(st.period_parking_revenue); });
+        document.querySelectorAll('[data-dash="period_month_revenue"]').forEach(function (el) { el.textContent = fmtMoney(st.period_month_revenue); });
+        document.querySelectorAll('[data-dash="period_records"]').forEach(function (el) { el.textContent = st.period_records; });
+        document.querySelectorAll('[data-dash="period_entries"]').forEach(function (el) { el.textContent = st.period_entries; });
+        document.querySelectorAll('[data-dash="period_exits"]').forEach(function (el) { el.textContent = st.period_exits; });
+
+        var maxRev = Math.max(st.period_parking_revenue || 0, st.period_month_revenue || 0, st.period_revenue || 0, 10000);
+        updateBar('kv-bar-park', 'kv-txt-park', st.period_parking_revenue || 0, maxRev);
+        updateBar('kv-bar-month', 'kv-txt-month', st.period_month_revenue || 0, maxRev);
+        updateBar('kv-bar-total', 'kv-txt-total', st.period_revenue || 0, maxRev);
+
+        var cnt = data.counts || { total: 0, available: 0, occupied: 0, maintenance: 0 };
+        var maxFlow = Math.max(st.period_entries || 0, st.period_exits || 0, cnt.occupied || 0, 10);
+        var yIn = Math.round(180 - ((st.period_entries || 0) * 130 / maxFlow));
+        var yOut = Math.round(180 - ((st.period_exits || 0) * 130 / maxFlow));
+        var yOcc = Math.round(180 - ((cnt.occupied || 0) * 130 / maxFlow));
+        var fy3 = document.getElementById('kv-flow-y3');
+        var fy2 = document.getElementById('kv-flow-y2');
+        var fy1 = document.getElementById('kv-flow-y1');
+        if (fy3) fy3.textContent = maxFlow;
+        if (fy2) fy2.textContent = Math.round(maxFlow * 0.66);
+        if (fy1) fy1.textContent = Math.round(maxFlow * 0.33);
+        var inLineD = 'M 48 172 C 140 ' + Math.floor((yIn + 175) / 2) + ', 220 ' + yOcc + ', 290 ' + yIn + ' C 370 ' + Math.floor((yIn + yOcc) / 2) + ', 440 ' + yIn + ', 510 ' + yIn;
+        var outLineD = 'M 48 176 C 140 ' + Math.floor((yOut + 178) / 2) + ', 220 ' + Math.floor((yOut + 170) / 2) + ', 290 ' + yOut + ' C 370 ' + Math.floor((yOut + 165) / 2) + ', 440 ' + yOut + ', 510 ' + yOut;
+        var inAreaEl = document.getElementById('kv-flow-in-area');
+        var inLineEl = document.getElementById('kv-flow-in-line');
+        var outAreaEl = document.getElementById('kv-flow-out-area');
+        var outLineEl = document.getElementById('kv-flow-out-line');
+        if (inAreaEl) inAreaEl.setAttribute('d', inLineD + ' L 510 180 L 48 180 Z');
+        if (inLineEl) inLineEl.setAttribute('d', inLineD);
+        if (outAreaEl) outAreaEl.setAttribute('d', outLineD + ' L 510 180 L 48 180 Z');
+        if (outLineEl) outLineEl.setAttribute('d', outLineD);
+        ['kv-flow-in-c1', 'kv-flow-in-c2'].forEach(function (id) { var c = document.getElementById(id); if (c) c.setAttribute('cy', String(yIn)); });
+        ['kv-flow-out-c1', 'kv-flow-out-c2'].forEach(function (id) { var c = document.getElementById(id); if (c) c.setAttribute('cy', String(yOut)); });
+        var occRate = cnt.total ? Math.round((cnt.occupied * 100) / cnt.total) : 0;
+        var pOcc = cnt.total ? Math.round((cnt.occupied * 100) / cnt.total) : 0;
+        var pAvail = cnt.total ? Math.round((cnt.available * 100) / cnt.total) : 0;
+        var pMaint = cnt.maintenance > 0 ? Math.max(0, 100 - pOcc - pAvail) : 0;
+        document.querySelectorAll('[data-dash="occ_rate"]').forEach(function (el) { el.textContent = occRate; });
+        document.querySelectorAll('[data-dash="counts_total"]').forEach(function (el) { el.textContent = cnt.total; });
+        document.querySelectorAll('[data-dash="counts_occupied"]').forEach(function (el) { el.textContent = cnt.occupied; });
+        document.querySelectorAll('[data-dash="counts_available"]').forEach(function (el) { el.textContent = cnt.available; });
+        document.querySelectorAll('[data-dash="counts_maintenance"]').forEach(function (el) { el.textContent = cnt.maintenance; });
+        document.querySelectorAll('[data-dash="p_occ"]').forEach(function (el) { el.textContent = pOcc; });
+        document.querySelectorAll('[data-dash="p_avail"]').forEach(function (el) { el.textContent = pAvail; });
+        document.querySelectorAll('[data-dash="p_maint"]').forEach(function (el) { el.textContent = pMaint; });
+
+        var dAvail = document.getElementById('kv-donut-avail');
+        var dOcc = document.getElementById('kv-donut-occ');
+        var dMaint = document.getElementById('kv-donut-maint');
+        if (dAvail) dAvail.setAttribute('stroke-dasharray', (pAvail * 4.27).toFixed(1) + ' 427.2');
+        if (dOcc) {
+          dOcc.setAttribute('stroke-dasharray', (pOcc * 4.27).toFixed(1) + ' 427.2');
+          dOcc.setAttribute('stroke-dashoffset', '-' + (pAvail * 4.27).toFixed(1));
+        }
+        if (dMaint) {
+          dMaint.hidden = cnt.maintenance <= 0;
+          dMaint.setAttribute('stroke-dasharray', (pMaint * 4.27).toFixed(1) + ' 427.2');
+          dMaint.setAttribute('stroke-dashoffset', '-' + ((pAvail + pOcc) * 4.27).toFixed(1));
+        }
+
+        var areaListEl = document.getElementById('kv-dash-area-list');
+        if (areaListEl) {
+          var aMap = data.area_stats || {};
+          var aKeys = Object.keys(aMap);
+          if (!aKeys.length) {
+            areaListEl.innerHTML = '<div class="empty-inline">Không có khu vực nào thuộc cổng đang chọn.</div>';
+          } else {
+            areaListEl.innerHTML = aKeys.map(function (aName, idx) {
+              var a = aMap[aName];
+              var pct = Math.round(a.percent || 0);
+              var barColor = pct > 80 ? '#e89d29' : '#0070f4';
+              var maintTxt = a.maintenance ? ' · ' + a.maintenance + ' bảo trì' : '';
+              return '<div class="area-row">' +
+                '<span class="area-icon area-' + (idx % 3) + '"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg></span>' +
+                '<div><div><b>Khu ' + escHtml(aName) + '</b><span><strong>' + a.occupied + '</strong> / ' + a.total + ' chỗ</span></div>' +
+                '<div class="progress-track"><div style="width: ' + pct + '%; background: ' + barColor + ';"></div></div>' +
+                '<small>' + a.available + ' chỗ trống' + maintTxt + '</small></div><b>' + pct + '%</b></div>';
+            }).join('');
+          }
+        }
+
+        if (feedList) {
+          var recs = data.recent_records || [];
+          if (!recs.length) {
+            feedList.innerHTML = '<div class="empty-inline">Chưa có hoạt động nào.</div>';
+          } else {
+            feedList.innerHTML = recs.map(function (r) {
+              var isOut = r.status === 'OUT';
+              var dotCls = isOut ? 'is-out' : 'is-in';
+              var icon = isOut
+                ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10"/><path d="M17 7v10H7"/></svg>'
+                : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>';
+              var desc = isOut
+                ? 'đã ra bãi · <strong>' + escHtml(fmtMoney(r.fee || 0)) + '</strong>'
+                : 'vào ô <strong>' + escHtml(r.slot_name || '—') + '</strong>';
+              var gateTxt = escHtml((isOut ? r.exit_gate : r.entry_gate) || 'Trung tâm');
+              var timeTxt = escHtml((isOut ? r.exit_time : r.entry_time) || '—');
+              return '<div class="kv-feed-item">' +
+                '<span class="kv-feed-dot ' + dotCls + '">' + icon + '</span>' +
+                '<div class="kv-feed-body">' +
+                  '<div>Xe <strong>' + escHtml(r.plate_number) + '</strong> ' + desc + '</div>' +
+                  '<div class="kv-feed-meta"><span>' + gateTxt + '</span><span>·</span><span>' + timeTxt + '</span></div>' +
+                '</div></div>';
+            }).join('');
+          }
+        }
+      })
+      .catch(function () {});
+  }
+
+  control.addEventListener('click', function () {
+    if (!isOpen) openMenu();
+  });
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (isOpen) closeMenu();
+      else { openMenu(); input.focus(); }
+    });
+  }
+  input.addEventListener('input', function () {
+    if (!isOpen) openMenu();
+    filterList(input.value);
+  });
+
+  options.forEach(function (opt) {
+    opt.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var name = opt.dataset.gateOption;
+      var idx = selected.indexOf(name);
+      if (idx === -1) selected.push(name);
+      else selected.splice(idx, 1);
+      syncOptionUI();
+      input.value = getSelectionLabel();
+      refreshDashboard();
+    });
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      selected = allNames.slice();
+      syncOptionUI();
+      input.value = getSelectionLabel();
+      filterList('');
+      refreshDashboard();
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    if (isOpen && !wrap.contains(e.target)) closeMenu();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && isOpen) closeMenu();
+  });
+})();
+</script>
 {% endblock %}

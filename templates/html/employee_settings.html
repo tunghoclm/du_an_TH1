@@ -1,0 +1,22 @@
+{% extends "_layout.html" %}
+{% set active_page = 'employee_settings' %}
+
+{% block title %}Thiết lập nhân viên — Smart Parking{% endblock %}
+{% block breadcrumb %}Nhân viên / Thiết lập nhân viên{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/css/invoices.css">
+<link rel="stylesheet" href="/css/customers.css">
+<link rel="stylesheet" href="/css/settings-kv.css">
+<link rel="stylesheet" href="/css/employees.css">
+{% endblock %}
+
+{% block content %}
+<section class="kv-emp-setting-page" aria-label="Thiết lập nhân viên">
+  <div class="kv-emp-setting-header">
+    <h1>Thiết lập nhân viên</h1>
+  </div>
+
+  {% include '_settings_employee.html' %}
+</section>
+{% endblock %}

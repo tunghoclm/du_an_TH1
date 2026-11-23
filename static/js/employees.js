@@ -19,6 +19,218 @@
     });
   }
 
+  // Desktop collapsible sidebar toggle
+  var workspace = document.querySelector('.employee-page .invoice-workspace');
+  var collapseBtn = document.getElementById('employee-sidebar-collapse');
+  var SIDEBAR_KEY = 'sp_employee_sidebar_collapsed';
+  if (workspace && collapseBtn) {
+    try {
+      if (localStorage.getItem(SIDEBAR_KEY) === '1') {
+        workspace.classList.add('is-sidebar-collapsed');
+      }
+    } catch (e) {}
+    collapseBtn.addEventListener('click', function () {
+      var collapsed = workspace.classList.toggle('is-sidebar-collapsed');
+      collapseBtn.setAttribute('aria-label', collapsed ? 'Mở rộng bộ lọc' : 'Thu gọn bộ lọc');
+      try {
+        localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+      } catch (e) {}
+    });
+  }
+
+  // Kendo-style MultiSelect Tag-Chip Combobox (Cổng làm việc)
+  function parseGateList(csv) {
+    return (csv || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  function initGateMultiselect(root) {
+    var hiddenInput = root.querySelector('input[type="hidden"][name="work_branch"]');
+    var box = root.querySelector('.kv-multiselect-box');
+    var tagsWrap = root.querySelector('[data-gate-tags]');
+    var searchInput = root.querySelector('[data-gate-search]');
+    var dropdown = root.querySelector('[data-gate-dropdown]');
+    if (!hiddenInput || !box || !tagsWrap || !searchInput || !dropdown) return;
+
+    var autoSubmit = root.dataset.autoSubmit === 'true';
+    var allowAll = root.dataset.allowAll === 'true';
+
+    function getSelected() {
+      return parseGateList(hiddenInput.value);
+    }
+
+    function setSelected(list, shouldSubmit) {
+      var deduped = [];
+      list.forEach(function (item) {
+        if (item && deduped.indexOf(item) === -1) deduped.push(item);
+      });
+      hiddenInput.value = deduped.join(', ');
+      render();
+      if (shouldSubmit && autoSubmit) {
+        form.requestSubmit();
+      }
+    }
+
+    function render() {
+      var selected = getSelected();
+      tagsWrap.innerHTML = '';
+      selected.forEach(function (gate) {
+        var chip = document.createElement('span');
+        chip.className = 'kv-tag-chip';
+        chip.textContent = gate;
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'kv-tag-chip-remove';
+        rm.setAttribute('aria-label', 'Bỏ ' + gate);
+        rm.textContent = '×';
+        rm.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          setSelected(selected.filter(function (g) { return g !== gate; }), true);
+        });
+        chip.appendChild(rm);
+        tagsWrap.appendChild(chip);
+      });
+
+      dropdown.querySelectorAll('[data-gate-option]').forEach(function (opt) {
+        var val = opt.dataset.gateOption;
+        if (val === '__ALL__') {
+          opt.classList.toggle('is-selected', selected.length === 0);
+        } else {
+          var isMatch = selected.some(function (s) { return s.toLowerCase() === val.toLowerCase(); });
+          opt.classList.toggle('is-selected', isMatch);
+        }
+      });
+    }
+
+    function openDropdown() {
+      document.querySelectorAll('.kv-multiselect.is-open').forEach(function (other) {
+        if (other !== root) {
+          other.classList.remove('is-open');
+          var d = other.querySelector('[data-gate-dropdown]');
+          var b = other.querySelector('.kv-multiselect-box');
+          if (d) d.hidden = true;
+          if (b) b.setAttribute('aria-expanded', 'false');
+        }
+      });
+      root.classList.add('is-open');
+      dropdown.hidden = false;
+      box.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeDropdown() {
+      root.classList.remove('is-open');
+      dropdown.hidden = true;
+      box.setAttribute('aria-expanded', 'false');
+    }
+
+    box.addEventListener('click', function () {
+      if (dropdown.hidden) openDropdown();
+      searchInput.focus();
+    });
+
+    searchInput.addEventListener('focus', openDropdown);
+    searchInput.addEventListener('input', function () {
+      var q = (searchInput.value || '').trim().toLowerCase();
+      dropdown.querySelectorAll('[data-gate-option]').forEach(function (opt) {
+        var val = opt.dataset.gateOption;
+        if (val === '__ALL__') {
+          opt.hidden = q.length > 0;
+        } else {
+          opt.hidden = q.length > 0 && val.toLowerCase().indexOf(q) === -1;
+        }
+      });
+      if (dropdown.hidden) openDropdown();
+    });
+
+    dropdown.querySelectorAll('[data-gate-option]').forEach(function (opt) {
+      opt.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var val = opt.dataset.gateOption;
+        if (val === '__ALL__' && allowAll) {
+          setSelected([], true);
+          closeDropdown();
+          return;
+        }
+        var current = getSelected();
+        var idx = -1;
+        for (var i = 0; i < current.length; i++) {
+          if (current[i].toLowerCase() === val.toLowerCase()) { idx = i; break; }
+        }
+        if (idx >= 0) current.splice(idx, 1);
+        else current.push(val);
+        searchInput.value = '';
+        dropdown.querySelectorAll('[data-gate-option]').forEach(function (o) { o.hidden = false; });
+        setSelected(current, true);
+      });
+    });
+
+    root._syncGateValue = function (csv) {
+      hiddenInput.value = csv || '';
+      render();
+    };
+    render();
+  }
+
+  document.querySelectorAll('[data-gate-multiselect]').forEach(initGateMultiselect);
+
+  document.addEventListener('click', function (ev) {
+    if (!ev.target.closest('.kv-multiselect')) {
+      document.querySelectorAll('.kv-multiselect.is-open').forEach(function (ms) {
+        ms.classList.remove('is-open');
+        var d = ms.querySelector('[data-gate-dropdown]');
+        var b = ms.querySelector('.kv-multiselect-box');
+        if (d) d.hidden = true;
+        if (b) b.setAttribute('aria-expanded', 'false');
+      });
+    }
+  });
+
+  // Inline "+ Tạo mới" for Phòng ban & Chức danh
+  document.querySelectorAll('[data-quick-create]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var kind = btn.dataset.quickCreate;
+      var group = btn.closest('.invoice-filter-group');
+      if (!group) return;
+      var existing = group.querySelector('.kv-quick-create-row');
+      if (existing) { existing.remove(); return; }
+      var row = document.createElement('div');
+      row.className = 'kv-quick-create-row';
+      var inp = document.createElement('input');
+      inp.type = 'text';
+      inp.placeholder = kind === 'department' ? 'Tên phòng ban mới...' : 'Tên chức danh mới...';
+      var ok = document.createElement('button');
+      ok.type = 'button';
+      ok.textContent = 'Thêm';
+      function commit() {
+        var val = (inp.value || '').trim();
+        if (!val) return;
+        var sel = group.querySelector('select');
+        var dl = document.getElementById(kind === 'department' ? 'employee-dept-list' : 'employee-pos-list');
+        if (dl) {
+          var optDl = document.createElement('option');
+          optDl.value = val;
+          dl.appendChild(optDl);
+        }
+        if (sel) {
+          var optSel = document.createElement('option');
+          optSel.value = val;
+          optSel.textContent = val;
+          optSel.selected = true;
+          sel.appendChild(optSel);
+        }
+        row.remove();
+      }
+      ok.addEventListener('click', commit);
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') row.remove();
+      });
+      row.appendChild(inp);
+      row.appendChild(ok);
+      group.appendChild(row);
+      inp.focus();
+    });
+  });
+
   // Inline detail row expand / collapse
   function closeEmployee(id) {
     var detail = document.getElementById('employee-detail-' + id);
@@ -159,6 +371,27 @@
   bindAvatarPreview(addDlg);
   bindAvatarPreview(editDlg);
 
+  // Auto-apply Mẫu lương defaults when selected in add/edit modal
+  document.querySelectorAll('[data-salary-template-select]').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+      var opt = sel.options[sel.selectedIndex];
+      var dlg = sel.closest('dialog');
+      if (!opt || !dlg || !opt.dataset.tplType) return;
+      var st = dlg.querySelector('[name="salary_type"]');
+      var sa = dlg.querySelector('[name="salary_amount"]');
+      var aen = dlg.querySelector('[name="allowance_enabled"]');
+      var aamt = dlg.querySelector('[name="allowance_amount"]');
+      var den = dlg.querySelector('[name="deduction_enabled"]');
+      var damt = dlg.querySelector('[name="deduction_amount"]');
+      if (st) st.value = opt.dataset.tplType;
+      if (sa) sa.value = opt.dataset.tplAmount || '';
+      if (aen) { aen.checked = opt.dataset.tplAen === '1'; aen.dispatchEvent(new Event('change')); }
+      if (aamt) aamt.value = opt.dataset.tplAamt || '';
+      if (den) { den.checked = opt.dataset.tplDen === '1'; den.dispatchEvent(new Event('change')); }
+      if (damt) damt.value = opt.dataset.tplDamt || '';
+    });
+  });
+
   var openAddBtn = document.getElementById('open-add-account');
   if (openAddBtn && addDlg) {
     openAddBtn.addEventListener('click', function () {
@@ -182,7 +415,7 @@
 
       var fieldMap = [
         'employee_code', 'fullname', 'phone',
-        'start_date', 'department', 'position', 'username', 'role',
+        'start_date', 'department', 'position', 'work_branch', 'pay_branch', 'username', 'role',
         'attendance_code', 'customer_note', 'bank_account', 'bank_name',
         'bank_holder', 'id_card', 'dob', 'email', 'address',
         'salary_type', 'salary_amount', 'salary_template', 'allowance_amount',
@@ -192,6 +425,10 @@
         var el = formEl.querySelector('[name="' + name + '"]');
         if (el) el.value = btn.dataset[name] || '';
       });
+      var gateMs = formEl.querySelector('[data-gate-multiselect]');
+      if (gateMs && typeof gateMs._syncGateValue === 'function') {
+        gateMs._syncGateValue(btn.dataset.work_branch || 'Cổng chính');
+      }
 
       var genderVal = btn.dataset.gender || '';
       formEl.querySelectorAll('[name="gender"]').forEach(function (radio) {
@@ -241,6 +478,18 @@
   var selectedCount = document.getElementById('employee-selected-count');
   var exportSelected = document.getElementById('employee-export-selected');
   var exportBase = document.getElementById('employee-export');
+  var exportXlsxSelected = document.getElementById('employee-export-selected-xlsx');
+  var exportXlsxBase = document.getElementById('employee-export-xlsx');
+  var payrollXlsxSelected = document.getElementById('employee-payroll-export-xlsx');
+  var payrollXlsxBase = document.getElementById('employee-payroll-xlsx');
+  var payrollPdfSelected = document.getElementById('employee-payroll-export-pdf');
+  var payrollPdfBase = document.getElementById('employee-payroll-pdf');
+
+  function appendIds(baseLink, targetLink, ids) {
+    if (!targetLink || !baseLink) return;
+    var sep = baseLink.href.indexOf('?') >= 0 ? '&' : '?';
+    targetLink.href = baseLink.href + sep + 'ids=' + encodeURIComponent(ids.join(','));
+  }
 
   function syncSelection() {
     var ids = rowChecks.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.dataset.selectEmployee; });
@@ -250,11 +499,17 @@
       selectAll.checked = rowChecks.length > 0 && ids.length === rowChecks.length;
       selectAll.indeterminate = ids.length > 0 && ids.length < rowChecks.length;
     }
-    if (exportSelected && exportBase) {
-      var sep = exportBase.href.indexOf('?') >= 0 ? '&' : '?';
-      exportSelected.href = exportBase.href + sep + 'ids=' + encodeURIComponent(ids.join(','));
-    }
+    appendIds(exportBase, exportSelected, ids);
+    appendIds(exportXlsxBase, exportXlsxSelected, ids);
+    appendIds(payrollXlsxBase, payrollXlsxSelected, ids);
+    appendIds(payrollPdfBase, payrollPdfSelected, ids);
   }
+
+  document.addEventListener('click', function (event) {
+    document.querySelectorAll('.employee-payroll-menu[open]').forEach(function (menu) {
+      if (!menu.contains(event.target)) menu.removeAttribute('open');
+    });
+  });
 
   if (selectAll) {
     selectAll.addEventListener('change', function () {

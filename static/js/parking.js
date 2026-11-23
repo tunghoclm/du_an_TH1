@@ -28,13 +28,21 @@
     }
     $('area-name')?.addEventListener('input', previewSlots);
     $('area-slot-count')?.addEventListener('input', previewSlots);
+    let editingAreaMeta = null;
     document.querySelectorAll('[data-edit-area]').forEach(button => {
         button.addEventListener('click', () => {
             const editing = !!button.dataset.id;
-            $('area-title').textContent = editing ? 'Sửa khu đỗ xe' : 'Thêm khu mới';
+            editingAreaMeta = editing ? button.dataset : null;
+            $('area-title').textContent = editing ? 'Sửa khu vực' : 'Thêm khu vực';
             $('area-id').value = button.dataset.id;
             $('area-name').value = button.dataset.name;
             $('area-type').value = button.dataset.type || 'all';
+            if ($('area-note')) $('area-note').value = button.dataset.note || '';
+            if ($('area-modal-delete-btn')) {
+                const delBtn = $('area-modal-delete-btn');
+                delBtn.hidden = !editing || !button.dataset.deleteUrl;
+                delBtn.disabled = Number(button.dataset.occupied || 0) > 0;
+            }
             $('area-count-field').hidden = editing;
             $('area-slot-count').disabled = editing;
             $('area-slot-count').required = !editing;
@@ -43,6 +51,15 @@
             $('area-dialog').showModal();
         });
     });
+    if ($('area-modal-delete-btn')) {
+        $('area-modal-delete-btn').addEventListener('click', () => {
+            if (!editingAreaMeta || !editingAreaMeta.deleteUrl) return;
+            $('area-dialog').close();
+            $('area-delete-form').action = editingAreaMeta.deleteUrl;
+            $('area-delete-description').textContent = 'Xóa khu ' + editingAreaMeta.name + ' cùng toàn bộ ' + (editingAreaMeta.count || 0) + ' ô đỗ?';
+            $('area-delete-dialog').showModal();
+        });
+    }
     document.querySelectorAll('[data-delete-area]').forEach(button => {
         button.addEventListener('click', () => {
             $('area-delete-form').action = button.dataset.url;

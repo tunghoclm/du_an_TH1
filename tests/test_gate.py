@@ -409,6 +409,21 @@ class GateTests(unittest.TestCase):
         self.assertEqual(response.status_code, 429)
         self.assertEqual(set(Path(config.TMP_DIR).iterdir()), before)
 
+    def test_entry_and_exit_lanes_scan_without_blocking_each_other(self):
+        # Làn vào đang giữ khóa làn của nó -> làn ra vẫn quét được; chỉ chính làn vào bị từ chối.
+        with self.module.LANE_OCR_LOCKS['entry']:
+            self.assertEqual(self.live_frame('entry').status_code, 429)
+            self.assertEqual(self.live_frame('exit').status_code, 200)
+        self.assertEqual(self.live_frame('entry').status_code, 200)
+
+    def test_capture_waits_for_shared_ocr_instead_of_failing(self):
+        import threading
+        self.module.CAMERA_OCR_LOCK.acquire()
+        threading.Timer(0.3, self.module.CAMERA_OCR_LOCK.release).start()
+        response = self.live_frame('exit', profile='capture')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.module.LANE_OCR_LOCKS['exit'].locked())
+
     def test_live_unclear_plate_can_be_corrected_manually(self):
         with patch.object(self.module, 'recognize_plate_live', return_value=('', self.frame, None, 200, 80,
                           dict(confidence=0, elapsed_ms=200, engine='easyocr'))):
@@ -567,11 +582,12 @@ class GateTests(unittest.TestCase):
         self.assertFalse(payload['ok'])
         self.assertIn('Chưa có ảnh', payload['message'])
 
-    def test_settings_devices_section_saves_cameras_and_ports(self):
+    def test_settings_devices_section_saves_cameras(self):
         page = self.client.get('/settings?section=devices')
         self.assertEqual(page.status_code, 200)
-        self.assertIn('Cổng kết nối &amp; Camera', page.text)
+        self.assertIn('Camera, Barrier &amp; Máy in', page.text)
         self.assertIn('entry_barrier_port', page.text)
+        self.assertIn('printer_port', page.text)
 
         res = self.client.post('/settings?section=devices', data={
             'setting_type': 'devices',
@@ -582,14 +598,14 @@ class GateTests(unittest.TestCase):
             'entry_barrier_port': 'COM8',
             'exit_barrier_port': 'COM9',
             'barrier_baudrate': '115200',
-            'card_reader_port': 'USB-HID',
-            'led_display_port': '192.168.1.88:5005',
-            'printer_port': 'USB 80mm',
             'auto_open_barrier': '1',
+            'printer_port': 'USB 80mm',
         }, follow_redirects=True)
         self.assertEqual(res.status_code, 200)
-        self.assertIn('COM8', res.text)
         self.assertIn('cam-in-plate-01', res.text)
+        self.assertIn('cam-out-view-01', res.text)
+        self.assertIn('COM8', res.text)
+        self.assertIn('USB 80mm', res.text)
 
         lanes = self.client.get('/gate/lanes')
         self.assertIn('data-default-device="cam-in-plate-01"', lanes.text)
@@ -637,6 +653,262 @@ class GateTests(unittest.TestCase):
 
         self.client.post(f"/settings/zones/{zone['id']}/delete", follow_redirects=True)
         self.assertFalse(any(z['id'] == zone['id'] for z in database.get_parking_zones()))
+
+    def test_settings_gates_section_crud_and_lane_types(self):
+        gates_page = self.client.get('/settings?section=gates')
+        self.assertEqual(gates_page.status_code, 200)
+        self.assertIn('Cài đặt cổng', gates_page.text)
+        self.assertIn('id="kv-sec-gates"', gates_page.text)
+
+        for name, lane_type in (('Cổng Vào 1', 'gate_in'), ('Cổng Ra 1', 'gate_out'), ('Cổng Phụ', 'gate_inout')):
+            res = self.client.post('/settings/zones/save', data={
+                'name': name,
+                'zone_type': lane_type,
+                'location': 'Bãi xe trung tâm',
+                'status': 'active',
+            }, follow_redirects=True)
+            self.assertEqual(res.status_code, 200)
+            self.assertIn(name, res.text)
+
+        filtered = self.client.get('/settings?section=gates&lane_type=gate_inout')
+        self.assertEqual(filtered.status_code, 200)
+        self.assertIn('<strong>Cổng Phụ</strong>', filtered.text)
+        self.assertNotIn('<strong>Cổng Vào 1</strong>', filtered.text)
+
+        main_gate = [z for z in database.get_parking_zones() if z['name'] == 'Cổng Phụ'][0]
+        self.client.post('/settings/zones/save', data={
+            'zone_id': str(main_gate['id']),
+            'name': 'Cổng Phụ A',
+            'zone_type': 'gate_in',
+            'location': 'Bãi xe trung tâm',
+            'status': 'active',
+        }, follow_redirects=True)
+        updated = [z for z in database.get_parking_zones() if z['id'] == main_gate['id']][0]
+        self.assertEqual(updated['name'], 'Cổng Phụ A')
+        self.assertEqual(updated['zone_type'], 'gate_in')
+
+        # Select this gate-in-only gate via topbar selector and verify /gate/lanes shows only entry lane
+        sel_res = self.client.post('/gate/select', data={'gate_id': str(main_gate['id'])}, follow_redirects=True)
+        self.assertEqual(sel_res.status_code, 200)
+        lanes_in = self.client.get('/gate/lanes')
+        self.assertEqual(lanes_in.status_code, 200)
+        self.assertIn('data-lane-form="entry"', lanes_in.text)
+        self.assertNotIn('data-lane-form="exit"', lanes_in.text)
+
+        # Switch to gate-out-only gate and verify /gate/lanes shows only exit lane
+        out_gate = [z for z in database.get_parking_zones() if z['name'] == 'Cổng Ra 1'][0]
+        self.client.post('/gate/select', data={'gate_id': str(out_gate['id'])})
+        lanes_out = self.client.get('/gate/lanes')
+        self.assertEqual(lanes_out.status_code, 200)
+        self.assertNotIn('data-lane-form="entry"', lanes_out.text)
+        self.assertIn('data-lane-form="exit"', lanes_out.text)
+
+        # Gate-specific statistics vs Cổng chính (all gates)
+        vt = database.get_vehicle_types()[0]
+        r1, _ = database.create_parking_entry('51A-11111', 'in1.jpg', None, vt['id'], vt['name'], entry_gate='Cổng Phụ A')
+        database.close_record(r1, 'out1.jpg', 15000, exit_gate='Cổng Ra 1')
+        r2, _ = database.create_parking_entry('51A-22222', 'in2.jpg', None, vt['id'], vt['name'], entry_gate='Cổng Vào 1')
+        database.close_record(r2, 'out2.jpg', 25000, exit_gate='Cổng Vào 1')
+
+        from datetime import date
+        today_str = date.today().isoformat()
+        all_stats = database.get_statistics(today_str, today_str)
+        gate_a_stats = database.get_statistics(today_str, today_str, gate_name='Cổng Phụ A')
+        gate_out_stats = database.get_statistics(today_str, today_str, gate_name='Cổng Ra 1')
+        self.assertEqual(all_stats['period_entries'], 2)
+        self.assertEqual(gate_a_stats['period_entries'], 1)
+        self.assertEqual(gate_a_stats['period_exits'], 0)
+        self.assertEqual(gate_out_stats['period_exits'], 1)
+        self.assertEqual(gate_out_stats['period_parking_revenue'], 15000)
+
+        # Reset back to Trung tâm (gate_id=0) and also allow selecting Cổng chính (gate_id=-1)
+        main_res = self.client.post('/gate/select', data={'gate_id': '-1'}, follow_redirects=True)
+        self.assertEqual(main_res.status_code, 200)
+        self.assertIn('<span class="gate-pill-text">Cổng chính</span>', main_res.text)
+        reset_res = self.client.post('/gate/select', data={'gate_id': '0'}, follow_redirects=True)
+        self.assertEqual(reset_res.status_code, 200)
+        self.assertIn('<span class="gate-pill-text">Tất cả các cổng</span>', reset_res.text)
+
+    def test_settings_gates_central_branch_and_operating_hours(self):
+        page = self.client.get('/settings?section=gates')
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('data-gate-row="central"', page.text)
+        self.assertIn('<strong>Cổng chính</strong>', page.text)
+        self.assertIn('data-detail-tab="info"', page.text)
+        self.assertIn('data-detail-tab="staff"', page.text)
+        self.assertIn('Gợi ý', page.text)
+
+        # Update Cổng chính central gate settings directly (zone_id=0, is_central=1)
+        central_res = self.client.post('/settings/zones/save', data={
+            'zone_id': '0',
+            'is_central': '1',
+            'name': 'Cổng chính',
+            'zone_type': 'gate_inout',
+            'location': 'Khu trung tâm tầng 1',
+            'operating_hours': '05:00 - 23:30',
+            'note': 'Xử lý trung tâm chính',
+        }, follow_redirects=True)
+        self.assertEqual(central_res.status_code, 200)
+        self.assertIn('Khu trung tâm tầng 1', central_res.text)
+        self.assertIn('05:00 - 23:30', central_res.text)
+        self.assertIn('Xử lý trung tâm chính', central_res.text)
+
+        # Clearing Cổng chính note must persist as empty instead of reverting to default
+        clear_note = self.client.post('/settings/zones/save', data={
+            'zone_id': '0',
+            'is_central': '1',
+            'name': 'Cổng chính',
+            'zone_type': 'gate_inout',
+            'location': 'Khu trung tâm tầng 1',
+            'operating_hours': '05:00 - 23:30',
+            'note': '',
+        }, follow_redirects=True)
+        self.assertEqual(clear_note.status_code, 200)
+        self.assertNotIn('Xử lý trung tâm chính', clear_note.text)
+        self.assertNotIn('Cổng mặc định của bãi xe.', clear_note.text)
+
+        # Reject creating duplicate custom gates named "Trung tâm" or "Cổng chính"
+        dup_res = self.client.post('/settings/zones/save', data={
+            'name': 'Cổng chính',
+            'zone_type': 'gate_inout',
+            'status': 'active',
+        }, follow_redirects=True)
+        self.assertEqual(dup_res.status_code, 200)
+        self.assertFalse(any(z['name'].lower() == 'cổng chính' for z in database.get_parking_zones()))
+
+        # Save custom gate with operating_hours and multiple vehicle_type_ids (2-wheelers)
+        vts = database.get_vehicle_types()
+        vt_ids = [str(vt['id']) for vt in vts[:2]]
+        save_res = self.client.post('/settings/zones/save', data={
+            'name': 'Cổng Đông',
+            'zone_type': 'gate_in',
+            'location': 'Mặt tiền đường A',
+            'operating_hours': '06:00 - 22:00',
+            'vehicle_type_ids': vt_ids,
+            'status': 'active',
+        }, follow_redirects=True)
+        self.assertEqual(save_res.status_code, 200)
+        self.assertIn('06:00 - 22:00', save_res.text)
+        self.assertIn(vts[0]['name'], save_res.text)
+        self.assertIn(vts[1]['name'], save_res.text)
+        gate = [z for z in database.get_parking_zones() if z['name'] == 'Cổng Đông'][0]
+        self.assertEqual(gate['operating_hours'], '06:00 - 22:00')
+        self.assertEqual(gate['vehicle_type_ids'], ','.join(vt_ids))
+
+    def test_dashboard_multi_gate_filter_and_api(self):
+        database.save_parking_zone(None, 'Cổng Đông', 'gate_inout', 'Mặt tiền', None, 0, 'active', '')
+        vt = database.get_vehicle_types()[0]
+        r1, _ = database.create_parking_entry('51A-33333', 'in3.jpg', None, vt['id'], vt['name'], entry_gate='Cổng Đông')
+        database.close_record(r1, 'out3.jpg', 20000, exit_gate='Cổng Đông')
+        r2, _ = database.create_parking_entry('51A-44444', 'in4.jpg', None, vt['id'], vt['name'], entry_gate=None)
+        database.close_record(r2, 'out4.jpg', 10000, exit_gate=None)
+
+        dash_page = self.client.get('/')
+        self.assertEqual(dash_page.status_code, 200)
+        self.assertIn('id="kv-dash-gate-filter"', dash_page.text)
+        self.assertIn('id="kv-dash-gate-reset"', dash_page.text)
+        self.assertIn('Đặt lại', dash_page.text)
+        self.assertIn('data-gate-option="Tất cả các cổng"', dash_page.text)
+        self.assertIn('data-gate-option="Cổng Đông"', dash_page.text)
+
+        api_east = self.client.get('/api/dashboard?gates=Cổng Đông&range=today')
+        self.assertEqual(api_east.status_code, 200)
+        self.assertEqual(api_east.json['stats']['period_parking_revenue'], 20000)
+        self.assertEqual(len(api_east.json['recent_records']), 1)
+
+        api_central = self.client.get('/api/dashboard?gates=Tất cả các cổng&range=today')
+        self.assertEqual(api_central.status_code, 200)
+        self.assertEqual(api_central.json['stats']['period_parking_revenue'], 10000)
+
+        api_all = self.client.get('/api/dashboard?gates=all&range=today')
+        self.assertEqual(api_all.status_code, 200)
+        self.assertEqual(api_all.json['stats']['period_parking_revenue'], 30000)
+
+        api_none = self.client.get('/api/dashboard?gates=none&range=today')
+        self.assertEqual(api_none.status_code, 200)
+        self.assertEqual(api_none.json['stats']['period_parking_revenue'], 0)
+        self.assertEqual(api_none.json['recent_records'], [])
+        self.assertEqual(api_none.json['counts']['total'], 0)
+        self.assertEqual(api_none.json['area_stats'], {})
+
+        # Gate with area_names='A' must filter dashboard counts & area_stats to only Khu A
+        database.save_parking_zone(None, 'Cổng Khu A', 'gate_inout', 'Khu A', None, 0, 'active', '', area_names='A')
+        api_a = self.client.get('/api/dashboard?gates=Cổng Khu A&range=today')
+        self.assertEqual(api_a.status_code, 200)
+        self.assertEqual(list(api_a.json['area_stats'].keys()), ['A'])
+        self.assertEqual(api_a.json['counts']['total'], api_a.json['area_stats']['A']['total'])
+
+    def test_parking_layout_and_gate_scoped_areas(self):
+        database.save_parking_zone(None, 'Cổng Tây', 'gate_inout', 'Cổng phụ', None, 0, 'active', '', area_names='A')
+        west = [z for z in database.get_parking_zones() if z['name'] == 'Cổng Tây'][0]
+
+        # Trung tâm (gate_id=0) shows all areas A, B, C
+        self.client.post('/gate/select', data={'gate_id': '0'})
+        all_page = self.client.get('/parking')
+        self.assertEqual(all_page.status_code, 200)
+        self.assertIn('id="kv-parking-search"', all_page.text)
+        self.assertIn('Khu A', all_page.text)
+        self.assertIn('Khu B', all_page.text)
+
+        # Select Cổng Tây from top-right -> /parking shows only Khu A
+        self.client.post('/gate/select', data={'gate_id': str(west['id'])})
+        west_page = self.client.get('/parking')
+        self.assertEqual(west_page.status_code, 200)
+        self.assertIn('Cổng Tây', west_page.text)
+        west_norm = west_page.text.replace(' style="margin:0;font-size:17px;font-weight:650;"', '')
+        self.assertIn('<h2>Khu A</h2>', west_norm)
+        self.assertNotIn('<h2>Khu B</h2>', west_norm)
+
+        # Update gate areas from /parking/gate-areas to B,C
+        upd = self.client.post('/parking/gate-areas', data={'area_names': ['B', 'C']}, follow_redirects=True)
+        self.assertEqual(upd.status_code, 200)
+        upd_norm = upd.text.replace(' style="margin:0;font-size:17px;font-weight:650;"', '')
+        self.assertIn('<h2>Khu B</h2>', upd_norm)
+        self.assertIn('<h2>Khu C</h2>', upd_norm)
+        self.assertNotIn('<h2>Khu A</h2>', upd_norm)
+
+        # Export CSV
+        exp = self.client.get('/parking/export')
+        self.assertEqual(exp.status_code, 200)
+        self.assertIn('text/csv', exp.content_type)
+
+        # Creating a new area while Cổng Tây is active attaches it to Cổng Tây automatically
+        self.client.post('/gate/select', data={'gate_id': str(west['id'])})
+        new_area_res = self.client.post('/parking/areas/save', data={
+            'name': 'VIP',
+            'slot_count': '2',
+            'vehicle_type_id': 'all',
+            'note': 'Khu VIP cổng tây',
+        }, follow_redirects=True)
+        self.assertEqual(new_area_res.status_code, 200)
+        self.assertIn('Khu VIP', new_area_res.text)
+        self.assertIn('Khu VIP cổng tây', new_area_res.text)
+
+        # Vehicle types setup inside /pricing (2w / 4w / other) and removed from /settings
+        settings_page = self.client.get('/settings')
+        self.assertNotIn('section=vehicles', settings_page.text)
+        self.assertNotIn('Bảng giá &amp; Gói vé', settings_page.text)
+        vpage = self.client.get('/pricing')
+        self.assertEqual(vpage.status_code, 200)
+        self.assertIn('Phân loại nhóm', vpage.text)
+        vsave = self.client.post('/pricing/type/save', data={
+            'name': 'Xe bán tải',
+            'wheel_group': '4w',
+            'free_minutes': '10',
+            'monthly_price': '1200000',
+        }, follow_redirects=True)
+        self.assertEqual(vsave.status_code, 200)
+        self.assertIn('Xe bán tải', vsave.text)
+        self.assertIn('Xe 4 bánh', vsave.text)
+        created_vt = [v for v in database.get_vehicle_types() if v['name'] == 'Xe bán tải'][0]
+        self.assertEqual(created_vt['wheel_group'], '4w')
+
+        # Gate with vehicle_type_id and no area_names must also render /parking cleanly
+        vt = database.get_vehicle_types()[0]
+        database.save_parking_zone(None, 'Cổng Xe Máy', 'gate_inout', 'Cổng phụ', vt['id'], 0, 'active', '')
+        moto_gate = [z for z in database.get_parking_zones() if z['name'] == 'Cổng Xe Máy'][0]
+        self.client.post('/gate/select', data={'gate_id': str(moto_gate['id'])})
+        self.assertEqual(self.client.get('/parking').status_code, 200)
 
 
 if __name__ == '__main__':

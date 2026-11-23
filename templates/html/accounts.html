@@ -48,13 +48,31 @@
           <label for="{{ prefix }}-start-date">Ngày bắt đầu làm việc</label>
           <input id="{{ prefix }}-start-date" type="date" name="start_date" value="{{ values.start_date or '' }}">
         </div>
-        <div class="form-field">
-          <label for="{{ prefix }}-department">Phòng ban</label>
-          <input id="{{ prefix }}-department" name="department" list="employee-dept-list" value="{{ values.department or '' }}" placeholder="Chọn hoặc nhập phòng ban" maxlength="120">
-        </div>
-        <div class="form-field">
-          <label for="{{ prefix }}-position">Chức danh</label>
-          <input id="{{ prefix }}-position" name="position" list="employee-pos-list" value="{{ values.position or '' }}" placeholder="Chọn hoặc nhập chức danh" maxlength="120">
+        <div class="form-field form-field-full">
+          <label for="{{ prefix }}-work-branch">Cổng làm việc <span class="kv-required-hint">Chọn 1 hoặc nhiều cổng</span></label>
+          <div class="kv-multiselect" data-gate-multiselect="modal">
+            <input type="hidden" id="{{ prefix }}-work-branch" name="work_branch" value="{{ values.work_branch or 'Cổng chính' }}">
+            <div class="kv-multiselect-box" tabindex="0" role="combobox" aria-expanded="false" aria-label="Chọn cổng làm việc">
+              <div class="kv-multiselect-tags" data-gate-tags></div>
+              <input type="text" class="kv-multiselect-input" data-gate-search placeholder="Chọn cổng làm việc..." autocomplete="off">
+            </div>
+            <div class="kv-multiselect-dropdown" data-gate-dropdown hidden>
+              {% for gc in (gate_choices or ['Cổng chính']) %}
+                <button type="button" class="kv-multiselect-option" data-gate-option="{{ gc }}">
+                  <span>{{ gc }}</span>
+                  <span class="kv-multiselect-check" aria-hidden="true">✓</span>
+                </button>
+              {% endfor %}
+              {% for ag in (active_gates or zones or []) %}
+                {% if ag.name and ag.name not in (gate_choices or ['Cổng chính']) and ag.name|lower not in ('cổng chính', 'cong chinh') %}
+                  <button type="button" class="kv-multiselect-option" data-gate-option="{{ ag.name }}">
+                    <span>{{ ag.name }}</span>
+                    <span class="kv-multiselect-check" aria-hidden="true">✓</span>
+                  </button>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
         </div>
         <div class="form-field">
           <label for="{{ prefix }}-attendance-code">Mã chấm công</label>
@@ -173,11 +191,24 @@
       <div class="salary-card-grid" style="grid-template-columns: 1fr;">
         <div class="form-field">
           <label for="{{ prefix }}-salary-template">Mẫu lương</label>
-          <select id="{{ prefix }}-salary-template" name="salary_template">
+          <select id="{{ prefix }}-salary-template" name="salary_template" data-salary-template-select>
             <option value="">Chọn mẫu lương có sẵn</option>
-            {% for tpl in salary_templates %}
-              <option value="{{ tpl }}" {% if values and values.salary_template == tpl %}selected{% endif %}>{{ tpl }}</option>
-            {% endfor %}
+            {% if salary_templates_data is defined and salary_templates_data %}
+              {% for tpl in salary_templates_data %}
+                <option value="{{ tpl.name }}"
+                        data-tpl-type="{{ tpl.salary_type }}"
+                        data-tpl-amount="{{ tpl.salary_amount }}"
+                        data-tpl-aen="{{ '1' if tpl.allowance_enabled else '0' }}"
+                        data-tpl-aamt="{{ tpl.allowance_amount }}"
+                        data-tpl-den="{{ '1' if tpl.deduction_enabled else '0' }}"
+                        data-tpl-damt="{{ tpl.deduction_amount }}"
+                        {% if values and values.salary_template == tpl.name %}selected{% endif %}>{{ tpl.name }}</option>
+              {% endfor %}
+            {% else %}
+              {% for tpl in salary_templates %}
+                <option value="{{ tpl }}" {% if values and values.salary_template == tpl %}selected{% endif %}>{{ tpl }}</option>
+              {% endfor %}
+            {% endif %}
           </select>
         </div>
       </div>
@@ -231,24 +262,22 @@
 {%- endmacro %}
 
 {% block content %}
-<datalist id="employee-dept-list">
-  {% for dept in departments %}<option value="{{ dept }}">{% endfor %}
-</datalist>
-<datalist id="employee-pos-list">
-  {% for pos in positions %}<option value="{{ pos }}">{% endfor %}
-</datalist>
 <datalist id="employee-bank-list">
   <option value="Vietcombank"><option value="BIDV"><option value="VietinBank">
   <option value="Techcombank"><option value="MBBank"><option value="ACB">
   <option value="VPBank"><option value="TPBank"><option value="Agribank"><option value="Sacombank">
 </datalist>
 <datalist id="employee-deduction-list">
+  {% for d in (deductions_catalog or []) %}
+    <option value="{{ d.name }}">
+  {% endfor %}
   <option value="Đi muộn / Về sớm">
   <option value="Nghỉ không phép">
   <option value="Vi phạm nội quy">
   <option value="Sai sót thu phí / Mất thẻ">
 </datalist>
 <datalist id="employee-zone-list">
+  <option value="Cổng chính">
   {% for z in zones %}<option value="{{ z.name }}">{% endfor %}
 </datalist>
 
@@ -263,16 +292,34 @@
     <div class="invoice-actions">
       <button type="button" class="invoice-action invoice-mobile-filter" id="employee-filter-toggle" aria-controls="employee-filter-sidebar" aria-expanded="false">{{ icon('filter') }} Bộ lọc</button>
       <button type="button" class="invoice-action invoice-action-primary" id="open-add-account" aria-label="Thêm nhân viên">{{ icon('plus') }} <span>Nhân viên</span></button>
-      <a class="invoice-action" id="employee-export" href="{{ url_for('accounts_export') }}?{{ query_string() }}" aria-label="Xuất file nhân viên">{{ icon('export') }} <span>Xuất file</span></a>
+      <details class="employee-payroll-menu">
+        <summary class="invoice-action invoice-action-primary" aria-label="Xuất bảng lương">{{ icon('export') }} <span>Xuất bảng lương</span></summary>
+        <div class="employee-payroll-dropdown">
+          <a id="employee-payroll-xlsx" href="{{ url_for('accounts_payroll_export') }}?{{ query_string(format='xlsx') }}">Bảng lương Excel (.xlsx)</a>
+          <a id="employee-payroll-pdf" href="{{ url_for('accounts_payroll_export') }}?{{ query_string(format='pdf') }}">Bảng lương PDF (.pdf)</a>
+          <a id="employee-payroll-csv" href="{{ url_for('accounts_payroll_export') }}?{{ query_string(format='csv') }}">Bảng lương CSV (.csv)</a>
+        </div>
+      </details>
+      <details class="employee-payroll-menu">
+        <summary class="invoice-action" aria-label="Xuất file nhân viên">{{ icon('export') }} <span>Xuất file</span></summary>
+        <div class="employee-payroll-dropdown">
+          <a id="employee-export-xlsx" href="{{ url_for('accounts_export') }}?{{ query_string(format='xlsx') }}">Danh sách Excel (.xlsx)</a>
+          <a id="employee-export-pdf" href="{{ url_for('accounts_export') }}?{{ query_string(format='pdf') }}">Danh sách PDF (.pdf)</a>
+          <a id="employee-export" href="{{ url_for('accounts_export') }}?{{ query_string(format='csv') }}">Danh sách CSV (.csv)</a>
+        </div>
+      </details>
       <details class="invoice-column-picker customer-column-picker">
         <summary class="invoice-action invoice-action-square" aria-label="Cài đặt cột nhân viên" title="Cài đặt cột">{{ icon('columns') }}</summary>
         <div>
           <b>Cột hiển thị</b>
-          {% for code, label in [('attendance','Mã chấm công'),('phone','Số điện thoại'),('id_card','Số CMND/CCCD'),('department','Phòng ban'),('role','Vai trò'),('note','Ghi chú')] %}
+          {% for code, label in [('attendance','Mã chấm công'),('phone','Số điện thoại'),('id_card','Số CMND/CCCD'),('work_branch','Cổng làm việc'),('role','Vai trò'),('salary','Mức lương'),('net_salary','Thực nhận'),('note','Ghi chú')] %}
             <label><input type="checkbox" data-employee-column="{{ code }}" checked> {{ label }}</label>
           {% endfor %}
         </div>
       </details>
+      {% if is_admin %}
+      <a href="{{ url_for('employee_settings') }}" class="invoice-action" title="Thiết lập ca làm việc, chấm công &amp; tính lương">Thiết lập nhân viên</a>
+      {% endif %}
     </div>
   </div>
 
@@ -293,23 +340,39 @@
         </fieldset>
 
         <div class="invoice-filter-group">
-          <label for="employee-dept-filter">Phòng ban</label>
-          <select id="employee-dept-filter" name="department" data-employee-auto-submit>
-            <option value="">Chọn phòng ban</option>
-            {% for dept in departments %}
-              <option value="{{ dept }}" {% if filters.department == dept %}selected{% endif %}>{{ dept }}</option>
-            {% endfor %}
-          </select>
+          <label for="employee-branch-filter">Cổng làm việc</label>
+          <div class="kv-multiselect kv-multiselect-filter" data-gate-multiselect="filter" data-auto-submit="true" data-allow-all="true">
+            <input type="hidden" id="employee-branch-filter" name="work_branch" value="{{ filters.work_branch }}">
+            <div class="kv-multiselect-box" tabindex="0" role="combobox" aria-expanded="false" aria-label="Lọc theo cổng làm việc">
+              <div class="kv-multiselect-tags" data-gate-tags></div>
+              <input type="text" class="kv-multiselect-input" data-gate-search placeholder="Chọn cổng..." autocomplete="off">
+            </div>
+            <div class="kv-multiselect-dropdown" data-gate-dropdown hidden>
+              <button type="button" class="kv-multiselect-option kv-multiselect-all" data-gate-option="__ALL__">
+                <span>Tất cả các cổng</span>
+                <span class="kv-multiselect-check" aria-hidden="true">✓</span>
+              </button>
+              {% for gc in (gate_choices or ['Cổng chính']) %}
+                <button type="button" class="kv-multiselect-option" data-gate-option="{{ gc }}">
+                  <span>{{ gc }}</span>
+                  <span class="kv-multiselect-check" aria-hidden="true">✓</span>
+                </button>
+              {% endfor %}
+              {% for ag in (active_gates or zones or []) %}
+                {% if ag.name and ag.name not in (gate_choices or ['Cổng chính']) and ag.name|lower not in ('cổng chính', 'cong chinh') %}
+                  <button type="button" class="kv-multiselect-option" data-gate-option="{{ ag.name }}">
+                    <span>{{ ag.name }}</span>
+                    <span class="kv-multiselect-check" aria-hidden="true">✓</span>
+                  </button>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
         </div>
 
         <div class="invoice-filter-group">
-          <label for="employee-pos-filter">Chức danh</label>
-          <select id="employee-pos-filter" name="position" data-employee-auto-submit>
-            <option value="">Chọn chức danh</option>
-            {% for pos in positions %}
-              <option value="{{ pos }}" {% if filters.position == pos %}selected{% endif %}>{{ pos }}</option>
-            {% endfor %}
-          </select>
+          <label for="employee-month-filter">Kỳ lương (Tháng)</label>
+          <input id="employee-month-filter" type="month" name="month" value="{{ filters.month }}" data-employee-auto-submit>
         </div>
 
         <div class="invoice-filter-group">
@@ -324,12 +387,37 @@
         <button type="submit" class="invoice-action invoice-action-primary invoice-apply">Áp dụng bộ lọc</button>
         <a class="invoice-reset" href="{{ url_for('accounts') }}">Đặt lại bộ lọc</a>
       </form>
+      <button type="button" class="kv-sidebar-collapse-btn" id="employee-sidebar-collapse" aria-label="Thu gọn bộ lọc" title="Thu gọn / Mở rộng bộ lọc">
+        {{ icon('left', 16) }}
+      </button>
     </aside>
 
     <div class="invoice-results customer-results">
+      <div class="payroll-summary-strip" aria-label="Tổng hợp quỹ lương">
+        <div class="payroll-summary-item">
+          <small>Lương theo công ({{ payroll_totals.worked_shifts }} ca)</small>
+          <strong>{{ payroll_totals.base_earned|vnd }}</strong>
+        </div>
+        <div class="payroll-summary-item">
+          <small>Tổng phụ cấp</small>
+          <strong class="is-plus">+{{ payroll_totals.allowance|vnd }}</strong>
+        </div>
+        <div class="payroll-summary-item">
+          <small>Tổng giảm trừ</small>
+          <strong class="is-minus">-{{ payroll_totals.deduction|vnd }}</strong>
+        </div>
+        <div class="payroll-summary-item is-total">
+          <small>Tổng quỹ lương thực nhận{% if filters.month %} ({{ filters.month }}){% endif %}</small>
+          <strong>{{ payroll_totals.net_salary|vnd }}</strong>
+        </div>
+      </div>
+
       <div class="invoice-selection" id="employee-selection" hidden>
         <span>Đã chọn <b id="employee-selected-count">0</b> nhân viên</span>
-        <a id="employee-export-selected" href="#">{{ icon('export', 16) }} Xuất file đã chọn</a>
+        <a id="employee-payroll-export-xlsx" href="#">{{ icon('export', 16) }} Xuất bảng lương (.xlsx)</a>
+        <a id="employee-payroll-export-pdf" href="#">{{ icon('export', 16) }} Xuất bảng lương (.pdf)</a>
+        <a id="employee-export-selected-xlsx" href="#">{{ icon('export', 16) }} Xuất danh sách (.xlsx)</a>
+        <a id="employee-export-selected" href="#">{{ icon('export', 16) }} Xuất danh sách (.csv)</a>
       </div>
 
       <div class="invoice-table-scroll">
@@ -343,8 +431,10 @@
               <th>{{ sort_link('name', 'Tên nhân viên') }}</th>
               <th data-employee-cell="phone">Số điện thoại</th>
               <th data-employee-cell="id_card">Số CMND/CCCD</th>
-              <th data-employee-cell="department">Phòng ban</th>
+              <th data-employee-cell="work_branch">Cổng làm việc</th>
               <th data-employee-cell="role">{{ sort_link('role', 'Vai trò') }}</th>
+              <th data-employee-cell="salary">{{ sort_link('salary', 'Mức lương') }}</th>
+              <th data-employee-cell="net_salary">{{ sort_link('net_salary', 'Thực nhận') }}</th>
               <th data-employee-cell="note">Ghi chú</th>
             </tr>
           </thead>
@@ -367,17 +457,41 @@
               </td>
               <td data-employee-cell="phone">{{ emp.phone or '—' }}</td>
               <td data-employee-cell="id_card">{{ emp.id_card or '—' }}</td>
-              <td data-employee-cell="department">{{ emp.department or '—' }}</td>
+              <td data-employee-cell="work_branch">
+                <div class="employee-gate-pills">
+                  {% for wb in emp.work_branches_list %}
+                    <span class="employee-gate-pill">{{ wb }}</span>
+                  {% endfor %}
+                </div>
+              </td>
               <td data-employee-cell="role">
                 <span class="employee-role-pill {{ emp.role }}">
                   {{ 'Quản trị viên' if emp.role == 'admin' else 'Nhân viên' }}
                 </span>
               </td>
+              <td data-employee-cell="salary" class="employee-money-cell">
+                {% if emp.salary_amount %}
+                  <div>{{ emp.salary_amount|vnd }}{{ emp.salary_unit_label }}</div>
+                  <small class="employee-money-sub">{{ emp.salary_type_label }}</small>
+                {% else %}
+                  <span class="employee-money-unset">Chưa thiết lập</span>
+                {% endif %}
+              </td>
+              <td data-employee-cell="net_salary" class="employee-money-cell">
+                {% if emp.has_salary_config %}
+                  <strong class="employee-salary-net">{{ emp.net_salary|vnd }}</strong>
+                  {% if emp.salary_type in ('shift', 'hour') %}
+                    <small class="employee-money-sub">{{ emp.worked_shifts }} ca · {{ emp.worked_hours_label }}</small>
+                  {% endif %}
+                {% else %}
+                  <span class="employee-money-unset">Chưa thiết lập</span>
+                {% endif %}
+              </td>
               <td data-employee-cell="note">{{ emp.customer_note or '—' }}</td>
             </tr>
 
             <tr class="customer-detail-row" id="employee-detail-{{ emp.id }}" hidden>
-              <td colspan="10" data-employee-colspan>
+              <td colspan="13" data-employee-colspan>
                 <section class="customer-detail" aria-label="Hồ sơ {{ emp.fullname }}">
                   <div class="customer-tabs" role="tablist" aria-label="Chi tiết {{ emp.code }}">
                     <button type="button" role="tab" aria-selected="true" tabindex="0" data-employee-tab="info">Thông tin</button>
@@ -401,8 +515,7 @@
 
                     <dl class="customer-profile-grid">
                       <div><dt>Mã chấm công</dt><dd>{{ emp.attendance_code or 'Chưa thiết lập' }}</dd></div>
-                      <div><dt>Phòng ban</dt><dd>{{ emp.department or 'Chưa cập nhật' }}</dd></div>
-                      <div><dt>Chức danh</dt><dd>{{ emp.position or 'Chưa cập nhật' }}</dd></div>
+                      <div><dt>Cổng làm việc</dt><dd>{{ emp.work_branch or 'Cổng chính' }}</dd></div>
                       <div><dt>Số điện thoại</dt><dd>{{ emp.phone or 'Chưa cập nhật' }}</dd></div>
                       <div><dt>Số CMND/CCCD</dt><dd>{{ emp.id_card or 'Chưa cập nhật' }}</dd></div>
                       <div><dt>Ngày bắt đầu</dt><dd>{{ emp.start_date or 'Chưa cập nhật' }}</dd></div>
@@ -432,8 +545,8 @@
                         data-fullname="{{ emp.fullname or '' }}"
                         data-phone="{{ emp.phone or '' }}"
                         data-start_date="{{ emp.start_date or '' }}"
-                        data-department="{{ emp.department or '' }}"
-                        data-position="{{ emp.position or '' }}"
+                        data-work_branch="{{ emp.work_branch or 'Cổng chính' }}"
+                        data-pay_branch="{{ emp.pay_branch or 'Cổng chính' }}"
                         data-username="{{ emp.username or '' }}"
                         data-role="{{ emp.role }}"
                         data-attendance_code="{{ emp.attendance_code or '' }}"
@@ -470,8 +583,8 @@
                         data-fullname="{{ emp.fullname or '' }}"
                         data-phone="{{ emp.phone or '' }}"
                         data-start_date="{{ emp.start_date or '' }}"
-                        data-department="{{ emp.department or '' }}"
-                        data-position="{{ emp.position or '' }}"
+                        data-work_branch="{{ emp.work_branch or 'Cổng chính' }}"
+                        data-pay_branch="{{ emp.pay_branch or 'Cổng chính' }}"
                         data-username="{{ emp.username or '' }}"
                         data-role="{{ emp.role }}"
                         data-attendance_code="{{ emp.attendance_code or '' }}"
@@ -502,7 +615,15 @@
                       </div>
                       <div class="salary-summary-box">
                         <small>Mức lương cơ bản</small>
-                        <strong>{{ emp.salary_amount|vnd if emp.salary_amount else 'Chưa thiết lập' }}</strong>
+                        <strong>{% if emp.salary_amount %}{{ emp.salary_amount|vnd }}{{ emp.salary_unit_label }}{% else %}Chưa thiết lập{% endif %}</strong>
+                      </div>
+                      <div class="salary-summary-box">
+                        <small>Công / Giờ làm</small>
+                        <strong>{{ emp.worked_shifts }} ca · {{ emp.worked_hours_label }}</strong>
+                      </div>
+                      <div class="salary-summary-box">
+                        <small>Lương theo công</small>
+                        <strong>{{ emp.base_earned|vnd if emp.salary_amount else 'Chưa thiết lập' }}</strong>
                       </div>
                       <div class="salary-summary-box">
                         <small>Mẫu lương áp dụng</small>
@@ -510,7 +631,7 @@
                       </div>
                       <div class="salary-summary-box">
                         <small>Thực nhận dự kiến</small>
-                        <strong>{{ emp.net_salary|vnd if (emp.salary_amount or emp.allowance_enabled or emp.deduction_enabled) else 'Chưa thiết lập' }}</strong>
+                        <strong class="employee-salary-net">{{ emp.net_salary|vnd if emp.has_salary_config else 'Chưa thiết lập' }}</strong>
                       </div>
                     </div>
                     <div class="salary-feature-list">
@@ -538,10 +659,13 @@
                       <div class="form-field">
                         <label>Ca trực</label>
                         <select name="shift_name">
-                          <option value="Ca sáng">Ca sáng</option>
-                          <option value="Ca chiều">Ca chiều</option>
-                          <option value="Ca đêm">Ca đêm</option>
-                          <option value="Ca hành chính">Ca hành chính</option>
+                          {% for s in (employee_shifts or []) %}
+                            <option value="{{ s.name }}">{{ s.name }} ({{ s.time_range }})</option>
+                          {% else %}
+                            <option value="Ca sáng">Ca sáng</option>
+                            <option value="Ca chiều">Ca chiều</option>
+                            <option value="Ca đêm">Ca đêm</option>
+                          {% endfor %}
                         </select>
                       </div>
                       <div class="form-field">
@@ -618,7 +742,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="10" class="invoice-empty" data-employee-colspan>
+              <td colspan="13" class="invoice-empty" data-employee-colspan>
                 {{ icon('users', 42) }}
                 <h2>Không tìm thấy nhân viên</h2>
                 <p>Thay đổi bộ lọc hoặc bấm "+ Nhân viên" để thêm nhân sự mới.</p>

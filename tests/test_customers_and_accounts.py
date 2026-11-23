@@ -4,8 +4,12 @@ import sys
 from pathlib import Path
 import unittest
 
+import openpyxl
+import reportlab.platypus
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'py'))
+sys.path.insert(0, str(ROOT / 'tests'))
 
 import test_gate
 import database
@@ -100,8 +104,6 @@ class CustomerAndAccountTests(unittest.TestCase):
             'employee_code': 'NV0099',
             'attendance_code': 'CC99',
             'phone': '0901234567',
-            'department': 'Bảo vệ / Trực cổng',
-            'position': 'Trưởng ca',
             'salary_type': 'month',
             'salary_amount': '8500000',
             'allowance_enabled': '1',
@@ -122,14 +124,13 @@ class CustomerAndAccountTests(unittest.TestCase):
         resp_update = self.client.post(f"/accounts/{staff['id']}/profile", data={
             'fullname': 'Nguyễn Văn Ca Tối',
             'role': 'manager',
-            'department': 'Thu ngân',
             'salary_type': 'shift',
             'salary_amount': '350000',
         }, follow_redirects=True)
         self.assertEqual(resp_update.status_code, 200)
         self.assertIn('Nguyễn Văn Ca Tối', resp_update.text)
 
-        resp_filter = self.client.get('/accounts?department=Thu+ng%C3%A2n&q=Ca+T%E1%BB%91i')
+        resp_filter = self.client.get('/accounts?q=Ca+T%E1%BB%91i')
         self.assertEqual(resp_filter.status_code, 200)
         self.assertIn('Nguyễn Văn Ca Tối', resp_filter.text)
 
@@ -160,6 +161,235 @@ class CustomerAndAccountTests(unittest.TestCase):
         self.assertEqual(r_manual.status_code, 200)
         self.assertIn('Ca chiều', r_manual.text)
         self.assertIn('8h 00p', r_manual.text)
+
+    def test_employee_payroll_display_calculation_and_export(self):
+        from io import BytesIO
+
+        self.role('admin')
+        # Tạo nhân viên lương theo ca (300.000 đ/ca) + phụ cấp 200.000 đ
+        r_add = self.client.post('/accounts/add', data={
+            'username': 'nv_luong_ca',
+            'fullname': 'Trần Thị Lương Ca',
+            'password': 'password123',
+            'role': 'manager',
+            'employee_code': 'NV0888',
+            'salary_type': 'shift',
+            'salary_amount': '300000',
+            'allowance_enabled': '1',
+            'allowance_amount': '200000',
+        }, follow_redirects=True)
+        self.assertEqual(r_add.status_code, 200)
+        emp = [s for s in database.get_staff_users() if s['username'] == 'nv_luong_ca'][0]
+
+        # Chấm công 2 ca trong tháng 2026-11 -> 2 * 300.000 + 200.000 = 800.000 đ
+        for day in ('2026-11-10', '2026-11-11'):
+            self.client.post(f"/accounts/{emp['id']}/attendance", data={
+                'work_date': day,
+                'shift_name': 'Ca sáng',
+                'check_in_time': '07:00',
+                'check_out_time': '15:00',
+                'status': 'completed',
+            })
+
+        r_page = self.client.get('/accounts?month=2026-11')
+        self.assertEqual(r_page.status_code, 200)
+        self.assertIn('300.000 đ/ca', r_page.text)
+        self.assertIn('800.000 đ', r_page.text)
+        self.assertIn('Tổng quỹ lương thực nhận', r_page.text)
+
+        # Xuất bảng lương Excel (.xlsx)
+        r_xlsx = self.client.get(f"/accounts/payroll/export?format=xlsx&month=2026-11&ids={emp['id']}")
+        self.assertEqual(r_xlsx.status_code, 200)
+        self.assertIn('spreadsheetml', r_xlsx.content_type)
+        wb = openpyxl.load_workbook(BytesIO(r_xlsx.data))
+        ws = wb.active
+        self.assertEqual(ws['A1'].value, 'BẢNG LƯƠNG NHÂN VIÊN')
+        self.assertEqual(ws.cell(row=5, column=4).value, 'Trần Thị Lương Ca')
+        self.assertEqual(ws.cell(row=5, column=9).value, 600000)
+        self.assertEqual(ws.cell(row=5, column=13).value, 800000)
+
+        # Xuất bảng lương PDF (.pdf)
+        r_pdf = self.client.get(f"/accounts/payroll/export?format=pdf&month=2026-11&ids={emp['id']}")
+        self.assertEqual(r_pdf.status_code, 200)
+        self.assertEqual(r_pdf.content_type, 'application/pdf')
+        self.assertTrue(r_pdf.data.startswith(b'%PDF-'))
+
+        # Xuất bảng lương CSV (.csv)
+        r_csv = self.client.get(f"/accounts/payroll/export?format=csv&month=2026-11&ids={emp['id']}")
+        self.assertEqual(r_csv.status_code, 200)
+        csv_text = r_csv.data.decode('utf-8')
+        self.assertIn('Trần Thị Lương Ca', csv_text)
+        self.assertIn('800000', csv_text)
+        self.assertIn('TỔNG CỘNG', csv_text)
+
+        # Xuất danh sách nhân viên Excel (.xlsx) và PDF (.pdf)
+        r_emp_xlsx = self.client.get(f"/accounts/export?format=xlsx&ids={emp['id']}")
+        self.assertEqual(r_emp_xlsx.status_code, 200)
+        self.assertIn('spreadsheetml', r_emp_xlsx.content_type)
+        wb_emp = openpyxl.load_workbook(BytesIO(r_emp_xlsx.data))
+        self.assertEqual(wb_emp.active['A1'].value, 'DANH SÁCH NHÂN VIÊN')
+        self.assertEqual(wb_emp.active.cell(row=5, column=3).value, 'Trần Thị Lương Ca')
+
+        r_emp_pdf = self.client.get(f"/accounts/export?format=pdf&ids={emp['id']}")
+        self.assertEqual(r_emp_pdf.status_code, 200)
+        self.assertEqual(r_emp_pdf.content_type, 'application/pdf')
+        self.assertTrue(r_emp_pdf.data.startswith(b'%PDF-'))
+
+    def test_employee_suite_pages_and_actions(self):
+        from datetime import date
+        self.role('admin')
+        # 1. Topbar dropdown links render on /accounts
+        r_acc = self.client.get('/accounts')
+        self.assertEqual(r_acc.status_code, 200)
+        self.assertIn('/employees/schedule', r_acc.text)
+        self.assertIn('/employees/timesheet', r_acc.text)
+        self.assertIn('/employees/payroll', r_acc.text)
+
+        # 2. Lịch làm việc: GET + POST add + delete
+        r_sch = self.client.get('/employees/schedule')
+        self.assertEqual(r_sch.status_code, 200)
+        self.assertIn('Lịch làm việc', r_sch.text)
+        r_sch_add = self.client.post('/employees/schedule', data={
+            'user_id': '2',
+            'work_date': date.today().isoformat(),
+            'shift_name': 'Ca sáng',
+            'gate_name': 'Cổng chính',
+            'note': 'Trực đầu ca',
+        }, follow_redirects=True)
+        self.assertEqual(r_sch_add.status_code, 200)
+        self.assertIn('Ca sáng', r_sch_add.text)
+
+        # 3. Bảng chấm công: GET + POST
+        r_ts = self.client.get('/employees/timesheet')
+        self.assertEqual(r_ts.status_code, 200)
+        self.assertIn('Bảng chấm công', r_ts.text)
+        r_ts_add = self.client.post('/employees/timesheet', data={
+            'user_id': '2',
+            'work_date': date.today().isoformat(),
+            'shift_name': 'Ca chiều',
+            'zone_name': 'Cổng chính',
+            'check_in_time': '14:00',
+            'check_out_time': '22:00',
+            'status': 'completed',
+        }, follow_redirects=True)
+        self.assertEqual(r_ts_add.status_code, 200)
+        self.assertIn('Ca chiều', r_ts_add.text)
+
+        # 4. Bảng lương: GET + POST create + status update
+        r_pr = self.client.get('/employees/payroll')
+        self.assertEqual(r_pr.status_code, 200)
+        self.assertIn('Bảng tính lương', r_pr.text)
+        r_pr_add = self.client.post('/employees/payroll', data={
+            'name': 'Bảng lương test T11',
+            'pay_cycle': 'Hàng tháng',
+            'work_period': date.today().strftime('%Y-%m'),
+            'pay_branch': 'Cổng chính',
+        }, follow_redirects=True)
+        self.assertEqual(r_pr_add.status_code, 200)
+        self.assertIn('Bảng lương test T11', r_pr_add.text)
+
+        # 5. Thiết lập nhân viên nằm trong phân hệ Nhân viên (/employees/settings)
+        r_set = self.client.get('/employees/settings')
+        self.assertEqual(r_set.status_code, 200)
+        self.assertIn('Thiết lập nhanh', r_set.text)
+        r_wd = self.client.post('/employees/settings', data={
+            'emp_action': 'save_work_days',
+            'gate_name': 'Cổng chính',
+            'work_days': ['T2', 'T3', 'T4', 'T5', 'T6'],
+        }, follow_redirects=True)
+        self.assertEqual(r_wd.status_code, 200)
+        self.assertIn('T2, T3, T4, T5, T6', r_wd.text)
+        r_hol = self.client.post('/employees/settings', data={
+            'emp_action': 'add_holiday',
+            'holiday_name': 'Tết Dương lịch',
+            'start_date': '2026-01-01',
+            'end_date': '2026-01-01',
+            'holiday_bonus': '500000',
+        }, follow_redirects=True)
+        self.assertEqual(r_hol.status_code, 200)
+        self.assertIn('Tết Dương lịch', r_hol.text)
+        r_qadd = self.client.post('/employees/settings', data={
+            'emp_action': 'quick_add_employees',
+            'emp_fullname': ['Lê Văn Nhanh'],
+            'emp_phone': ['0911222333'],
+            'emp_pay_branch': ['Cổng chính'],
+            'emp_work_branch': ['Cổng chính'],
+        }, follow_redirects=True)
+        self.assertEqual(r_qadd.status_code, 200)
+        self.assertIn('Đã thêm nhanh 1 nhân viên', r_qadd.text)
+        r_qsal = self.client.post('/employees/settings', data={
+            'emp_action': 'quick_save_salary',
+            'user_id': '2',
+            'salary_type': 'hour',
+            'salary_amount': '25000',
+            'allowance_enabled': '1',
+            'allowance_amount': '200000',
+        }, follow_redirects=True)
+        self.assertEqual(r_qsal.status_code, 200)
+        self.assertIn('Đã cập nhật thiết lập lương', r_qsal.text)
+        r_attm = self.client.post('/employees/settings', data={
+            'emp_action': 'quick_save_attendance_mode',
+            'emp_attendance_mode': 'flex',
+        }, follow_redirects=True)
+        self.assertEqual(r_attm.status_code, 200)
+        self.assertIn('Chấm công theo khung giờ làm việc', r_attm.text)
+        r_cim = self.client.post('/employees/settings', data={
+            'emp_action': 'quick_save_checkin_methods',
+            'emp_checkin_software': '1',
+            'emp_checkin_photo': '1',
+        }, follow_redirects=True)
+        self.assertEqual(r_cim.status_code, 200)
+        self.assertIn('Qua phần mềm, Chụp ảnh', r_cim.text)
+        r_sh = self.client.post('/employees/settings', data={
+            'emp_action': 'save_shift',
+            'shift_name': 'Ca tăng cường',
+            'shift_start': '08:00',
+            'shift_end': '12:00',
+            'checkin_start': '07:30',
+            'checkin_end': '12:30',
+            'shift_gates': ['Cổng chính'],
+        }, follow_redirects=True)
+        self.assertEqual(r_sh.status_code, 200)
+        self.assertIn('Ca tăng cường', r_sh.text)
+        r_tpl = self.client.post('/employees/settings', data={
+            'emp_action': 'save_salary_template',
+            'tpl_name': 'Mẫu trực đêm',
+            'tpl_salary_type': 'shift',
+            'tpl_salary_amount': '350000',
+            'tpl_allowance_enabled': '1',
+            'tpl_allowance_amount': '100000',
+        }, follow_redirects=True)
+        self.assertEqual(r_tpl.status_code, 200)
+        self.assertIn('Mẫu trực đêm', r_tpl.text)
+        r_apply = self.client.post('/employees/settings', data={
+            'emp_action': 'apply_salary_template',
+            'tpl_name': 'Mẫu trực đêm',
+            'user_ids': ['2'],
+        }, follow_redirects=True)
+        self.assertEqual(r_apply.status_code, 200)
+        self.assertIn('1 nhân viên', r_apply.text)
+        r_alw = self.client.post('/employees/settings', data={
+            'emp_action': 'save_allowance',
+            'item_name': 'Phụ cấp xăng xe',
+            'item_type': 'Phụ cấp cố định hàng tháng',
+            'item_amount': '300000',
+        }, follow_redirects=True)
+        self.assertEqual(r_alw.status_code, 200)
+        self.assertIn('Phụ cấp xăng xe', r_alw.text)
+        r_ded = self.client.post('/employees/settings', data={
+            'emp_action': 'save_deduction',
+            'item_name': 'Quên bấm thẻ',
+            'item_type': 'Vi phạm nội quy',
+            'item_amount': '100000',
+        }, follow_redirects=True)
+        self.assertEqual(r_ded.status_code, 200)
+        self.assertIn('Quên bấm thẻ', r_ded.text)
+        r_acc2 = self.client.get('/accounts')
+        self.assertIn('Mẫu trực đêm', r_acc2.text)
+        self.assertIn('Quên bấm thẻ', r_acc2.text)
+        r_gen_set = self.client.get('/settings')
+        self.assertEqual(r_gen_set.status_code, 200)
+        self.assertNotIn('/settings?section=employee', r_gen_set.text)
 
 
 if __name__ == '__main__':

@@ -10,108 +10,297 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-heading">
-  <div>
-    <h1>Sơ đồ bãi đỗ xe</h1>
-    <p>Theo dõi trực quan trạng thái từng ô đỗ, phân khu phương tiện và điều phối xe trực tiếp</p>
-  </div>
-  <div class="heading-actions">
-    {% if is_admin %}
-      <button type="button"
-              class="btn btn-primary"
-              data-edit-area
-              data-id=""
-              data-name=""
-              data-type="all">
-        + Thêm khu
+<div class="kv-parking-page">
+  <!-- Thanh tiêu đề, tìm kiếm và thao tác giống KiotViet Phòng/Bàn -->
+  <div class="kv-parking-topbar">
+    <div class="kv-parking-title-wrap">
+      <h1>Sơ đồ bãi đỗ xe</h1>
+    </div>
+
+    <div class="kv-parking-search" role="search">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="search" id="kv-parking-search" placeholder="Theo tên khu, ô đỗ, biển số..." aria-label="Tìm kiếm khu hoặc ô đỗ">
+      <button type="button" class="kv-parking-sliders" id="kv-parking-reset-filter" title="Đặt lại bộ lọc">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
       </button>
-    {% endif %}
-    {% if is_staff %}
-      <a href="{{ url_for('gate') }}" class="btn btn-outline">Giám sát vào / ra</a>
-    {% endif %}
-  </div>
-</div>
+    </div>
 
-<div class="stats-grid four">
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Tổng số ô đỗ</span>
-      <span class="stat-icon blue">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
-      </span>
-    </div>
-    <strong>{{ counts.total }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      {{ areas|length }} phân khu toàn hệ thống
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Còn trống</span>
-      <span class="stat-icon green">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
-      </span>
-    </div>
-    <strong>{{ counts.available }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Sẵn sàng đón xe vào bãi
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Đang có xe</span>
-      <span class="stat-icon purple">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
-      </span>
-    </div>
-    <strong>{{ counts.occupied }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Phương tiện đang lưu bãi
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-top">
-      <span>Đang bảo trì</span>
-      <span class="stat-icon amber">
-        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-      </span>
-    </div>
-    <strong>{{ counts.maintenance }}</strong>
-    <div class="stat-detail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
-      Tạm ngưng nhận xe
-    </div>
-  </div>
-</div>
-
-<section class="panel chart-card" style="margin-bottom: 18px; padding: 16px 20px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
-    <div class="chip-list" id="area-filter" role="tablist" aria-label="Lọc theo khu đỗ xe">
-      <button type="button" class="chip active" data-area="all">
-        Tất cả khu ({{ counts.total }})
-      </button>
-      {% for area in areas %}
-        {% set area_slots = slots_by_area.get(area.name, []) %}
-        <button type="button" class="chip" data-area="{{ area.id }}">
-          Khu {{ area.name }} ({{ area_slots|length }})
+    <div class="kv-parking-actions">
+      {% if is_admin %}
+        <button type="button"
+                class="kv-btn-primary"
+                id="kv-open-add-slot-top">
+          + Thêm ô đỗ
         </button>
-      {% endfor %}
+      {% endif %}
+      <a href="{{ url_for('parking_export') }}" class="kv-btn-white">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Xuất file</span>
+      </a>
+      {% if is_staff %}
+        <a href="{{ url_for('gate') }}" class="kv-btn-white">Giám sát vào / ra</a>
+      {% endif %}
+      <div class="kv-help-wrap">
+        <button type="button" class="kv-btn-help" id="kv-parking-help-btn" title="Hướng dẫn" aria-expanded="false">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+        </button>
+        <div class="kv-help-popover" id="kv-parking-help-popover" hidden>
+          <strong>Hướng dẫn sơ đồ bãi đỗ</strong>
+          <div>• Chọn cổng ở góc trên cùng bên phải để xem khu/ô đỗ của riêng cổng đó.</div>
+          <div>• Bấm vào dòng ô đỗ trong bảng để xem chi tiết, sửa tên, bảo trì hoặc xóa.</div>
+        </div>
+      </div>
     </div>
-
-    {% if is_staff %}
-      <small style="color:#637798;font-weight:500;font-size:12px;">
-        Nhấn vào ô đỗ bất kỳ để thao tác bảo trì, chuyển vị trí xe{{ ', sửa tên hoặc xóa ô' if is_admin else '' }}.
-      </small>
-    {% endif %}
   </div>
-</section>
 
+  <!-- Bố cục 2 cột: Bộ lọc trái + Sơ đồ khu/ô phải -->
+  <div class="kv-parking-layout">
+    <aside class="kv-parking-sidebar" aria-label="Bộ lọc sơ đồ bãi đỗ">
+      <div>
+        <div class="kv-filter-group-head">
+          <h2>Khu vực</h2>
+          {% if is_admin %}
+            <button type="button"
+                    class="kv-filter-create-link"
+                    data-edit-area
+                    data-id=""
+                    data-name=""
+                    data-type="all">Tạo mới</button>
+          {% endif %}
+        </div>
+        <div class="kv-radio-list" id="kv-area-radio-list">
+          <label class="kv-radio-item">
+            <input type="radio" name="kv_area_filter" value="all" checked>
+            <span>Tất cả</span>
+          </label>
+          {% for area in areas %}
+            <div class="kv-area-radio-row">
+              <label class="kv-radio-item">
+                <input type="radio" name="kv_area_filter" value="{{ area.id }}">
+                <span>Khu {{ area.name }}</span>
+              </label>
+              {% if is_admin %}
+                {% set area_slots = slots_by_area.get(area.name, []) %}
+                {% set area_occ = area_slots|selectattr('status', 'equalto', 'occupied')|list|length %}
+                <button type="button"
+                        class="kv-area-edit-btn"
+                        title="Sửa khu {{ area.name }}"
+                        aria-label="Sửa khu {{ area.name }}"
+                        data-edit-area
+                        data-id="{{ area.id }}"
+                        data-name="{{ area.name }}"
+                        data-type="{{ area.allowed_vehicle_type_id or 'all' }}"
+                        data-note="{{ area.note or '' }}"
+                        data-count="{{ area_slots|length }}"
+                        data-occupied="{{ area_occ }}"
+                        data-delete-url="{{ url_for('parking_area_delete', area_id=area.id) }}">
+                  <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                </button>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <div class="kv-filter-group-head">
+          <h2>Trạng thái</h2>
+        </div>
+        <div class="kv-radio-list" id="kv-status-radio-list">
+          <label class="kv-radio-item">
+            <input type="radio" name="kv_status_filter" value="active" checked>
+            <span>Đang hoạt động</span>
+          </label>
+          <label class="kv-radio-item">
+            <input type="radio" name="kv_status_filter" value="inactive">
+            <span>Ngừng hoạt động</span>
+          </label>
+          <label class="kv-radio-item">
+            <input type="radio" name="kv_status_filter" value="all">
+            <span>Tất cả</span>
+          </label>
+        </div>
+      </div>
+    </aside>
+
+    <div class="kv-parking-main">
+      {% if current_gate_obj %}
+        <div class="kv-gate-scope-banner">
+          <div>
+            Đang xem sơ đồ bãi xe của cổng <strong>{{ current_gate_obj.name }}</strong>
+            {% if assigned_area_names %}
+              (Khu: {{ assigned_area_names|join(', ') }})
+            {% else %}
+              (Tất cả khu đỗ — chưa giới hạn khu riêng)
+            {% endif %}
+          </div>
+          {% if is_staff %}
+            <button type="button" class="kv-btn-white" id="kv-open-gate-areas">Chọn khu cho cổng này</button>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      <div class="kv-parking-summary-strip">
+        <div class="kv-summary-pills">
+          <span>Tổng số ô: <strong>{{ counts.total }}</strong></span>
+          <span>Còn trống: <strong style="color:#18a967;">{{ counts.available }}</strong></span>
+          <span>Đang có xe: <strong style="color:#0070f4;">{{ counts.occupied }}</strong></span>
+          <span>Bảo trì: <strong style="color:#d97706;">{{ counts.maintenance }}</strong></span>
+        </div>
+        <div class="kv-view-switch" role="tablist" aria-label="Chế độ hiển thị">
+          <button type="button" class="kv-view-btn active" data-parking-view="table" role="tab" aria-selected="true">Danh sách</button>
+          <button type="button" class="kv-view-btn" data-parking-view="grid" role="tab" aria-selected="false">Sơ đồ ô</button>
+        </div>
+      </div>
+
+      <!-- CHẾ ĐỘ BẢNG DANH SÁCH (KiotViet #/TableAndRoom) -->
+      <section class="kv-parking-table-card" id="kv-parking-table-view">
+        <div class="table-scroll">
+          <table class="kv-parking-table" id="kv-parking-table" aria-label="Danh sách ô đỗ xe">
+            <thead>
+              <tr>
+                <th>Tên ô đỗ</th>
+                <th>Khu vực</th>
+                <th>Loại xe</th>
+                <th>Biển số đang đỗ</th>
+                <th>Tình trạng chỗ</th>
+                <th>Trạng thái</th>
+                <th>Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for area in areas %}
+                {% for slot in slots_by_area.get(area.name, []) %}
+                  {% set is_maint = (slot.status == 'maintenance') %}
+                  {% set is_occ = (slot.status == 'occupied') %}
+                  <tr class="kv-slot-row"
+                      data-slot-row="{{ slot.slot_name }}"
+                      data-area="{{ area.id }}"
+                      data-area-name="{{ area.name }}"
+                      data-slot-status="{{ slot.status }}"
+                      data-search="{{ (slot.slot_name ~ ' ' ~ area.name ~ ' ' ~ (slot.plate_number or '') ~ ' ' ~ (slot.maintenance_reason or ''))|lower }}"
+                      tabindex="0"
+                      aria-expanded="false">
+                    <td><strong>{{ slot.slot_name }}</strong></td>
+                    <td>Khu {{ area.name }}</td>
+                    <td>{{ slot.vehicle_type_name or area.allowed_type_name or 'Tất cả loại xe' }}</td>
+                    <td>
+                      {% if is_occ and slot.plate_number %}
+                        <span class="kv-plate-chip">{{ slot.plate_number }}</span>
+                      {% else %}
+                        <span class="kv-muted">—</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if is_occ %}
+                        <span class="badge badge-blue"><span></span>Đang có xe</span>
+                      {% elif is_maint %}
+                        <span class="badge badge-amber"><span></span>Bảo trì</span>
+                      {% else %}
+                        <span class="badge badge-green"><span></span>Còn trống</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if is_maint %}
+                        <span class="kv-status-pill is-inactive">Ngừng hoạt động</span>
+                      {% else %}
+                        <span class="kv-status-pill is-active">Đang hoạt động</span>
+                      {% endif %}
+                    </td>
+                    <td>{{ slot.maintenance_reason or area.note or '—' }}</td>
+                  </tr>
+                  <tr class="kv-slot-detail-row" data-slot-detail="{{ slot.slot_name }}" hidden>
+                    <td colspan="7">
+                      <div class="kv-slot-detail-box">
+                        <div class="kv-slot-detail-head">
+                          <strong>{{ slot.slot_name }}</strong>
+                          {% if is_maint %}
+                            <span class="kv-status-pill is-inactive">Ngừng hoạt động</span>
+                          {% else %}
+                            <span class="kv-status-pill is-active">Đang hoạt động</span>
+                          {% endif %}
+                        </div>
+                        <dl class="kv-slot-detail-grid">
+                          <div>
+                            <dt>Khu vực</dt>
+                            <dd>Khu {{ area.name }}</dd>
+                          </div>
+                          <div>
+                            <dt>Loại xe</dt>
+                            <dd>{{ slot.vehicle_type_name or area.allowed_type_name or 'Tất cả loại xe' }}</dd>
+                          </div>
+                          <div>
+                            <dt>Biển số đang đỗ</dt>
+                            <dd>{{ slot.plate_number or 'Chưa có' }}</dd>
+                          </div>
+                          <div>
+                            <dt>{{ 'Lý do bảo trì' if is_maint else 'Giờ vào bãi' }}</dt>
+                            <dd>{{ (slot.maintenance_reason or 'Đang kiểm tra kỹ thuật') if is_maint else (slot.entry_time or '—') }}</dd>
+                          </div>
+                        </dl>
+                        {% if is_staff %}
+                        <div class="kv-slot-detail-foot">
+                          <div>
+                            {% if is_admin %}
+                              <button type="button"
+                                      class="kv-ghost-danger"
+                                      data-table-action="delete"
+                                      data-slot-target="{{ slot.slot_name }}"
+                                      {% if is_occ or slot.record_id %}disabled title="Không thể xóa ô đang có xe"{% endif %}>
+                                🗑 Xóa
+                              </button>
+                            {% endif %}
+                          </div>
+                          <div class="kv-slot-detail-right-actions">
+                            {% if is_occ %}
+                              <button type="button" class="kv-btn-primary" data-table-action="vehicle" data-slot-target="{{ slot.slot_name }}">Quản lý xe</button>
+                            {% endif %}
+                            {% if is_admin %}
+                              <button type="button" class="kv-btn-primary" data-table-action="edit" data-slot-target="{{ slot.slot_name }}">Chỉnh sửa</button>
+                            {% endif %}
+                            <button type="button"
+                                    class="kv-btn-white"
+                                    data-table-action="maintenance"
+                                    data-slot-target="{{ slot.slot_name }}"
+                                    {% if is_occ or slot.record_id %}disabled{% endif %}>
+                              {{ 'Mở lại ô' if is_maint else 'Ngừng hoạt động' }}
+                            </button>
+                          </div>
+                        </div>
+                        {% endif %}
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="7" class="empty-cell">Chưa có ô đỗ nào được thiết lập.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="kv-parking-pagination" id="kv-parking-pagination">
+          <div class="kv-page-size-wrap">
+            <select id="kv-page-size" aria-label="Số dòng mỗi trang">
+              <option value="15" selected>15</option>
+              <option value="30">30</option>
+              <option value="50">50</option>
+              <option value="999">Tất cả</option>
+            </select>
+            <span>Dòng</span>
+          </div>
+          <div class="kv-page-controls">
+            <button type="button" id="kv-page-prev" aria-label="Trang trước">‹</button>
+            <span id="kv-page-info">Trang 1 / 1</span>
+            <button type="button" id="kv-page-next" aria-label="Trang sau">›</button>
+          </div>
+          <div class="kv-page-summary" id="kv-page-summary"></div>
+        </div>
+      </section>
+
+      <!-- CHẾ ĐỘ SƠ ĐỒ Ô (Visual Grid View) -->
+      <div id="kv-parking-grid-view" hidden>
 {% if areas %}
   {% for area in areas %}
     {% set area_slots = slots_by_area.get(area.name, []) %}
@@ -136,6 +325,9 @@
           {% if maint_count %}
             <span class="badge badge-amber"><span></span>{{ maint_count }} bảo trì</span>
           {% endif %}
+          {% if area.note %}
+            <span class="kv-muted" style="font-size:12.5px;">· {{ area.note }}</span>
+          {% endif %}
         </div>
 
         {% if is_admin %}
@@ -145,7 +337,8 @@
                     data-edit-area
                     data-id="{{ area.id }}"
                     data-name="{{ area.name }}"
-                    data-type="{{ area.allowed_vehicle_type_id or 'all' }}">
+                    data-type="{{ area.allowed_vehicle_type_id or 'all' }}"
+                    data-note="{{ area.note or '' }}">
               Sửa khu
             </button>
             <button type="button"
@@ -234,8 +427,36 @@
   {% endfor %}
 {% else %}
   <section class="panel chart-card">
-    <div class="empty-inline">Bãi đỗ xe hiện chưa có khu vực nào.{% if is_admin %} Hãy bấm "+ Thêm khu" để khởi tạo.{% endif %}</div>
+    <div class="empty-inline">Bãi đỗ xe hiện chưa có khu vực nào.{% if is_admin %} Hãy bấm "Tạo mới" ở mục Khu vực để khởi tạo.{% endif %}</div>
   </section>
+{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if is_staff and current_gate_obj %}
+  <dialog id="gate-areas-dialog">
+    <form method="POST" action="{{ url_for('parking_gate_areas_save') }}" class="dialog-content">
+      <div class="dialog-header">
+        <h3>Chọn khu đỗ cho {{ current_gate_obj.name }}</h3>
+        <button type="button" class="dialog-close" data-close aria-label="Đóng">×</button>
+      </div>
+      <p style="margin:0 0 8px;font-size:13px;color:#525d6a;">Chọn các khu đỗ hiển thị khi chuyển sang cổng này (bỏ chọn tất cả để hiển thị toàn bộ bãi xe):</p>
+      <div class="kv-gate-area-checks">
+        {% for a in all_areas %}
+          <label class="kv-gate-area-check">
+            <span><strong>Khu {{ a.name }}</strong> · {{ a.allowed_type_name or 'Tất cả loại xe' }}</span>
+            <input type="checkbox" name="area_names" value="{{ a.name }}" {% if a.name in assigned_area_names %}checked{% endif %}>
+          </label>
+        {% endfor %}
+      </div>
+      <div class="dialog-actions" style="margin-top:16px;">
+        <button type="button" class="btn btn-outline" data-close>Bỏ qua</button>
+        <button type="submit" class="btn btn-primary">Lưu cấu hình</button>
+      </div>
+    </form>
+  </dialog>
 {% endif %}
 
 {% if is_staff %}
@@ -350,42 +571,54 @@
   </dialog>
 
   {% if is_admin %}
-    <!-- HỘP THOẠI THÊM / SỬA KHU ĐỖ XE -->
-    <dialog id="area-dialog">
-      <form method="POST" action="{{ url_for('parking_area_save') }}" class="dialog-content">
-        <div class="dialog-header">
-          <h3 id="area-title">Thêm khu mới</h3>
-          <button type="button" class="dialog-close" data-close aria-label="Đóng">×</button>
+    <!-- HỘP THOẠI THÊM / SỬA KHU ĐỖ XE (Kiểu KiotViet Thêm khu vực) -->
+    <dialog id="area-dialog" class="kv-area-modal">
+      <form method="POST" action="{{ url_for('parking_area_save') }}" class="kv-area-modal-form">
+        <div class="kv-area-modal-head">
+          <h3 id="area-title">Thêm khu vực</h3>
+          <button type="button" class="kv-area-modal-close" data-close aria-label="Đóng">×</button>
         </div>
 
         <input type="hidden" name="area_id" id="area-id">
 
-        <div class="form-grid" style="grid-template-columns: 1fr;">
-          <div class="form-field">
-            <label for="area-name">Tên khu vực (VD: A, B, C, Tầng hầm B1)</label>
-            <input type="text" id="area-name" name="name" required placeholder="Nhập tên khu vực">
+        <div class="kv-area-modal-body">
+          <div class="kv-modal-field">
+            <label for="area-name">Tên khu vực</label>
+            <input type="text" id="area-name" name="name" required placeholder="Bắt buộc">
           </div>
 
-          <div class="form-field" id="area-count-field">
-            <label for="area-slot-count">Số lượng ô đỗ khởi tạo (1 – 1000)</label>
-            <input type="number" id="area-slot-count" name="slot_count" min="1" max="1000" value="6" required>
-            <small id="area-slot-preview" style="color:#637798;font-size:12px;"></small>
+          <div class="kv-modal-field">
+            <label for="area-note">Ghi chú</label>
+            <textarea id="area-note" name="note" rows="3" maxlength="255" placeholder="Nhập ghi chú"></textarea>
           </div>
 
-          <div class="form-field">
-            <label for="area-type">Loại xe được phép đỗ</label>
-            <select id="area-type" name="vehicle_type_id">
-              <option value="all">Tất cả loại xe</option>
-              {% for vt in vehicle_types %}
-                <option value="{{ vt.id }}">{{ vt.name }}</option>
-              {% endfor %}
-            </select>
+          <div class="kv-modal-two-col">
+            <div class="kv-modal-field" id="area-count-field">
+              <label for="area-slot-count">Số lượng ô đỗ (1 – 1000)</label>
+              <input type="number" id="area-slot-count" name="slot_count" min="1" max="1000" value="6" required>
+              <small id="area-slot-preview" class="kv-modal-hint"></small>
+            </div>
+
+            <div class="kv-modal-field">
+              <label for="area-type">Loại xe được phép đỗ</label>
+              <select id="area-type" name="vehicle_type_id">
+                <option value="all">Tất cả loại xe</option>
+                {% for vt in vehicle_types %}
+                  <option value="{{ vt.id }}">{{ vt.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
           </div>
         </div>
 
-        <div class="dialog-actions">
-          <button type="button" class="btn btn-outline" data-close>Hủy</button>
-          <button type="submit" class="btn btn-primary">Lưu khu vực</button>
+        <div class="kv-area-modal-foot" style="justify-content:space-between;">
+          <div>
+            <button type="button" class="kv-ghost-danger" id="area-modal-delete-btn" hidden>🗑 Xóa</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <button type="button" class="kv-modal-cancel" data-close>Bỏ qua</button>
+            <button type="submit" class="kv-modal-save">Lưu</button>
+          </div>
         </div>
       </form>
     </dialog>
@@ -425,27 +658,39 @@
       </form>
     </dialog>
 
-    <!-- HỘP THOẠI THÊM Ô ĐỖ LẺ -->
-    <dialog id="slot-add-dialog">
-      <form method="POST" action="{{ url_for('parking_slot_add') }}" class="dialog-content">
-        <div class="dialog-header">
+    <!-- HỘP THOẠI THÊM Ô ĐỖ LẺ (Kiểu KiotViet Thêm phòng/bàn) -->
+    <dialog id="slot-add-dialog" class="kv-area-modal">
+      <form method="POST" action="{{ url_for('parking_slot_add') }}" class="kv-area-modal-form">
+        <div class="kv-area-modal-head">
           <h3>Thêm ô đỗ mới</h3>
-          <button type="button" class="dialog-close" data-close aria-label="Đóng">×</button>
+          <button type="button" class="kv-area-modal-close" data-close aria-label="Đóng">×</button>
         </div>
-        <input type="hidden" name="area_id" id="slot-add-area">
-        <div class="form-grid" style="grid-template-columns: 1fr;">
-          <div class="form-field">
-            <label>Khu vực</label>
-            <div id="slot-add-area-label" style="font-weight:700;color:#10244b;"></div>
-          </div>
-          <div class="form-field">
+        <div class="kv-area-modal-body">
+          <div class="kv-modal-field">
             <label for="slot-add-name">Tên ô đỗ</label>
-            <input type="text" id="slot-add-name" name="slot_name" required placeholder="VD: A07">
+            <input type="text" id="slot-add-name" name="slot_name" required placeholder="Bắt buộc (VD: A07)">
+          </div>
+          <div class="kv-modal-field">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <label for="slot-add-area">Khu vực</label>
+              <button type="button" class="kv-filter-create-link" id="kv-slot-add-new-area">Tạo mới</button>
+            </div>
+            <select id="slot-add-area" name="area_id" required>
+              {% for area in areas %}
+                <option value="{{ area.id }}">Khu {{ area.name }}</option>
+              {% endfor %}
+            </select>
+            <div id="slot-add-area-label" hidden></div>
           </div>
         </div>
-        <div class="dialog-actions">
-          <button type="button" class="btn btn-outline" data-close>Hủy</button>
-          <button type="submit" class="btn btn-primary">Thêm ô đỗ</button>
+        <div class="kv-area-modal-foot" style="justify-content:space-between;">
+          <div>
+            <button type="button" class="kv-ghost-danger" id="area-modal-delete-btn" hidden>🗑 Xóa</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <button type="button" class="kv-modal-cancel" data-close>Bỏ qua</button>
+            <button type="submit" class="kv-modal-save">Lưu</button>
+          </div>
         </div>
       </form>
     </dialog>
@@ -472,4 +717,219 @@
 {% if is_staff %}
 <script src="/static/js/parking.js"></script>
 {% endif %}
+<script>
+(function () {
+  'use strict';
+  var searchInput = document.getElementById('kv-parking-search');
+  var resetBtn = document.getElementById('kv-parking-reset-filter');
+  var helpBtn = document.getElementById('kv-parking-help-btn');
+  var helpPop = document.getElementById('kv-parking-help-popover');
+  var openGateAreasBtn = document.getElementById('kv-open-gate-areas');
+  var gateAreasDlg = document.getElementById('gate-areas-dialog');
+  var openAddSlotTopBtn = document.getElementById('kv-open-add-slot-top');
+  var slotAddDlg = document.getElementById('slot-add-dialog');
+  var slotAddAreaSelect = document.getElementById('slot-add-area');
+  var slotAddNameInput = document.getElementById('slot-add-name');
+  var slotAddNewAreaBtn = document.getElementById('kv-slot-add-new-area');
+  var tableView = document.getElementById('kv-parking-table-view');
+  var gridView = document.getElementById('kv-parking-grid-view');
+  var pageSizeSel = document.getElementById('kv-page-size');
+  var pagePrevBtn = document.getElementById('kv-page-prev');
+  var pageNextBtn = document.getElementById('kv-page-next');
+  var pageInfoEl = document.getElementById('kv-page-info');
+  var pageSummaryEl = document.getElementById('kv-page-summary');
+  var currentPage = 1;
+
+  // View Switcher (Danh sách / Sơ đồ ô)
+  document.querySelectorAll('[data-parking-view]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var mode = btn.dataset.parkingView;
+      document.querySelectorAll('[data-parking-view]').forEach(function (b) {
+        var active = b === btn;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      if (tableView) tableView.hidden = mode !== 'table';
+      if (gridView) gridView.hidden = mode !== 'grid';
+    });
+  });
+
+  function applyParkingFilters() {
+    var areaEl = document.querySelector('input[name="kv_area_filter"]:checked');
+    var statusEl = document.querySelector('input[name="kv_status_filter"]:checked');
+    var occEl = document.querySelector('input[name="kv_occ_filter"]:checked');
+    var areaVal = areaEl ? areaEl.value : 'all';
+    var statusVal = statusEl ? statusEl.value : 'all';
+    var occVal = occEl ? occEl.value : 'all';
+    var q = (searchInput ? searchInput.value : '').trim().toLowerCase();
+
+    // Filter Table Rows + Pagination
+    var rows = Array.prototype.slice.call(document.querySelectorAll('.kv-slot-row'));
+    var matchedRows = [];
+    rows.forEach(function (row) {
+      var st = row.dataset.slotStatus;
+      var areaOk = areaVal === 'all' || row.dataset.area === areaVal;
+      var stOk = statusVal === 'all' || (statusVal === 'active' && st !== 'maintenance') || (statusVal === 'inactive' && st === 'maintenance');
+      var occOk = occVal === 'all' || (occVal === 'available' && st === 'available') || (occVal === 'occupied' && st === 'occupied');
+      var qOk = !q || (row.dataset.search || '').indexOf(q) !== -1;
+      var show = areaOk && stOk && occOk && qOk;
+      if (show) matchedRows.push(row);
+      else {
+        row.hidden = true;
+        row.classList.remove('is-expanded');
+        var det = document.querySelector('.kv-slot-detail-row[data-slot-detail="' + row.dataset.slotRow + '"]');
+        if (det) det.hidden = true;
+      }
+    });
+
+    var pageSize = pageSizeSel ? Number(pageSizeSel.value) || 15 : 15;
+    var totalMatched = matchedRows.length;
+    var totalPages = Math.max(1, Math.ceil(totalMatched / pageSize));
+    if (currentPage > totalPages) currentPage = totalPages;
+    var startIdx = (currentPage - 1) * pageSize;
+    var endIdx = startIdx + pageSize;
+    matchedRows.forEach(function (row, idx) {
+      var inPage = idx >= startIdx && idx < endIdx;
+      row.hidden = !inPage;
+      if (!inPage) {
+        row.classList.remove('is-expanded');
+        var det = document.querySelector('.kv-slot-detail-row[data-slot-detail="' + row.dataset.slotRow + '"]');
+        if (det) det.hidden = true;
+      }
+    });
+    if (pageInfoEl) pageInfoEl.textContent = 'Trang ' + currentPage + ' / ' + totalPages;
+    if (pagePrevBtn) pagePrevBtn.disabled = currentPage <= 1;
+    if (pageNextBtn) pageNextBtn.disabled = currentPage >= totalPages;
+    if (pageSummaryEl) {
+      pageSummaryEl.textContent = totalMatched
+        ? (startIdx + 1) + ' - ' + Math.min(endIdx, totalMatched) + ' trong ' + totalMatched
+        : '0 kết quả';
+    }
+
+    // Filter Grid View Sections
+    document.querySelectorAll('.parking-section').forEach(function (section) {
+      var areaMatch = (areaVal === 'all' || section.dataset.area === areaVal);
+      if (!areaMatch) {
+        section.hidden = true;
+        return;
+      }
+      var areaTitle = (section.querySelector('h2') ? section.querySelector('h2').textContent : '').toLowerCase();
+      var areaNameMatch = q && areaTitle.indexOf(q) !== -1;
+      var slots = section.querySelectorAll('.slot');
+      var visibleSlots = 0;
+
+      slots.forEach(function (slot) {
+        var isMaint = slot.classList.contains('maintenance');
+        var isAvail = slot.classList.contains('available');
+        var isOcc = slot.classList.contains('occupied');
+
+        var stOk = statusVal === 'all' || (statusVal === 'active' && !isMaint) || (statusVal === 'inactive' && isMaint);
+        var occOk = occVal === 'all' || (occVal === 'available' && isAvail) || (occVal === 'occupied' && isOcc);
+        var qOk = !q || areaNameMatch || slot.textContent.toLowerCase().indexOf(q) !== -1;
+
+        var show = stOk && occOk && qOk;
+        slot.hidden = !show;
+        if (show) visibleSlots += 1;
+      });
+
+      section.hidden = (slots.length > 0 && visibleSlots === 0 && (q || statusVal !== 'all' || occVal !== 'all'));
+    });
+  }
+
+  // Inline Row Expansion for Table Rows
+  document.querySelectorAll('.kv-slot-row').forEach(function (row) {
+    row.addEventListener('click', function () {
+      var key = row.dataset.slotRow;
+      var detail = document.querySelector('.kv-slot-detail-row[data-slot-detail="' + key + '"]');
+      if (!detail) return;
+      var willOpen = detail.hidden;
+      document.querySelectorAll('.kv-slot-detail-row').forEach(function (d) { d.hidden = true; });
+      document.querySelectorAll('.kv-slot-row').forEach(function (r) {
+        r.classList.remove('is-expanded');
+        r.setAttribute('aria-expanded', 'false');
+      });
+      if (willOpen) {
+        detail.hidden = false;
+        row.classList.add('is-expanded');
+        row.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
+
+  {% if is_staff %}
+  // Bridge Table Detail Action Buttons to existing parking.js dialogs
+  document.querySelectorAll('[data-table-action]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var slotName = btn.dataset.slotTarget;
+      var action = btn.dataset.tableAction;
+      var gridBtn = document.querySelector('[data-open-slot][data-name="' + slotName + '"]');
+      if (!gridBtn) return;
+      gridBtn.click();
+      var map = {
+        'edit': 'slot-menu-edit',
+        'delete': 'slot-menu-delete',
+        'maintenance': 'slot-menu-maintenance',
+        'vehicle': 'slot-menu-vehicle'
+      };
+      var menuBtn = document.getElementById(map[action]);
+      if (menuBtn && !menuBtn.disabled) menuBtn.click();
+    });
+  });
+  {% endif %}
+
+  document.querySelectorAll('input[name="kv_area_filter"], input[name="kv_status_filter"], input[name="kv_occ_filter"]').forEach(function (r) {
+    r.addEventListener('change', function () { currentPage = 1; applyParkingFilters(); });
+  });
+  if (searchInput) searchInput.addEventListener('input', function () { currentPage = 1; applyParkingFilters(); });
+  if (pageSizeSel) pageSizeSel.addEventListener('change', function () { currentPage = 1; applyParkingFilters(); });
+  if (pagePrevBtn) pagePrevBtn.addEventListener('click', function () { if (currentPage > 1) { currentPage -= 1; applyParkingFilters(); } });
+  if (pageNextBtn) pageNextBtn.addEventListener('click', function () { currentPage += 1; applyParkingFilters(); });
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      if (searchInput) searchInput.value = '';
+      var a = document.querySelector('input[name="kv_area_filter"][value="all"]');
+      var s = document.querySelector('input[name="kv_status_filter"][value="active"]');
+      if (a) a.checked = true;
+      if (s) s.checked = true;
+      currentPage = 1;
+      applyParkingFilters();
+    });
+  }
+  if (openAddSlotTopBtn && slotAddDlg) {
+    openAddSlotTopBtn.addEventListener('click', function () {
+      if (slotAddNameInput) slotAddNameInput.value = '';
+      if (slotAddAreaSelect && slotAddAreaSelect.options.length) slotAddAreaSelect.selectedIndex = 0;
+      if (typeof slotAddDlg.showModal === 'function') slotAddDlg.showModal();
+      else slotAddDlg.setAttribute('open', '');
+    });
+  }
+  if (slotAddNewAreaBtn) {
+    slotAddNewAreaBtn.addEventListener('click', function () {
+      if (slotAddDlg && typeof slotAddDlg.close === 'function') slotAddDlg.close();
+      var createBtn = document.querySelector('[data-edit-area][data-id=""]');
+      if (createBtn) createBtn.click();
+    });
+  }
+  applyParkingFilters();
+  if (helpBtn && helpPop) {
+    helpBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      helpPop.hidden = !helpPop.hidden;
+      helpBtn.setAttribute('aria-expanded', helpPop.hidden ? 'false' : 'true');
+    });
+    document.addEventListener('click', function (e) {
+      if (!helpPop.hidden && !helpPop.contains(e.target) && e.target !== helpBtn) {
+        helpPop.hidden = true;
+        helpBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+  if (openGateAreasBtn && gateAreasDlg) {
+    openGateAreasBtn.addEventListener('click', function () {
+      if (typeof gateAreasDlg.showModal === 'function') gateAreasDlg.showModal();
+      else gateAreasDlg.setAttribute('open', '');
+    });
+  }
+})();
+</script>
 {% endblock %}
