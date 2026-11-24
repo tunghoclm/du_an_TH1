@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS parking_areas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
     vehicle_type_id INTEGER,                 -- NULL = mọi loại xe; một ID = chỉ loại xe đó
+    wheel_group TEXT,                        -- NULL = mọi nhóm; '2w' = Xe 2 bánh; '4w' = Xe 4 bánh
     note TEXT
 );
 
@@ -149,6 +150,7 @@ CREATE TABLE IF NOT EXISTS ticket_payments (
     plate_number     TEXT,
     amount           INTEGER NOT NULL,
     months           INTEGER,
+    payment_method   TEXT DEFAULT 'cash',
     paid_on          TEXT NOT NULL,                 -- YYYY-MM-DD (ngày thu tiền)
     created_at       TEXT NOT NULL
 );

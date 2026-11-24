@@ -2,6 +2,7 @@
   {% set rows = form_vehicles if form_vehicles else [{}] %}
   {% for v in rows %}
     <div class="vehicle-row-item" data-vehicle-row>
+      <input type="hidden" name="ticket_type" value="month">
       <div class="field">
         <label>BIỂN SỐ XE</label>
         <input type="text" name="plate" value="{{ v.plate or '' }}" placeholder="VD: 59A1-12345">
@@ -13,15 +14,6 @@
           <option value="">-- Chọn loại xe --</option>
           {% for vt in vehicle_types %}
             <option value="{{ vt.id }}" {% if (v.type|string) == (vt.id|string) %}selected{% endif %}>{{ vt.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div class="field">
-        <label>LOẠI VÉ</label>
-        <select name="ticket_type" data-ticket-select>
-          {% for code, label in ticket_labels.items() %}
-            <option value="{{ code }}" {% if (v.ticket or 'turn') == code %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>

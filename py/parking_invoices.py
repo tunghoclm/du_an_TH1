@@ -139,6 +139,41 @@ def invoice_context(args, role, user_id, today=None):
                 last_item=min(page * per_page, len(filtered)))
 
 
+def export_excel(records):
+    from io import BytesIO
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Hoa don gui xe'
+    headers = ['Mã hóa đơn', 'Biển số', 'Khách hàng', 'Loại xe', 'Khu vực', 'Ô đỗ',
+               'Thời gian vào', 'Thời gian ra', 'Thời gian gửi', 'Phí thu (VND)', 'Phương thức', 'Ghi chú']
+    ws.append(headers)
+    header_fill = PatternFill(start_color='EEF4FF', end_color='EEF4FF', fill_type='solid')
+    header_font = Font(bold=True)
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for record in records:
+        values = [record[key] if record[key] is not None else '' for key in ('code', 'plate_number', 'customer_name',
+                  'vehicle_type_name', 'area_name', 'slot_name', 'entry_time_label',
+                  'exit_time_label', 'duration', 'fee', 'payment_method_label', 'note')]
+        ws.append(["'" + value if isinstance(value, str) and value.lstrip().startswith(('=', '+', '-', '@'))
+                   else value for value in values])
+
+    ws.auto_filter.ref = f"A1:L{max(ws.max_row, 1)}"
+    ws.freeze_panes = 'A2'
+    for col in ws.columns:
+        max_len = max((len(str(c.value or '')) for c in col), default=10)
+        ws.column_dimensions[col[0].column_letter].width = min(max(max_len + 4, 12), 40)
+
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def export_csv(records):
     output = StringIO(newline='')
     writer = csv.writer(output)

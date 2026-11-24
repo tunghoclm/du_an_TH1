@@ -411,6 +411,81 @@ class ParkingManagementTests(unittest.TestCase):
             self.assertEqual('hidden' in controls.nodes['history-time-fields'], not active)
             self.assertEqual('disabled' in controls.nodes['time-from'], not active)
 
+    def test_parking_excel_export_template_and_import(self):
+        import io
+        import openpyxl
+
+        self.role('admin')
+        # Tạo 1 ô đang có xe và 1 ô bảo trì để kiểm tra xuất Excel
+        database.create_parking_entry('51F-12345', 'in.jpg', 'A01', self.type_id, 'Xe máy')
+        database.set_slot_maintenance('A02', True, 'Sửa đèn')
+
+        # 1. Kiểm tra Export Excel (.xlsx) có AutoFilter và trạng thái chữ
+        exp = self.client.get('/parking/export')
+        self.assertEqual(exp.status_code, 200)
+        self.assertIn('spreadsheetml', exp.content_type)
+        wb_exp = openpyxl.load_workbook(io.BytesIO(exp.data), data_only=True)
+        ws_exp = wb_exp.active
+        self.assertEqual([c.value for c in ws_exp[1]], ['Tên ô đỗ', 'Khu vực', 'Nhóm xe', 'Loại xe', 'Trạng thái', 'Ghi chú'])
+        self.assertTrue(ws_exp.auto_filter.ref)
+        self.assertEqual(ws_exp.freeze_panes, 'A2')
+        statuses = {row[0]: row[4] for row in ws_exp.iter_rows(min_row=2, values_only=True)}
+        self.assertEqual(statuses.get('A01'), 'Đang đỗ')
+        self.assertEqual(statuses.get('A02'), 'Ngừng hoạt động')
+        self.assertEqual(statuses.get('A03'), 'Trống')
+        wb_exp.close()
+
+        # 2. Kiểm tra tải File mẫu
+        tpl = self.client.get('/parking/import/template')
+        self.assertEqual(tpl.status_code, 200)
+        self.assertIn('spreadsheetml', tpl.content_type)
+        wb_tpl = openpyxl.load_workbook(io.BytesIO(tpl.data), data_only=True)
+        self.assertTrue(wb_tpl.active.auto_filter.ref)
+        wb_tpl.close()
+
+        # 3. Kiểm tra Import file Excel mới: thêm khu D (2 Bánh), cập nhật A03 -> Ngừng hoạt động, bỏ qua A01 (đang đỗ)
+        wb_in = openpyxl.Workbook()
+        ws_in = wb_in.active
+        ws_in.append(['Tên ô đỗ', 'Khu vực', 'Nhóm xe', 'Loại xe', 'Trạng thái', 'Ghi chú'])
+        ws_in.append(['D01', 'Khu D', '2 Bánh', 'Tất cả loại xe', 'Trống', ''])
+        ws_in.append(['D02', 'Khu D', '2 Bánh', 'Tất cả loại xe', 'Ngừng hoạt động', 'Chưa sơn vạch'])
+        ws_in.append(['A03', 'Khu A', 'Tất cả', 'Tất cả loại xe', 'Ngừng hoạt động', 'Bảo trì theo Excel'])
+        ws_in.append(['A01', 'Khu A', 'Tất cả', 'Tất cả loại xe', 'Trống', 'Không được ghi đè xe đang đỗ'])
+        buf = io.BytesIO()
+        wb_in.save(buf)
+        buf.seek(0)
+
+        imp = self.client.post(
+            '/parking/import',
+            data={'file': (buf, 'so_do_moi.xlsx')},
+            content_type='multipart/form-data',
+            follow_redirects=True,
+        )
+        self.assertEqual(imp.status_code, 200)
+        self.assertIn('Import thành công', imp.text)
+
+        slots = {s['slot_name']: dict(s) for s in database.get_all_slots()}
+        self.assertIn('D01', slots)
+        self.assertEqual(slots['D01']['area'], 'D')
+        self.assertEqual(slots['D01']['allowed_wheel_group'], '2w')
+        self.assertEqual(slots['D01']['status'], 'available')
+        self.assertEqual(slots['D02']['status'], 'maintenance')
+        self.assertEqual(slots['D02']['maintenance_reason'], 'Chưa sơn vạch')
+        self.assertEqual(slots['A03']['status'], 'maintenance')
+        self.assertEqual(slots['A03']['maintenance_reason'], 'Bảo trì theo Excel')
+        # A01 đang có xe -> không bị ghi đè thành Trống
+        self.assertEqual(slots['A01']['status'], 'occupied')
+
+        # 4. Kiểm tra file sai định dạng bị từ chối an toàn
+        bad = self.client.post(
+            '/parking/import',
+            data={'file': (io.BytesIO(b'not-excel'), 'bad.csv')},
+            content_type='multipart/form-data',
+            follow_redirects=True,
+        )
+        self.assertEqual(bad.status_code, 200)
+        self.assertIn('.xlsx', bad.text)
+
 
 if __name__ == '__main__':
     unittest.main()

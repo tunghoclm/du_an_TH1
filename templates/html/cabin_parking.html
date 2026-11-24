@@ -36,36 +36,125 @@
     <div class="cabin-no-results" id="cabin-no-results" hidden>{{ icon('search', 36) }}<p>Không tìm thấy ô đỗ phù hợp</p><button type="button" id="cabin-reset-filter">Xóa bộ lọc</button></div>
   </div>
 </section>
-<section class="cabin-ticket cabin-pane" aria-label="Thông tin phiếu xe">
+<section class="cabin-ticket cabin-pane" aria-label="Thông tin cabin & thao tác nhanh">
   <div class="cabin-ticket-content" aria-live="polite">
-    <div class="cabin-ticket-empty" id="cabin-ticket-empty" aria-hidden="true"></div>
+    <div class="cabin-ticket-empty" id="cabin-ticket-empty">
+      <div class="cabin-overview-head">
+        <h2>Điều hành bãi xe</h2>
+        <span class="cabin-overview-sub">Chọn ô đỗ bên trái hoặc thao tác nhanh làn xe</span>
+      </div>
+
+      <div class="cabin-overview-kpis">
+        <div class="cabin-kpi-box is-occupied">
+          <span>Đang gửi</span>
+          <strong>{{ counts.occupied }}</strong>
+        </div>
+        <div class="cabin-kpi-box is-available">
+          <span>Còn trống</span>
+          <strong>{{ counts.available }}</strong>
+        </div>
+        <div class="cabin-kpi-box is-maint">
+          <span>Bảo trì</span>
+          <strong>{{ counts.maintenance }}</strong>
+        </div>
+      </div>
+
+      {% set _is_admin = (current_user_role == 'admin') %}
+      {% set _gate_ztype = selected_gate.zone_type if selected_gate else 'gate_inout' %}
+      <div class="cabin-quick-actions">
+        {% if (_is_admin or has_perm('gate.entry')) and _gate_ztype != 'gate_out' %}
+        <a href="{{ url_for('entry') }}" class="cabin-quick-btn is-entry">
+          {{ icon('entry', 16) }}
+          <span>Nhận xe vào</span>
+          <kbd data-shortcut-badge="new_entry">F1</kbd>
+        </a>
+        {% endif %}
+        {% if (_is_admin or has_perm('gate.exit')) and _gate_ztype != 'gate_in' %}
+        <a href="{{ url_for('exit_gate') }}" class="cabin-quick-btn is-exit">
+          {{ icon('exit', 16) }}
+          <span>Xử lý xe ra</span>
+          <kbd data-shortcut-badge="quick_exit">F3</kbd>
+        </a>
+        {% endif %}
+        {% if (_is_admin or has_perm('gate.view')) and _gate_ztype == 'gate_inout' %}
+        <a href="{{ url_for('gate_lanes') }}" class="cabin-quick-btn is-lanes">
+          {{ icon('lanes', 16) }}
+          <span>Cabin 2 làn</span>
+        </a>
+        {% endif %}
+      </div>
+
+      <div class="cabin-parked-section">
+        <div class="cabin-parked-head">
+          <h3>Xe đang gửi ({{ occupied_slots|length }})</h3>
+          <span>Bấm để chọn ô</span>
+        </div>
+        {% if occupied_slots %}
+        <div class="cabin-parked-list">
+          {% for s in occupied_slots %}
+          <div class="cabin-parked-item" data-pick-slot="{{ s.slot_name }}">
+            <button type="button" class="cabin-parked-pick" data-pick-slot-btn="{{ s.slot_name }}">
+              <span class="cabin-parked-slot">{{ s.slot_name }}</span>
+              <span class="cabin-parked-info">
+                <strong>{{ s.plate_number }}</strong>
+                <small>Khu {{ s.area }}{% if s.record %} · {{ s.record.entry_time[11:16] }}{% endif %}</small>
+              </span>
+              <span class="cabin-parked-fee">{{ "{:,}".format(s.preview_fee).replace(",", ".") }} đ</span>
+            </button>
+            {% if (_is_admin or has_perm('gate.exit')) and _gate_ztype != 'gate_in' %}
+            <a href="{{ url_for('exit_gate', plate=s.plate_number) }}" class="cabin-parked-exit" title="Xử lý xe ra {{ s.plate_number }}">Xe ra</a>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="cabin-parked-empty">
+          {{ icon('car', 32) }}
+          <p>Hiện chưa có xe nào đang gửi trong bãi.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
     {% for slot in cabin_slots %}
     <article class="cabin-slot-detail" data-cabin-detail="{{ slot.slot_name }}" hidden>
-      <div class="cabin-detail-heading"><span>Ô đỗ {{ slot.slot_name }}</span><span class="cabin-state {{ slot.status }}">{{ 'Đang sử dụng' if slot.status == 'occupied' else ('Đang bảo trì' if slot.status == 'maintenance' else 'Còn trống') }}</span></div>
+      <div class="cabin-detail-heading">
+        <div class="cabin-detail-title-wrap">
+          <span>Ô đỗ {{ slot.slot_name }}</span>
+          <span class="cabin-state {{ slot.status }}">{{ 'Đang sử dụng' if slot.status == 'occupied' else ('Đang bảo trì' if slot.status == 'maintenance' else 'Còn trống') }}</span>
+        </div>
+        <button type="button" class="cabin-detail-clear" data-cabin-deselect aria-label="Bỏ chọn ô {{ slot.slot_name }}">× Đóng</button>
+      </div>
       {% if slot.status == 'occupied' %}
         <strong class="cabin-detail-plate">{{ slot.plate_number }}</strong>
-        <dl><div><dt>Vị trí</dt><dd>Khu {{ slot.area }} · {{ slot.slot_name }}</dd></div>
-        {% if slot.record %}<div><dt>Loại xe</dt><dd>{{ slot.record.vehicle_type_name or '—' }}</dd></div><div><dt>Giờ vào</dt><dd>{{ slot.record.entry_time[:10]|vdate }} · {{ slot.record.entry_time[11:19] }}</dd></div><div><dt>Thời gian gửi</dt><dd>{{ slot.preview_duration }}</dd></div>{% endif %}</dl>
-        <p class="cabin-detail-hint">Đối chiếu ảnh và biển số ở tab Xe ra trước khi xác nhận thu phí.</p>
+        <dl>
+          <div><dt>Vị trí</dt><dd>Khu {{ slot.area }} · {{ slot.slot_name }}</dd></div>
+          {% if slot.record %}
+          <div><dt>Loại xe</dt><dd>{{ slot.record.vehicle_type_name or '—' }}</dd></div>
+          <div><dt>Giờ vào</dt><dd>{{ slot.record.entry_time[:10]|vdate }} · {{ slot.record.entry_time[11:19] }}</dd></div>
+          <div><dt>Thời gian gửi</dt><dd>{{ slot.preview_duration }}</dd></div>
+          {% endif %}
+          <div class="is-fee-row"><dt>Phí tạm tính</dt><dd>{{ "{:,}".format(slot.preview_fee).replace(",", ".") }} VNĐ</dd></div>
+        </dl>
+        <p class="cabin-detail-hint">Đối chiếu ảnh và biển số ở màn hình Xe ra trước khi xác nhận thu phí.</p>
       {% elif slot.status == 'maintenance' %}
         <div class="cabin-detail-placeholder">{{ icon('wrench', 54) }}<h2>Ô đỗ đang bảo trì</h2><p>{{ slot.maintenance_reason or 'Vị trí tạm ngừng tiếp nhận phương tiện.' }}</p></div>
       {% else %}
-        <div class="cabin-detail-placeholder">{{ icon('car', 64) }}<h2>Sẵn sàng nhận xe</h2><p>Ô {{ slot.slot_name }} · Khu {{ slot.area }}</p><span>Chuyển sang Xe vào để nhận diện biển số và chọn ô đỗ.</span></div>
+        <div class="cabin-detail-placeholder">{{ icon('car', 64) }}<h2>Sẵn sàng nhận xe</h2><p>Ô {{ slot.slot_name }} · Khu {{ slot.area }}</p><span>Nhấn "Nhận xe vào ô này" để chuyển sang làn vào và quét biển số.</span></div>
       {% endif %}
     </article>
     {% endfor %}
   </div>
-  <footer class="cabin-ticket-footer">
+  <footer class="cabin-ticket-footer" id="cabin-ticket-footer" hidden>
     <div class="cabin-ticket-meta">
       <span class="cabin-total">
-        <span id="cabin-total-label">Tổng tiền</span>
-        <span class="cabin-count-badge" id="cabin-total-count">0</span>
-        <strong id="cabin-total">0</strong>
+        <span id="cabin-total-label">Phí tạm tính</span>
+        <strong id="cabin-total">0 đ</strong>
       </span>
     </div>
     <div class="cabin-ticket-actions">
-      <button type="button" class="cabin-secondary-action" id="cabin-exit-action" disabled>{{ icon('bell-solid', 16) }}<span>xe ra</span></button>
-      <button type="button" class="cabin-primary-action" id="cabin-primary-action" disabled>{{ icon('money', 18) }}<span id="cabin-primary-label">Thanh toán</span></button>
+      <button type="button" class="cabin-secondary-action" id="cabin-exit-action" data-cabin-deselect><span>Bỏ chọn</span></button>
+      <button type="button" class="cabin-primary-action" id="cabin-primary-action" disabled>{{ icon('exit', 17) }}<span id="cabin-primary-label">Xử lý xe ra</span></button>
     </div>
   </footer>
 </section>

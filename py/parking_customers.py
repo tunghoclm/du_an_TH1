@@ -16,7 +16,12 @@ CUSTOMER_GROUPS = (('all', 'Tất cả các nhóm'), ('month', 'Có vé tháng c
 
 
 def parse_profile(form):
-    profile = {key: form.get(key, '').strip() for key in ('fullname', 'phone', 'email', 'address', 'customer_note')}
+    profile = {
+        key: form.get(key, '').strip()
+        for key in ('fullname', 'phone', 'email', 'address', 'customer_note', 'dob', 'gender', 'province', 'district', 'ward')
+    }
+    if 'username' in form:
+        profile['username'] = form.get('username', '').strip()
     errors = []
     if not profile['fullname'] or len(profile['fullname']) > 160:
         errors.append('Họ tên khách hàng phải có từ 1 đến 160 ký tự.')
@@ -43,7 +48,7 @@ def display_time(value):
 def customer_records(today):
     conn = database.get_connection()
     try:
-        users = conn.execute("SELECT id,username,fullname,status,phone,email,address,customer_note,created_at "
+        users = conn.execute("SELECT id,username,fullname,status,phone,email,address,customer_note,dob,gender,province,district,ward,avatar,created_at "
                              "FROM users WHERE role='user' ORDER BY id DESC").fetchall()
         vehicles = conn.execute("SELECT v.*,t.name AS vehicle_type_name FROM user_vehicles v "
                                 "LEFT JOIN vehicle_types t ON t.id=v.vehicle_type_id ORDER BY v.id").fetchall()
@@ -219,6 +224,42 @@ def customer_context(args, today=None):
                 filters=filters, filter_errors=errors, groups=CUSTOMER_GROUPS, customer_time_controls=time_controls,
                 period_groups=PERIOD_GROUPS, page=page, pages=pages, per_page=per_page, query_string=query_string,
                 first_item=(page - 1) * per_page + 1 if filtered else 0, last_item=min(page * per_page, len(filtered)), open_customer_id=open_id)
+
+
+def export_customers_excel(customers):
+    from io import BytesIO
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Khach hang'
+    headers = ['Mã khách hàng', 'Họ tên', 'Tài khoản', 'Điện thoại', 'Email', 'Địa chỉ', 'Biển số',
+               'Số xe', 'Vé tháng còn hạn', 'Lượt gửi xe', 'Phí gửi xe', 'Tiền vé tháng', 'Tổng phí', 'Trạng thái']
+    ws.append(headers)
+    header_fill = PatternFill(start_color='EEF4FF', end_color='EEF4FF', fill_type='solid')
+    header_font = Font(bold=True)
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for customer in customers:
+        values = [customer['code'], customer['fullname'], customer['username'], customer['phone'] or '',
+                  customer['email'] or '', customer['address'] or '', ', '.join(v['plate_number'] for v in customer['vehicles']),
+                  customer['vehicle_count'], customer['monthly_count'], customer['visit_count'], customer['parking_fee'],
+                  customer['monthly_fee'], customer['total_fee'], 'Hoạt động' if customer['status'] == 'active' else 'Đã khóa']
+        ws.append(["'" + value if isinstance(value, str) and value.lstrip().startswith(('=', '+', '-', '@')) else value
+                   for value in values])
+
+    ws.auto_filter.ref = f"A1:N{max(ws.max_row, 1)}"
+    ws.freeze_panes = 'A2'
+    for col in ws.columns:
+        max_len = max((len(str(c.value or '')) for c in col), default=10)
+        ws.column_dimensions[col[0].column_letter].width = min(max(max_len + 4, 12), 40)
+
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 def export_customers(customers):

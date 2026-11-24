@@ -391,6 +391,115 @@ class CustomerAndAccountTests(unittest.TestCase):
         self.assertEqual(r_gen_set.status_code, 200)
         self.assertNotIn('/settings?section=employee', r_gen_set.text)
 
+    def test_customer_vehicles_always_require_monthly_ticket(self):
+        self.role('admin')
+        page = self.client.get('/customers')
+        self.assertEqual(page.status_code, 200)
+        self.assertNotIn('data-edit-ticket-select', page.text)
+        self.assertNotIn('data-ticket-select', page.text)
+        self.assertIn('data-payment-box', page.text)
+        self.assertIn('data-vietqr', page.text)
+
+        month_period = next((p for p in database.get_periods() if p['kind'] == 'day'), None)
+        self.assertIsNotNone(month_period)
+        database.save_price(None, self.type_id, month_period['id'], 120000, 'month')
+
+        resp = self.client.post('/customers/add', data={
+            'username': 'khach_ve_thang',
+            'fullname': 'Khách Vé Tháng',
+            'password': 'password123',
+            'plate': '59A1-99887',
+            'vehicle_type_id': str(self.type_id),
+            'ticket_type': 'turn',  # Ngay cả khi gửi 'turn', backend vẫn ép thành 'month'
+            'months': '2',
+            'payment_method': 'transfer',
+        })
+        self.assertEqual(resp.status_code, 302)
+        user = next(u for u in database.get_customer_users() if u['username'] == 'khach_ve_thang')
+        vehicles = database.get_user_vehicles(user['id'])
+        self.assertEqual(len(vehicles), 1)
+        self.assertEqual(vehicles[0]['ticket_type'], 'month')
+        self.assertEqual(vehicles[0]['months'], 2)
+        self.assertEqual(vehicles[0]['paid_amount'], 240000)
+        self.assertIsNotNone(vehicles[0]['expires_on'])
+
+        conn = database.get_connection()
+        payment = conn.execute(
+            "SELECT amount, months, payment_method FROM ticket_payments WHERE user_vehicle_id=?",
+            (vehicles[0]['id'],),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(payment)
+        self.assertEqual((payment['amount'], payment['months'], payment['payment_method']), (240000, 2, 'transfer'))
+
+        # Gia hạn thêm 1 tháng bằng thẻ
+        renew_resp = self.client.post(f"/users/{user['id']}/vehicles/{vehicles[0]['id']}/renew", data={
+            'months': '1',
+            'payment_method': 'card',
+            'next': 'customers',
+        })
+        self.assertEqual(renew_resp.status_code, 302)
+        conn = database.get_connection()
+        payments = conn.execute(
+            "SELECT amount, months, payment_method FROM ticket_payments WHERE user_vehicle_id=? ORDER BY id",
+            (vehicles[0]['id'],),
+        ).fetchall()
+        conn.close()
+        self.assertEqual(len(payments), 2)
+        self.assertEqual((payments[1]['amount'], payments[1]['months'], payments[1]['payment_method']), (120000, 1, 'card'))
+
+    def test_employee_kiotviet_permissions_modal_and_save(self):
+        import json
+        self.role('admin')
+        self.client.post('/accounts/add', data={
+            'username': 'nv_phanquyen',
+            'fullname': 'Nhân Viên Phân Quyền',
+            'password': 'password123',
+            'role': 'manager',
+        })
+        emp = next(s for s in database.get_staff_users() if s['username'] == 'nv_phanquyen')
+
+        page = self.client.get('/accounts')
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('id="edit-permissions-dialog"', page.text)
+        self.assertIn('Phân quyền theo vai trò', page.text)
+        self.assertIn('Phân quyền khác', page.text)
+
+        payload = {
+            'gates': {
+                'Cổng chính': {
+                    'role_preset': 'Nhân viên vận hành',
+                    'perms': ['dashboard.view', 'gate.view', 'invoices.view', 'invoices.print', 'staff.view'],
+                },
+            },
+            'other': {
+                'view_shared_info': True,
+                'manage_other_staff_eod': False,
+            },
+        }
+        resp = self.client.post(f"/accounts/{emp['id']}/permissions", data={
+            'permissions_json': json.dumps(payload),
+        })
+        self.assertEqual(resp.status_code, 302)
+        updated = database.get_user_by_id(emp['id'])
+        saved = json.loads(updated['permissions_json'])
+        self.assertEqual(saved['gates']['Cổng chính']['role_preset'], 'Nhân viên vận hành')
+        self.assertTrue(saved['other']['view_shared_info'])
+        self.assertFalse(saved['other']['manage_other_staff_eod'])
+
+        # Kiểm tra quyền được thực thi thực tế khi nhân viên đăng nhập:
+        # Cấp staff.view, không cấp reports.view / customers.create / parking.create / pricing.edit
+        with self.client.session_transaction() as sess:
+            sess['user_id'] = emp['id']
+            sess['username'] = emp['username']
+            sess['role'] = 'manager'
+        self.assertEqual(self.client.get('/accounts').status_code, 200)
+        self.assertEqual(self.client.get('/statistics').status_code, 302)
+        self.assertEqual(self.client.post('/customers/add', data={'username': 'x', 'fullname': 'X', 'password': 'password123'}).status_code, 302)
+        self.assertEqual(self.client.post('/parking/areas/save', data={'name': 'Z', 'slot_count': '2'}).status_code, 302)
+        self.assertEqual(self.client.post('/pricing/period/save', data={'name': 'Ca'}).status_code, 302)
+        self.assertFalse(database.username_exists('x'))
+
 
 if __name__ == '__main__':
     unittest.main()

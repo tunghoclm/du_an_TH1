@@ -25,9 +25,16 @@ class InvoiceTests(unittest.TestCase):
         return record_id
 
     def csv_rows(self, url='/invoices/export'):
+        from io import BytesIO
+        import openpyxl
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        return list(csv.reader(StringIO(response.data.decode('utf-8-sig'))))
+        self.assertIn('spreadsheetml', response.content_type)
+        wb = openpyxl.load_workbook(BytesIO(response.data), data_only=True)
+        ws = wb.active
+        rows = [[cell if cell is not None else '' for cell in row] for row in ws.iter_rows(values_only=True)]
+        wb.close()
+        return rows
 
     def test_only_completed_sessions_with_recorded_fees_become_receipts(self):
         paid = self.receipt()
@@ -41,7 +48,7 @@ class InvoiceTests(unittest.TestCase):
         self.assertNotIn('30A-99999', response.text)
         rows = self.csv_rows()
         self.assertEqual(len(rows), 3)
-        self.assertEqual(sorted(row[9] for row in rows[1:]), ['0', '15000'])
+        self.assertEqual(sorted(row[9] for row in rows[1:]), [0, 15000])
 
     def test_filters_use_exit_date_area_vehicle_and_normalized_plate(self):
         self.receipt(day='2026-11-02')
@@ -111,7 +118,7 @@ class InvoiceTests(unittest.TestCase):
             self.assertIn('12.345 đ', response.text)
             self.assertNotIn('<script>', response.text)
             rows = self.csv_rows()
-            self.assertEqual(rows[1][9], '12345')
+            self.assertEqual(rows[1][9], 12345)
             self.assertTrue(rows[1][-1].startswith("'=SUM"))
 
     def test_invoice_routes_require_authentication(self):

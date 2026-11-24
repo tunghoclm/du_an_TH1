@@ -1,0 +1,24 @@
+<div class="customer-payment-box" data-payment-box>
+  <div class="customer-payment-head">
+    <span>Số tiền cần thanh toán</span>
+    <strong class="customer-payment-total" data-payment-total>0 đ</strong>
+  </div>
+  <p class="customer-payment-note" data-payment-note>Chọn loại xe và số tháng thuê để tính tiền vé tháng.</p>
+  <div class="customer-payment-methods" role="radiogroup" aria-label="Phương thức thanh toán">
+    {% for code, label in payment_methods.items() %}
+      <label class="customer-payment-pill">
+        <input type="radio" name="payment_method" value="{{ code }}"{% if loop.first %} checked{% endif %}>
+        <span>{{ 'Chuyển khoản (VietQR)' if code == 'transfer' else label }}</span>
+      </label>
+    {% endfor %}
+  </div>
+  <div class="customer-payment-qr" data-payment-qr hidden>
+    <img data-payment-qr-img src="" alt="Mã VietQR thanh toán vé tháng" width="144" height="144">
+    <div class="customer-payment-qr-info">
+      <b data-payment-qr-bank>{{ vietqr_bank_name }} · {{ vietqr_account_number }}</b>
+      <span>Chủ TK: {{ vietqr_account_name }}</span>
+      <span>Số tiền: <strong data-payment-qr-amount>0 đ</strong></span>
+      <span>Nội dung: <code data-payment-qr-memo>VE THANG</code></span>
+    </div>
+  </div>
+</div>

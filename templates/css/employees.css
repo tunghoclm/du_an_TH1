@@ -2619,3 +2619,95 @@ dialog.customer-dialog[open] {
 .kv-tpl-staff-link:hover {
   text-decoration: underline;
 }
+
+/* ============================================================
+   PHÂN QUYỀN KIOTVIET (SUMMARY + 3-COLUMN PERMISSION MODAL)
+   ============================================================ */
+.kv-perm-summary { margin-top: 18px; padding-top: 16px; border-top: 1px solid #e9edf3; display: grid; gap: 12px; }
+.kv-perm-status-line { margin: 0; font-size: 13px; color: #334155; }
+.kv-perm-summary-table { width: 100%; max-width: 680px; border-collapse: collapse; font-size: 13px; border: 1px solid #e5eaf1; border-radius: 10px; overflow: hidden; }
+.kv-perm-summary-table th { text-align: left; padding: 9px 12px; background: #f5f7fa; color: #475569; font-weight: 600; border-bottom: 1px solid #e5eaf1; }
+.kv-perm-summary-table td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; color: #1e293b; }
+.kv-perm-summary-table tr:last-child td { border-bottom: 0; }
+.kv-perm-other-list { display: grid; gap: 6px; margin: 2px 0 0; padding: 0; list-style: none; font-size: 13px; color: #334155; }
+.kv-perm-other-list li { display: flex; align-items: center; gap: 8px; }
+.kv-perm-icon-on { color: #16a34a; font-weight: 700; }
+.kv-perm-icon-off { color: #dc2626; font-weight: 700; }
+
+.kv-perm-dialog { width: min(1140px, 96vw); max-width: 1140px; height: min(88vh, 820px); padding: 0; border: 0; border-radius: 16px; background: #fff; box-shadow: 0 24px 60px rgba(15, 23, 42, .22); overflow: hidden; }
+.kv-perm-dialog::backdrop { background: rgba(15, 23, 42, .45); backdrop-filter: blur(2px); }
+.kv-perm-dialog > form { display: flex; flex-direction: column; height: 100%; }
+.kv-perm-tabs { display: flex; gap: 24px; padding: 0 24px; border-bottom: 1px solid #e5eaf1; background: #fff; flex: 0 0 auto; }
+.kv-perm-tab { position: relative; padding: 12px 2px; border: 0; background: transparent; font-size: 14px; font-weight: 500; color: #64748b; cursor: pointer; }
+.kv-perm-tab[aria-selected="true"] { color: #0070f4; font-weight: 600; }
+.kv-perm-tab[aria-selected="true"]::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: #0070f4; border-radius: 2px 2px 0 0; }
+.kv-perm-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; background: #f8fafc; }
+.kv-perm-tabpanel { flex: 1 1 auto; min-height: 0; display: flex; }
+.kv-perm-tabpanel[hidden] { display: none; }
+.kv-perm-3col { display: grid; grid-template-columns: 230px minmax(0, 1fr) 210px; width: 100%; height: 100%; min-height: 0; }
+
+/* Col 1: Gates */
+.kv-perm-gates { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-right: 1px solid #e5eaf1; background: #fff; overflow-y: auto; }
+.kv-perm-search-inp { width: 100%; height: 34px; padding: 6px 10px; border: 1px solid #dbe2ea; border-radius: 8px; font-size: 13px; background: #fff; }
+.kv-perm-search-inp:focus { outline: none; border-color: #0070f4; box-shadow: 0 0 0 2px rgba(0,112,244,.12); }
+.kv-perm-gate-list { display: grid; gap: 6px; }
+.kv-perm-gate-card { display: grid; gap: 2px; width: 100%; text-align: left; padding: 10px 12px; border: 1px solid transparent; border-radius: 10px; background: #fff; cursor: pointer; transition: background .12s, border-color .12s; }
+.kv-perm-gate-card:hover { background: #f1f5f9; }
+.kv-perm-gate-card.is-active { background: #e6f2ff; border-color: #bfdbfe; }
+.kv-perm-gate-card b { font-size: 13px; color: #0f172a; }
+.kv-perm-gate-card small { font-size: 12px; color: #0070f4; font-weight: 500; }
+.kv-perm-gate-card small.is-empty { color: #94a3b8; font-weight: 400; }
+
+/* Col 2: Toolbar + Groups */
+.kv-perm-center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.kv-perm-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid #e5eaf1; background: #fff; flex: 0 0 auto; }
+.kv-perm-role-wrap { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #1e293b; }
+.kv-perm-role-wrap select { height: 34px; min-width: 190px; padding: 4px 10px; border: 1px solid #dbe2ea; border-radius: 8px; font-size: 13px; background: #fff; }
+.kv-perm-clear-role { width: 30px; height: 30px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #64748b; cursor: pointer; display: grid; place-items: center; font-size: 15px; }
+.kv-perm-clear-role:hover { background: #fee2e2; color: #dc2626; border-color: #fecaca; }
+.kv-perm-scroll { flex: 1 1 auto; overflow-y: auto; padding: 16px 18px; display: grid; gap: 14px; align-content: start; }
+.kv-perm-empty { margin: 40px auto; text-align: center; color: #64748b; display: grid; gap: 8px; justify-items: center; }
+.kv-perm-empty[hidden] { display: none; }
+.kv-perm-empty-icon { width: 52px; height: 52px; border-radius: 50%; background: #e0f2fe; color: #0284c7; display: grid; place-items: center; font-size: 22px; }
+
+.kv-perm-group-card { border: 1px solid #e5eaf1; border-radius: 12px; background: #fff; padding: 14px 16px; display: grid; gap: 10px; }
+.kv-perm-group-card[hidden] { display: none; }
+.kv-perm-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.kv-perm-group-head h3 { margin: 0; font-size: 14px; font-weight: 700; color: #0f172a; }
+.kv-perm-group-head small { font-size: 12px; color: #64748b; }
+
+.kv-perm-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #1e293b; cursor: pointer; user-select: none; }
+.kv-perm-check input[type="checkbox"] { width: 16px; height: 16px; accent-color: #0070f4; cursor: pointer; margin: 0; }
+.kv-perm-acc { border: 1px solid #edf2f7; border-radius: 10px; overflow: hidden; }
+.kv-perm-acc[hidden] { display: none; }
+.kv-perm-acc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: #f8fafc; cursor: pointer; }
+.kv-perm-acc-head:hover { background: #f1f5f9; }
+.kv-perm-acc-chevron { font-size: 12px; color: #64748b; transition: transform .15s; }
+.kv-perm-acc.is-open .kv-perm-acc-chevron { transform: rotate(180deg); }
+.kv-perm-acc-body { padding: 12px 14px; border-top: 1px solid #edf2f7; display: grid; gap: 12px; background: #fff; }
+.kv-perm-acc:not(.is-open) .kv-perm-acc-body { display: none; }
+.kv-perm-matrix { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.kv-perm-col { display: grid; gap: 6px; align-content: start; }
+.kv-perm-col-title { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .02em; }
+.kv-perm-other-row { padding-top: 8px; border-top: 1px dashed #e2e8f0; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.kv-perm-hl { background: #fed7aa; color: #7c2d12; border-radius: 3px; padding: 0 2px; }
+
+/* Col 3: Quick Nav TOC */
+.kv-perm-toc { padding: 14px 10px; border-left: 1px solid #e5eaf1; background: #fff; overflow-y: auto; display: grid; gap: 4px; align-content: start; }
+.kv-perm-toc-btn { text-align: left; padding: 7px 10px; border: 0; border-left: 2px solid transparent; border-radius: 0 8px 8px 0; background: transparent; font-size: 12.5px; color: #475569; cursor: pointer; }
+.kv-perm-toc-btn:hover { background: #f1f5f9; color: #0f172a; }
+.kv-perm-toc-btn.is-active { border-left-color: #0070f4; color: #0070f4; font-weight: 600; background: #eff6ff; }
+
+.kv-perm-other-panel { padding: 24px; display: grid; gap: 14px; align-content: start; background: #fff; width: 100%; }
+.kv-perm-other-card { display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; border: 1px solid #e5eaf1; border-radius: 10px; background: #fafbfc; }
+.kv-perm-other-card small { display: block; color: #64748b; font-size: 12px; margin-top: 2px; }
+
+@media (max-width: 960px) {
+  .kv-perm-3col { grid-template-columns: 180px minmax(0, 1fr); }
+  .kv-perm-toc { display: none; }
+  .kv-perm-matrix { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+#add-employee-dialog.is-perm-wide { width: min(1140px, 96vw); max-width: 1140px; }
+.kv-perm-inline-panel { border: 1px solid #e5eaf1; border-radius: 12px; overflow: hidden; height: 520px; display: flex; }
+.kv-perm-inline-panel[hidden] { display: none; }

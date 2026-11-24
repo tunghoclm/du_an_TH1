@@ -1,5 +1,6 @@
 {% extends '_layout.html' %}
 {% from '_management_icons.html' import icon %}
+{% from '_permission_editor_panels.html' import perm_role_panel, perm_other_panel with context %}
 {% set active_page = 'accounts' %}
 {% set is_admin = (current_user_role == 'admin') %}
 
@@ -34,14 +35,21 @@
         <input id="{{ prefix }}-phone" type="tel" name="phone" value="{{ values.phone or '' }}" placeholder="Nhập số điện thoại" maxlength="32">
       </div>
     </div>
-    <div class="customer-form-avatar" aria-hidden="true">
+    <label class="customer-form-avatar" for="{{ prefix }}-avatar-file">
       <span data-employee-avatar>NV</span>
-      <small>Ảnh đại diện</small>
-    </div>
+      <small>Nhân viên</small>
+      <img class="avatar-preview-img" hidden alt="Ảnh đại diện">
+      <span class="customer-avatar-hover">
+        <span class="customer-avatar-upload-btn">Thêm ảnh</span>
+        <span class="customer-avatar-hint">Mỗi ảnh không vượt quá 2Mb</span>
+      </span>
+      <input id="{{ prefix }}-avatar-file" type="file" accept="image/*" data-avatar-input hidden>
+      <input type="hidden" name="avatar_data" value="" data-avatar-data>
+    </label>
   </div>
 
   <details class="customer-form-section" open>
-    <summary>Thông tin công việc &amp; Tài khoản</summary>
+    <summary>Thông tin công việc</summary>
     <div class="customer-form-section-body">
       <div class="customer-form-grid">
         <div class="form-field">
@@ -79,15 +87,26 @@
           <input id="{{ prefix }}-attendance-code" name="attendance_code" value="{{ values.attendance_code or '' }}" placeholder="VD: CC001" maxlength="32">
         </div>
         <div class="form-field">
-          <label for="{{ prefix }}-username">Tên đăng nhập{% if creating %} <span class="required">*</span>{% endif %}</label>
-          <input id="{{ prefix }}-username" {% if creating %}name="username" required placeholder="VD: nhanvien02"{% else %}name="username" readonly{% endif %} value="{{ values.username or '' }}">
+          <label for="{{ prefix }}-note">Ghi chú</label>
+          <input id="{{ prefix }}-note" name="customer_note" value="{{ values.customer_note or '' }}" placeholder="Ghi chú nội bộ" maxlength="500">
         </div>
-        {% if creating %}
+      </div>
+    </div>
+  </details>
+
+  {% if creating %}
+  <details class="customer-form-section" open>
+    <summary>Thông tin tài khoản &amp; Phân quyền</summary>
+    <div class="customer-form-section-body">
+      <div class="customer-form-grid">
+        <div class="form-field">
+          <label for="{{ prefix }}-username">Tên đăng nhập <span class="required">*</span></label>
+          <input id="{{ prefix }}-username" name="username" required placeholder="VD: nhanvien02" value="{{ values.username or '' }}">
+        </div>
         <div class="form-field">
           <label for="{{ prefix }}-password">Mật khẩu khởi tạo <span class="required">*</span></label>
           <input id="{{ prefix }}-password" type="password" name="password" minlength="{{ min_password_len }}" placeholder="Tối thiểu {{ min_password_len }} ký tự" required>
         </div>
-        {% endif %}
         <div class="form-field">
           <label for="{{ prefix }}-role">Vai trò hệ thống <span class="required">*</span></label>
           <select id="{{ prefix }}-role" name="role" required>
@@ -95,13 +114,10 @@
             <option value="admin" {% if values and values.role == 'admin' %}selected{% endif %}>Quản trị viên (Admin)</option>
           </select>
         </div>
-        <div class="form-field">
-          <label for="{{ prefix }}-note">Ghi chú</label>
-          <input id="{{ prefix }}-note" name="customer_note" value="{{ values.customer_note or '' }}" placeholder="Ghi chú nội bộ" maxlength="500">
-        </div>
       </div>
     </div>
   </details>
+  {% endif %}
 
   <details class="customer-form-section">
     <summary>Thông tin ngân hàng</summary>
@@ -442,7 +458,7 @@
             {% for emp in employees %}
             <tr class="customer-row" data-employee-row="{{ emp.id }}">
               <td class="invoice-check"><input type="checkbox" data-select-employee="{{ emp.id }}" aria-label="Chọn nhân viên {{ emp.code }}"></td>
-              <td class="employee-avatar-cell"><span class="employee-row-avatar">{{ emp.initials }}</span></td>
+              <td class="employee-avatar-cell"><span class="employee-row-avatar" style="overflow:hidden;">{% if emp.avatar %}<img src="{{ emp.avatar }}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;">{% else %}{{ emp.initials }}{% endif %}</span></td>
               <td>
                 <button type="button" class="invoice-code" data-toggle-employee="{{ emp.id }}" aria-expanded="false" aria-controls="employee-detail-{{ emp.id }}">{{ emp.code }}</button>
               </td>
@@ -503,7 +519,7 @@
 
                   <div class="customer-tab-panel" role="tabpanel" data-employee-panel="info">
                     <div class="customer-profile-heading">
-                      <div class="customer-profile-avatar">{{ emp.initials }}</div>
+                      <div class="customer-profile-avatar">{% if emp.avatar %}<img src="{{ emp.avatar }}" alt="">{% else %}{{ emp.initials }}{% endif %}</div>
                       <div>
                         <h2>{{ emp.fullname }} <small>{{ emp.code }}</small></h2>
                         <p>
@@ -528,7 +544,6 @@
                     <p class="customer-profile-note">{{ emp.customer_note or 'Chưa có ghi chú' }}</p>
 
                     <div class="customer-detail-actions">
-                      <a class="invoice-action" href="{{ url_for('edit_user', user_id=emp.id) }}">Đổi mật khẩu / Chi tiết</a>
                       {% if is_admin and emp.username != 'admin' %}
                         <form method="post" action="{{ url_for('remove_user', user_id=emp.id) }}" onsubmit="return confirm('Xóa tài khoản nhân viên {{ emp.username }}?');">
                           <button type="submit" class="invoice-action customer-danger">Xóa</button>
@@ -736,6 +751,50 @@
                       <div><dt>Trạng thái tài khoản</dt><dd>{{ 'Đang hoạt động' if emp.status == 'active' else 'Đã khóa' }}</dd></div>
                       <div><dt>Ngày tạo</dt><dd>{{ emp.created_at or 'Hệ thống mặc định' }}</dd></div>
                     </dl>
+
+                    <div class="kv-perm-summary">
+                      <p class="kv-perm-status-line">Người dùng này có quyền trên <b>{{ emp.perm_summary.assigned_count }}/{{ emp.perm_summary.total_gates }}</b> cổng</p>
+                      {% if emp.perm_summary.gate_rows %}
+                        <table class="kv-perm-summary-table">
+                          <thead><tr><th>Tên cổng</th><th>Vai trò</th></tr></thead>
+                          <tbody>
+                            {% for gr in emp.perm_summary.gate_rows %}
+                              <tr><td><b>{{ gr.gate }}</b></td><td>{{ gr.role_preset }}</td></tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      {% endif %}
+                      <ul class="kv-perm-other-list">
+                        {% for op in other_perms %}
+                          {% set allowed = emp.perm_summary.other.get(op.key) %}
+                          <li>
+                            <span class="{{ 'kv-perm-icon-on' if allowed else 'kv-perm-icon-off' }}">{{ '✓' if allowed else '⊘' }}</span>
+                            <span>{{ op.label }}</span>
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    </div>
+
+                    {% if is_admin %}
+                      <div class="customer-detail-actions">
+                        <button type="button" class="invoice-action"
+                          data-edit-account
+                          data-id="{{ emp.id }}"
+                          data-username="{{ emp.username }}"
+                          data-role="{{ emp.role }}"
+                          data-action="{{ url_for('employee_account_save', user_id=emp.id) }}">
+                          Đổi mật khẩu / Tên ĐN
+                        </button>
+                        <button type="button" class="invoice-action invoice-action-primary"
+                          data-open-perm-modal
+                          data-id="{{ emp.id }}"
+                          data-username="{{ emp.username }}"
+                          data-permissions='{{ emp.permissions|tojson }}'
+                          data-action="{{ url_for('employee_permissions_save', user_id=emp.id) }}">
+                          {{ icon('edit') }} Chỉnh sửa
+                        </button>
+                      </div>
+                    {% endif %}
                   </div>
                 </section>
               </td>
@@ -783,9 +842,10 @@
   </div>
 </section>
 
-<!-- Modal Thêm mới nhân viên (2 tab: Thông tin | Thiết lập lương) -->
-<dialog id="add-employee-dialog" class="customer-dialog" {% if open_modal %}data-open-on-load{% endif %} aria-labelledby="add-employee-title">
+<!-- Modal Thêm mới nhân viên (4 tab: Thông tin | Thiết lập lương | Phân quyền theo vai trò | Phân quyền khác) -->
+<dialog id="add-employee-dialog" class="customer-dialog" data-presets='{{ perm_presets|tojson }}' data-gates='{{ gate_choices|tojson }}' {% if open_modal %}data-open-on-load{% endif %} aria-labelledby="add-employee-title">
   <form method="post" action="{{ url_for('add_account') }}">
+    <input type="hidden" name="permissions_json" value="" data-perm-json>
     <div class="customer-dialog-heading">
       <h2 id="add-employee-title">Thêm mới nhân viên</h2>
       <button type="button" data-close-dialog aria-label="Đóng form thêm nhân viên">{{ icon('close', 20) }}</button>
@@ -793,12 +853,20 @@
     <div class="employee-modal-tabs" role="tablist">
       <button type="button" class="employee-modal-tab" role="tab" aria-selected="true" data-modal-tab="info">Thông tin</button>
       <button type="button" class="employee-modal-tab" role="tab" aria-selected="false" data-modal-tab="salary">Thiết lập lương</button>
+      <button type="button" class="employee-modal-tab" role="tab" aria-selected="false" data-modal-tab="perm_role">Phân quyền theo vai trò</button>
+      <button type="button" class="employee-modal-tab" role="tab" aria-selected="false" data-modal-tab="perm_other">Phân quyền khác</button>
     </div>
     <div class="customer-dialog-body">
       {% if form_errors %}
         <div class="error-banner" role="alert">{% for error in form_errors %}<p>{{ error }}</p>{% endfor %}</div>
       {% endif %}
       {{ employee_form_fields('new', form or {}, true) }}
+      <div class="employee-modal-panel kv-perm-inline-panel" data-modal-panel="perm_role" hidden>
+        {{ perm_role_panel() }}
+      </div>
+      <div class="employee-modal-panel" data-modal-panel="perm_other" hidden>
+        {{ perm_other_panel() }}
+      </div>
     </div>
     <div class="customer-dialog-footer">
       <button type="button" class="invoice-action" data-close-dialog>Bỏ qua</button>
@@ -830,8 +898,137 @@
     </div>
   </form>
 </dialog>
+
+<!-- Modal Chỉnh sửa Tài khoản & Phân quyền nhân viên -->
+<dialog id="edit-employee-account-dialog" class="customer-dialog" aria-labelledby="edit-emp-acc-title">
+  <form method="post" id="edit-employee-account-form" action="">
+    <div class="customer-dialog-heading">
+      <h2 id="edit-emp-acc-title">Chỉnh sửa tài khoản &amp; phân quyền</h2>
+      <button type="button" data-close-dialog aria-label="Đóng form chỉnh sửa tài khoản">{{ icon('close', 20) }}</button>
+    </div>
+    <div class="customer-dialog-body">
+      <details class="customer-form-section" open>
+        <summary>Thông tin tài khoản &amp; Phân quyền</summary>
+        <div class="customer-form-section-body">
+          <div class="customer-form-grid">
+            <div class="form-field">
+              <label for="acc-edit-username">Tên đăng nhập <span class="required">*</span></label>
+              <input id="acc-edit-username" name="username" required placeholder="Tên đăng nhập">
+            </div>
+            <div class="form-field">
+              <label for="acc-edit-role">Vai trò hệ thống <span class="required">*</span></label>
+              <select id="acc-edit-role" name="role" required>
+                <option value="manager">Nhân viên vận hành (Manager)</option>
+                <option value="admin">Quản trị viên (Admin)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="customer-form-section" open>
+        <summary>Đặt lại mật khẩu <small>Để trống nếu không đổi</small></summary>
+        <div class="customer-form-section-body">
+          <div class="customer-form-grid">
+            <div class="form-field">
+              <label for="acc-edit-new-pw">Mật khẩu mới</label>
+              <input id="acc-edit-new-pw" type="password" name="new_password" autocomplete="new-password" minlength="{{ min_password_len }}" placeholder="Tối thiểu {{ min_password_len }} ký tự">
+            </div>
+            <div class="form-field">
+              <label for="acc-edit-confirm-pw">Nhập lại mật khẩu mới</label>
+              <input id="acc-edit-confirm-pw" type="password" name="confirm_password" autocomplete="new-password" minlength="{{ min_password_len }}" placeholder="Xác nhận mật khẩu mới">
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-dialog>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>
+<!-- Modal Sửa phân quyền KiotViet (3 cột + Tab Phân quyền khác) -->
+<dialog id="edit-permissions-dialog" class="kv-perm-dialog" data-presets='{{ perm_presets|tojson }}' data-gates='{{ gate_choices|tojson }}' aria-labelledby="perm-modal-title">
+  <form method="post" id="edit-permissions-form" action="">
+    <input type="hidden" name="permissions_json" value="" data-perm-json>
+    <div class="customer-dialog-heading">
+      <h2 id="perm-modal-title">Sửa phân quyền</h2>
+      <button type="button" data-close-dialog aria-label="Đóng">{{ icon('close', 20) }}</button>
+    </div>
+    <div class="kv-perm-tabs" role="tablist">
+      <button type="button" class="kv-perm-tab" role="tab" aria-selected="true" data-perm-tab="role">Phân quyền theo vai trò</button>
+      <button type="button" class="kv-perm-tab" role="tab" aria-selected="false" data-perm-tab="other">Phân quyền khác</button>
+    </div>
+    <div class="kv-perm-body">
+      <div class="kv-perm-tabpanel" data-perm-tabpanel="role">
+        {{ perm_role_panel() }}
+      </div>
+      <div class="kv-perm-tabpanel" data-perm-tabpanel="other" hidden>
+        {{ perm_other_panel() }}
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-dialog>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
 <script src="/static/js/employees.js" defer></script>
+<script src="/static/js/employees-permissions.js" defer></script>
+<script>
+document.querySelectorAll('[data-avatar-input]').forEach(function (inp) {
+  inp.addEventListener('change', function () {
+    var file = inp.files && inp.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Mỗi ảnh không vượt quá 2Mb.');
+      inp.value = '';
+      return;
+    }
+    var wrap = inp.closest('.customer-form-avatar');
+    var img = wrap && wrap.querySelector('.avatar-preview-img');
+    var hid = wrap && wrap.querySelector('[data-avatar-data]');
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      var res = ev.target && ev.target.result ? String(ev.target.result) : '';
+      if (hid) hid.value = res;
+      if (img && res) {
+        img.src = res;
+        img.hidden = false;
+        wrap.classList.add('has-preview');
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+});
+document.querySelectorAll('[data-edit-account]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var dlg = document.getElementById('edit-employee-account-dialog');
+    var form = document.getElementById('edit-employee-account-form');
+    if (!dlg || !form) return;
+    form.action = btn.dataset.action || '';
+    var uInp = document.getElementById('acc-edit-username');
+    var rSel = document.getElementById('acc-edit-role');
+    var pw1 = document.getElementById('acc-edit-new-pw');
+    var pw2 = document.getElementById('acc-edit-confirm-pw');
+    var isPrimaryAdmin = (btn.dataset.username === 'admin');
+    if (uInp) {
+      uInp.value = btn.dataset.username || '';
+      uInp.readOnly = isPrimaryAdmin;
+    }
+    if (rSel) {
+      rSel.value = btn.dataset.role || 'manager';
+      rSel.disabled = isPrimaryAdmin;
+    }
+    if (pw1) pw1.value = '';
+    if (pw2) pw2.value = '';
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+  });
+});
+</script>
 {% endblock %}

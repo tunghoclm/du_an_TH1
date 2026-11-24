@@ -105,10 +105,17 @@ def init_db():
                     "ALTER TABLE users ADD COLUMN deduction_enabled INTEGER NOT NULL DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN deduction_amount INTEGER NOT NULL DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN deduction_note TEXT",
+                    "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''",
+                    "ALTER TABLE users ADD COLUMN province TEXT DEFAULT ''",
+                    "ALTER TABLE users ADD COLUMN district TEXT DEFAULT ''",
+                    "ALTER TABLE users ADD COLUMN ward TEXT DEFAULT ''",
+                    "ALTER TABLE users ADD COLUMN permissions_json TEXT",
                     "ALTER TABLE parking_zones ADD COLUMN operating_hours TEXT DEFAULT '24/7'",
                     "ALTER TABLE parking_zones ADD COLUMN area_names TEXT",
                     "ALTER TABLE parking_zones ADD COLUMN vehicle_type_ids TEXT",
-                    "ALTER TABLE parking_areas ADD COLUMN note TEXT"):
+                    "ALTER TABLE parking_areas ADD COLUMN note TEXT",
+                    "ALTER TABLE parking_areas ADD COLUMN wheel_group TEXT",
+                    "ALTER TABLE ticket_payments ADD COLUMN payment_method TEXT DEFAULT 'cash'"):
         try:
             conn.execute(col_sql)
         except sqlite3.OperationalError:
@@ -325,13 +332,20 @@ def _parking_transaction():
 
 def get_areas():
     return _fetch(
-        "SELECT a.*, v.name AS vehicle_type_name FROM parking_areas a "
+        "SELECT a.*, "
+        "CASE WHEN a.wheel_group = '2w' THEN 'Xe 2 bánh' "
+        "     WHEN a.wheel_group = '4w' THEN 'Xe 4 bánh' "
+        "     ELSE v.name END AS vehicle_type_name "
+        "FROM parking_areas a "
         "LEFT JOIN vehicle_types v ON v.id = a.vehicle_type_id ORDER BY a.id")
 
 
-def save_area(area_id, name, vehicle_type_id=None, slot_count=0, note=''):
+def save_area(area_id, name, vehicle_type_id=None, slot_count=0, note='', wheel_group=None):
     name = (name or '').strip()
     note_val = (note or '').strip()[:255]
+    wg = wheel_group if wheel_group in ('2w', '4w') else None
+    if wg is not None:
+        vehicle_type_id = None
     if not name or len(name) > 60 or any(ord(c) < 32 for c in name):
         raise ValueError('Tên khu phải có từ 1 đến 60 ký tự.')
     with _parking_transaction() as conn:
@@ -344,18 +358,27 @@ def save_area(area_id, name, vehicle_type_id=None, slot_count=0, note=''):
             area = conn.execute('SELECT * FROM parking_areas WHERE id=?', (area_id,)).fetchone()
             if area is None:
                 raise ValueError('Không tìm thấy khu.')
-            if vehicle_type_id is not None:
+            if wg is not None:
+                occupied = conn.execute("SELECT * FROM parking_slots WHERE area=? AND status='occupied'", (area['name'],)).fetchall()
+                for slot in occupied:
+                    record = _slot_record(conn, slot)
+                    vt = conn.execute('SELECT wheel_group FROM vehicle_types WHERE id=?', (record['vehicle_type_id'],)).fetchone()
+                    if vt is None or (vt['wheel_group'] or '2w') != wg:
+                        raise ValueError('Khu còn xe thuộc nhóm bánh khác. Hãy xử lý các xe đó trước khi đổi phân khu.')
+            elif vehicle_type_id is not None:
                 occupied = conn.execute("SELECT * FROM parking_slots WHERE area=? AND status='occupied'", (area['name'],)).fetchall()
                 for slot in occupied:
                     record = _slot_record(conn, slot)
                     if record['vehicle_type_id'] != vehicle_type_id:
                         raise ValueError('Khu còn xe thuộc loại khác. Hãy xử lý các xe đó trước khi đổi phân khu.')
-            conn.execute('UPDATE parking_areas SET name=?, vehicle_type_id=?, note=? WHERE id=?', (name, vehicle_type_id, note_val, area_id))
+            conn.execute('UPDATE parking_areas SET name=?, vehicle_type_id=?, wheel_group=?, note=? WHERE id=?',
+                         (name, vehicle_type_id, wg, note_val, area_id))
             conn.execute('UPDATE parking_slots SET area=? WHERE area=?', (name, area['name']))
             return area_id
         if not isinstance(slot_count, int) or not 0 <= slot_count <= 1000:
             raise ValueError('Số lượng ô phải là số nguyên từ 1 đến 1000.')
-        new_id = conn.execute('INSERT INTO parking_areas (name,vehicle_type_id,note) VALUES (?,?,?)', (name, vehicle_type_id, note_val)).lastrowid
+        new_id = conn.execute('INSERT INTO parking_areas (name,vehicle_type_id,wheel_group,note) VALUES (?,?,?,?)',
+                              (name, vehicle_type_id, wg, note_val)).lastrowid
         import re
         import unicodedata
         ascii_name = unicodedata.normalize('NFKD', name.replace('đ', 'D').replace('Đ', 'D')).encode('ascii', 'ignore').decode().upper()
@@ -434,26 +457,36 @@ def delete_slot(slot_name):
         conn.execute('DELETE FROM parking_slots WHERE slot_name=?', (slot_name,))
 
 
+def _slot_allows_vehicle(slot_row, vehicle_type_id, vt_wheel_map):
+    if vehicle_type_id is None:
+        return True
+    wg = slot_row['allowed_wheel_group'] if 'allowed_wheel_group' in slot_row.keys() else None
+    if wg in ('2w', '4w'):
+        return vt_wheel_map.get(vehicle_type_id, '2w') == wg
+    return slot_row['allowed_vehicle_type_id'] is None or slot_row['allowed_vehicle_type_id'] == vehicle_type_id
+
+
 def get_available_slots_by_area(vehicle_type_id=None):
     areas = get_areas()
+    vt_wheel_map = {t['id']: (t['wheel_group'] or '2w') for t in get_vehicle_types()}
     result = {a['name']: [] for a in areas}
     for row in get_all_slots():
-        if row['status'] == 'available' and row['record_id'] is None and (vehicle_type_id is None or
-                row['allowed_vehicle_type_id'] is None or row['allowed_vehicle_type_id'] == vehicle_type_id):
+        if row['status'] == 'available' and row['record_id'] is None and _slot_allows_vehicle(row, vehicle_type_id, vt_wheel_map):
             result.setdefault(row['area'], []).append(row)
     return result
 
 
 def is_slot_available(slot_name, vehicle_type_id=None):
     rows = [s for s in get_all_slots() if s['slot_name'] == slot_name]
+    vt_wheel_map = {t['id']: (t['wheel_group'] or '2w') for t in get_vehicle_types()}
     return bool(rows and rows[0]['status'] == 'available' and rows[0]['record_id'] is None and
-                (vehicle_type_id is None or rows[0]['allowed_vehicle_type_id'] is None or
-                 rows[0]['allowed_vehicle_type_id'] == vehicle_type_id))
+                _slot_allows_vehicle(rows[0], vehicle_type_id, vt_wheel_map))
 
 
 def get_all_slots():
     return _fetch(
         "SELECT s.*, a.id AS area_id, a.vehicle_type_id AS allowed_vehicle_type_id, "
+        "a.wheel_group AS allowed_wheel_group, "
         "(SELECT r.id FROM parking_records r WHERE r.slot_name=s.slot_name AND r.status='IN' "
         "ORDER BY r.id DESC LIMIT 1) AS record_id "
         "FROM parking_slots s JOIN parking_areas a ON a.name=s.area ORDER BY a.id,s.slot_name")
@@ -464,6 +497,57 @@ def find_free_slot(area=None, vehicle_type_id=None):
         if slots and (area is None or area_name == area):
             return slots[0]['slot_name']
     return None
+
+
+def import_parking_slots(rows: list):
+    """Import danh sách ô đỗ từ Excel. Mỗi phần tử là dict:
+    {slot_name, area_name, wheel_group, vehicle_type_id, status, note}.
+    Trả về (added_count, updated_count, skipped_count)."""
+    import re
+    added = 0
+    updated = 0
+    skipped = 0
+    with _parking_transaction() as conn:
+        area_cache = {r['name'].strip().lower(): dict(r)
+                      for r in conn.execute('SELECT * FROM parking_areas').fetchall()}
+        slot_cache = {r['slot_name']: dict(r)
+                      for r in conn.execute('SELECT * FROM parking_slots').fetchall()}
+        for item in rows:
+            slot_name = (item.get('slot_name') or '').strip().upper()
+            area_name = (item.get('area_name') or '').strip()
+            if not re.fullmatch(r'[A-Z0-9][A-Z0-9_-]{0,31}', slot_name) or not area_name or len(area_name) > 60:
+                skipped += 1
+                continue
+            area_key = area_name.lower()
+            if area_key not in area_cache:
+                wg = item.get('wheel_group') if item.get('wheel_group') in ('2w', '4w') else None
+                vt_id = None if wg else item.get('vehicle_type_id')
+                new_aid = conn.execute(
+                    'INSERT INTO parking_areas (name, vehicle_type_id, wheel_group, note) VALUES (?,?,?,?)',
+                    (area_name, vt_id, wg, ''),
+                ).lastrowid
+                area_cache[area_key] = {'id': new_aid, 'name': area_name}
+            canonical_area = area_cache[area_key]['name']
+            status = item.get('status') if item.get('status') in ('available', 'maintenance') else 'available'
+            reason = ((item.get('note') or '').strip()[:255] or 'Bảo trì') if status == 'maintenance' else None
+
+            existing = slot_cache.get(slot_name)
+            if existing is None:
+                conn.execute(
+                    'INSERT INTO parking_slots (slot_name, area, status, maintenance_reason) VALUES (?,?,?,?)',
+                    (slot_name, canonical_area, status, reason),
+                )
+                slot_cache[slot_name] = {'slot_name': slot_name, 'area': canonical_area, 'status': status}
+                added += 1
+            elif existing['status'] == 'occupied':
+                skipped += 1
+            else:
+                conn.execute(
+                    'UPDATE parking_slots SET area=?, status=?, maintenance_reason=? WHERE slot_name=?',
+                    (canonical_area, status, reason, slot_name),
+                )
+                updated += 1
+    return added, updated, skipped
 
 
 def occupy_slot(slot_name, plate_number):
@@ -685,15 +769,42 @@ def update_user(user_id: int, fullname: str, role: str):
     conn.close()
 
 
-def update_customer_profile(user_id, fullname, phone='', email='', address='', customer_note=''):
-    _exec("UPDATE users SET fullname=?,phone=?,email=?,address=?,customer_note=? WHERE id=? AND role='user'",
-          (fullname, phone, email, address, customer_note, user_id))
+def update_user_account(user_id: int, username: str, role: str):
+    conn = get_connection()
+    conn.execute("UPDATE users SET username = ?, role = ? WHERE id = ?", (username, role, user_id))
+    conn.commit()
+    conn.close()
+
+
+def save_user_permissions(user_id: int, permissions_json: str, work_branch: str = None):
+    conn = get_connection()
+    if work_branch is not None:
+        conn.execute("UPDATE users SET permissions_json = ?, work_branch = ? WHERE id = ?",
+                     (permissions_json, work_branch, user_id))
+    else:
+        conn.execute("UPDATE users SET permissions_json = ? WHERE id = ?", (permissions_json, user_id))
+    conn.commit()
+    conn.close()
+
+
+def update_customer_profile(user_id, fullname, phone='', email='', address='', customer_note='',
+                            dob='', gender='', province='', district='', ward='', username=None, avatar=None):
+    sets = "fullname=?,phone=?,email=?,address=?,customer_note=?,dob=?,gender=?,province=?,district=?,ward=?"
+    params = [fullname, phone, email, address, customer_note, dob, gender, province, district, ward]
+    if username:
+        sets += ",username=?"
+        params.append(username)
+    if avatar is not None:
+        sets += ",avatar=?"
+        params.append(avatar)
+    params.append(user_id)
+    _exec(f"UPDATE users SET {sets} WHERE id=? AND role='user'", tuple(params))
 
 
 def update_employee_profile(user_id, **fields):
     """Cập nhật thông tin hồ sơ & thiết lập lương cho nhân viên (admin/manager)."""
     allowed = (
-        'fullname', 'role', 'phone', 'email', 'address', 'customer_note',
+        'fullname', 'role', 'phone', 'email', 'address', 'customer_note', 'avatar',
         'employee_code', 'attendance_code', 'department', 'position',
         'work_branch', 'pay_branch', 'start_date', 'id_card', 'gender', 'dob',
         'bank_account', 'bank_name', 'bank_holder',
@@ -794,7 +905,9 @@ def find_vehicle_owner(key: str):
 
 
 def add_user_vehicle(user_id: int, plate_number: str, key: str, vehicle_type_id,
-                     ticket_type: str, expires_on, start_on=None, months=None, paid_amount=None):
+                     ticket_type: str, expires_on, start_on=None, months=None, paid_amount=None,
+                     payment_method: str = 'cash'):
+    pm = payment_method if payment_method in PAYMENT_METHODS else 'cash'
     conn = get_connection()
     now = datetime.now()
     cur = conn.execute(
@@ -806,22 +919,24 @@ def add_user_vehicle(user_id: int, plate_number: str, key: str, vehicle_type_id,
          start_on, months, paid_amount, now.isoformat(timespec='seconds')))
     if ticket_type == 'month' and paid_amount:
         conn.execute(
-            "INSERT INTO ticket_payments (user_vehicle_id, plate_number, amount, months, paid_on, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (cur.lastrowid, plate_number, paid_amount, months,
+            "INSERT INTO ticket_payments (user_vehicle_id, plate_number, amount, months, payment_method, paid_on, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (cur.lastrowid, plate_number, paid_amount, months, pm,
              now.strftime('%Y-%m-%d'), now.isoformat(timespec='seconds')))
     conn.commit()
     conn.close()
 
 
-def add_ticket_payment(vehicle_id: int, plate_number: str, amount: int, months: int):
+def add_ticket_payment(vehicle_id: int, plate_number: str, amount: int, months: int,
+                       payment_method: str = 'cash'):
     """Ghi nhận 1 lần thu tiền vé tháng (thuê thêm tháng) vào doanh thu."""
+    pm = payment_method if payment_method in PAYMENT_METHODS else 'cash'
     now = datetime.now()
     conn = get_connection()
     conn.execute(
-        "INSERT INTO ticket_payments (user_vehicle_id, plate_number, amount, months, paid_on, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (vehicle_id, plate_number, amount, months,
+        "INSERT INTO ticket_payments (user_vehicle_id, plate_number, amount, months, payment_method, paid_on, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (vehicle_id, plate_number, amount, months, pm,
          now.strftime('%Y-%m-%d'), now.isoformat(timespec='seconds')))
     conn.commit()
     conn.close()
@@ -980,9 +1095,9 @@ def get_statistics(start_date: str = None, end_date: str = None, gate_name: str 
 
 
 def _gate_sql_condition(col: str, gate_names: list):
-    """Tạo điều kiện SQL lọc theo danh sách cổng (hỗ trợ 'Tất cả các cổng' = NULL/''/'Trung tâm'/'Tất cả các cổng')."""
-    include_central = 'Tất cả các cổng' in gate_names or 'Trung tâm' in gate_names
-    specific = [g for g in gate_names if g not in ('Tất cả các cổng', 'Trung tâm')]
+    """Tạo điều kiện SQL lọc theo danh sách cổng (hỗ trợ 'Cổng chính' = NULL/''/'Trung tâm'/'Cổng chính')."""
+    include_central = any(g in gate_names for g in ('Cổng chính', 'Tất cả các cổng', 'Trung tâm'))
+    specific = [g for g in gate_names if g not in ('Cổng chính', 'Tất cả các cổng', 'Trung tâm')]
     parts = []
     params = []
     if specific:
@@ -990,7 +1105,7 @@ def _gate_sql_condition(col: str, gate_names: list):
         parts.append(f"{col} IN ({placeholders})")
         params.extend(specific)
     if include_central:
-        parts.append(f"({col} IS NULL OR {col} = '' OR {col} IN ('Trung tâm', 'Tất cả các cổng'))")
+        parts.append(f"({col} IS NULL OR {col} = '' OR {col} IN ('Cổng chính', 'Trung tâm', 'Tất cả các cổng'))")
     if not parts:
         return "1=0", []
     return "(" + " OR ".join(parts) + ")", params
@@ -1043,7 +1158,7 @@ def get_statistics_for_gates(start_date: str = None, end_date: str = None, gate_
         [start_date, end_date] + out_params
     )
 
-    if 'Tất cả các cổng' in gate_names or 'Trung tâm' in gate_names:
+    if any(g in gate_names for g in ('Cổng chính', 'Tất cả các cổng', 'Trung tâm')):
         month_revenue = one("SELECT COALESCE(SUM(amount), 0) FROM ticket_payments")
         period_month_revenue = one(
             "SELECT COALESCE(SUM(amount), 0) FROM ticket_payments WHERE paid_on BETWEEN ? AND ?",

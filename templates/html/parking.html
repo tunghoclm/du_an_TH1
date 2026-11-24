@@ -26,19 +26,24 @@
     </div>
 
     <div class="kv-parking-actions">
-      {% if is_admin %}
+      {% if has_perm('parking.create') %}
         <button type="button"
                 class="kv-btn-primary"
                 id="kv-open-add-slot-top">
           + Thêm ô đỗ
         </button>
       {% endif %}
-      <a href="{{ url_for('parking_export') }}" class="kv-btn-white">
-        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span>Xuất file</span>
-      </a>
-      {% if is_staff %}
-        <a href="{{ url_for('gate') }}" class="kv-btn-white">Giám sát vào / ra</a>
+      {% if has_perm('parking.export') %}
+        <a href="{{ url_for('parking_export') }}" id="kv-parking-export-link" class="kv-btn-white">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Xuất file</span>
+        </a>
+      {% endif %}
+      {% if has_perm('parking.import') %}
+        <button type="button" class="kv-btn-white" id="kv-open-import-btn">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>Import</span>
+        </button>
       {% endif %}
       <div class="kv-help-wrap">
         <button type="button" class="kv-btn-help" id="kv-parking-help-btn" title="Hướng dẫn" aria-expanded="false">
@@ -58,8 +63,30 @@
     <aside class="kv-parking-sidebar" aria-label="Bộ lọc sơ đồ bãi đỗ">
       <div>
         <div class="kv-filter-group-head">
+          <h2>Cổng</h2>
+        </div>
+        <div class="kv-radio-list" id="kv-gate-radio-list">
+          <label class="kv-radio-item">
+            <input type="radio" name="kv_gate_filter" value="all" data-gate-id="0"{% if not current_gate_obj %} checked{% endif %}>
+            <span>Tất cả</span>
+          </label>
+          {% for pg in parking_gates %}
+            <label class="kv-radio-item">
+              <input type="radio" name="kv_gate_filter" value="{{ pg.name }}" data-gate-id="{{ pg.id }}" data-area-ids="{{ pg.area_ids|join(',') }}"{% if current_gate_obj and current_gate_obj.name == pg.name %} checked{% endif %}>
+              <span>{{ pg.name }}</span>
+            </label>
+          {% endfor %}
+        </div>
+        <form id="kv-sidebar-gate-switch" method="post" action="{{ url_for('select_active_gate') }}" hidden>
+          <input type="hidden" name="gate_id" id="kv-sidebar-gate-id" value="0">
+          <input type="hidden" name="next" value="{{ url_for('parking') }}">
+        </form>
+      </div>
+
+      <div>
+        <div class="kv-filter-group-head">
           <h2>Khu vực</h2>
-          {% if is_admin %}
+          {% if has_perm('parking.create') %}
             <button type="button"
                     class="kv-filter-create-link"
                     data-edit-area
@@ -74,12 +101,12 @@
             <span>Tất cả</span>
           </label>
           {% for area in areas %}
-            <div class="kv-area-radio-row">
+            <div class="kv-area-radio-row" data-area-row="{{ area.id }}">
               <label class="kv-radio-item">
                 <input type="radio" name="kv_area_filter" value="{{ area.id }}">
                 <span>Khu {{ area.name }}</span>
               </label>
-              {% if is_admin %}
+              {% if has_perm('parking.edit') %}
                 {% set area_slots = slots_by_area.get(area.name, []) %}
                 {% set area_occ = area_slots|selectattr('status', 'equalto', 'occupied')|list|length %}
                 <button type="button"
@@ -89,7 +116,7 @@
                         data-edit-area
                         data-id="{{ area.id }}"
                         data-name="{{ area.name }}"
-                        data-type="{{ area.allowed_vehicle_type_id or 'all' }}"
+                        data-type="{{ 'wg:' ~ area.wheel_group if area.wheel_group else (area.allowed_vehicle_type_id or 'all') }}"
                         data-note="{{ area.note or '' }}"
                         data-count="{{ area_slots|length }}"
                         data-occupied="{{ area_occ }}"
@@ -134,7 +161,7 @@
               (Tất cả khu đỗ — chưa giới hạn khu riêng)
             {% endif %}
           </div>
-          {% if is_staff %}
+          {% if current_user_role == 'admin' or has_perm('parking.edit') %}
             <button type="button" class="kv-btn-white" id="kv-open-gate-areas">Chọn khu cho cổng này</button>
           {% endif %}
         </div>
@@ -142,10 +169,10 @@
 
       <div class="kv-parking-summary-strip">
         <div class="kv-summary-pills">
-          <span>Tổng số ô: <strong>{{ counts.total }}</strong></span>
-          <span>Còn trống: <strong style="color:#18a967;">{{ counts.available }}</strong></span>
-          <span>Đang có xe: <strong style="color:#0070f4;">{{ counts.occupied }}</strong></span>
-          <span>Bảo trì: <strong style="color:#d97706;">{{ counts.maintenance }}</strong></span>
+          <span>Tổng số ô: <strong id="kv-sum-total">{{ counts.total }}</strong></span>
+          <span>Còn trống: <strong id="kv-sum-avail" style="color:#18a967;">{{ counts.available }}</strong></span>
+          <span>Đang có xe: <strong id="kv-sum-occ" style="color:#0070f4;">{{ counts.occupied }}</strong></span>
+          <span>Bảo trì: <strong id="kv-sum-maint" style="color:#d97706;">{{ counts.maintenance }}</strong></span>
         </div>
         <div class="kv-view-switch" role="tablist" aria-label="Chế độ hiển thị">
           <button type="button" class="kv-view-btn active" data-parking-view="table" role="tab" aria-selected="true">Danh sách</button>
@@ -161,6 +188,7 @@
               <tr>
                 <th>Tên ô đỗ</th>
                 <th>Khu vực</th>
+                <th>Nhóm xe</th>
                 <th>Loại xe</th>
                 <th>Biển số đang đỗ</th>
                 <th>Tình trạng chỗ</th>
@@ -183,6 +211,7 @@
                       aria-expanded="false">
                     <td><strong>{{ slot.slot_name }}</strong></td>
                     <td>Khu {{ area.name }}</td>
+                    <td>{{ vt_wheel_by_name.get(slot.vehicle_type_name) if slot.vehicle_type_name else area.allowed_wheel_label }}</td>
                     <td>{{ slot.vehicle_type_name or area.allowed_type_name or 'Tất cả loại xe' }}</td>
                     <td>
                       {% if is_occ and slot.plate_number %}
@@ -210,7 +239,7 @@
                     <td>{{ slot.maintenance_reason or area.note or '—' }}</td>
                   </tr>
                   <tr class="kv-slot-detail-row" data-slot-detail="{{ slot.slot_name }}" hidden>
-                    <td colspan="7">
+                    <td colspan="8">
                       <div class="kv-slot-detail-box">
                         <div class="kv-slot-detail-head">
                           <strong>{{ slot.slot_name }}</strong>
@@ -241,7 +270,7 @@
                         {% if is_staff %}
                         <div class="kv-slot-detail-foot">
                           <div>
-                            {% if is_admin %}
+                            {% if has_perm('parking.delete') %}
                               <button type="button"
                                       class="kv-ghost-danger"
                                       data-table-action="delete"
@@ -252,19 +281,21 @@
                             {% endif %}
                           </div>
                           <div class="kv-slot-detail-right-actions">
-                            {% if is_occ %}
+                            {% if is_occ and has_perm('parking.edit') %}
                               <button type="button" class="kv-btn-primary" data-table-action="vehicle" data-slot-target="{{ slot.slot_name }}">Quản lý xe</button>
                             {% endif %}
-                            {% if is_admin %}
+                            {% if has_perm('parking.edit') %}
                               <button type="button" class="kv-btn-primary" data-table-action="edit" data-slot-target="{{ slot.slot_name }}">Chỉnh sửa</button>
                             {% endif %}
-                            <button type="button"
-                                    class="kv-btn-white"
-                                    data-table-action="maintenance"
-                                    data-slot-target="{{ slot.slot_name }}"
-                                    {% if is_occ or slot.record_id %}disabled{% endif %}>
-                              {{ 'Mở lại ô' if is_maint else 'Ngừng hoạt động' }}
-                            </button>
+                            {% if has_perm('parking.maintenance') %}
+                              <button type="button"
+                                      class="kv-btn-white"
+                                      data-table-action="maintenance"
+                                      data-slot-target="{{ slot.slot_name }}"
+                                      {% if is_occ or slot.record_id %}disabled{% endif %}>
+                                {{ 'Mở lại ô' if is_maint else 'Ngừng hoạt động' }}
+                              </button>
+                            {% endif %}
                           </div>
                         </div>
                         {% endif %}
@@ -592,19 +623,28 @@
             <textarea id="area-note" name="note" rows="3" maxlength="255" placeholder="Nhập ghi chú"></textarea>
           </div>
 
+          <div class="kv-modal-field" id="area-count-field">
+            <label for="area-slot-count">Số lượng ô đỗ (1 – 1000)</label>
+            <input type="number" id="area-slot-count" name="slot_count" min="1" max="1000" value="6" required>
+            <small id="area-slot-preview" class="kv-modal-hint"></small>
+          </div>
+
           <div class="kv-modal-two-col">
-            <div class="kv-modal-field" id="area-count-field">
-              <label for="area-slot-count">Số lượng ô đỗ (1 – 1000)</label>
-              <input type="number" id="area-slot-count" name="slot_count" min="1" max="1000" value="6" required>
-              <small id="area-slot-preview" class="kv-modal-hint"></small>
+            <div class="kv-modal-field">
+              <label for="area-wheel-group">Nhóm xe</label>
+              <select id="area-wheel-group" name="wheel_group">
+                <option value="all">Tất cả nhóm xe</option>
+                <option value="2w">Xe 2 bánh</option>
+                <option value="4w">Xe 4 bánh</option>
+              </select>
             </div>
 
-            <div class="kv-modal-field">
-              <label for="area-type">Loại xe được phép đỗ</label>
+            <div class="kv-modal-field" id="area-specific-type-field" hidden>
+              <label for="area-type">Loại xe</label>
               <select id="area-type" name="vehicle_type_id">
-                <option value="all">Tất cả loại xe</option>
+                <option value="">Tất cả xe trong nhóm</option>
                 {% for vt in vehicle_types %}
-                  <option value="{{ vt.id }}">{{ vt.name }}</option>
+                  <option value="{{ vt.id }}" data-wheel-group="{{ vt.wheel_group or '2w' }}">{{ vt.name }}</option>
                 {% endfor %}
               </select>
             </div>
@@ -618,6 +658,30 @@
           <div style="display:flex;align-items:center;gap:12px;">
             <button type="button" class="kv-modal-cancel" data-close>Bỏ qua</button>
             <button type="submit" class="kv-modal-save">Lưu</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- HỘP THOẠI IMPORT EXCEL -->
+    <dialog id="parking-import-dialog" class="kv-area-modal" style="max-width:560px;">
+      <form method="POST" action="{{ url_for('parking_import') }}" enctype="multipart/form-data" id="parking-import-form" class="kv-area-modal-form">
+        <div class="kv-area-modal-head">
+          <h3>Chọn file để import</h3>
+          <button type="button" class="kv-area-modal-close" data-close aria-label="Đóng">×</button>
+        </div>
+        <div class="kv-area-modal-body" style="padding:20px 24px 24px;">
+          <div id="parking-import-dropzone" style="border:1.5px dashed #cbd5e1;border-radius:12px;padding:34px 20px;text-align:center;background:#fafbfc;display:grid;gap:14px;justify-items:center;cursor:pointer;transition:border-color .15s,background .15s;">
+            <div style="color:#475569;font-size:14px;line-height:1.6;">
+              Nhấn chọn hoặc kéo thả file dữ liệu vào đây.<br>
+              Chỉ nhận file Excel có đuôi <strong>.xlsx</strong>
+            </div>
+            <input type="file" id="parking-import-file" name="file" accept=".xlsx" hidden>
+            <button type="button" id="parking-import-pick" class="kv-btn-primary" style="display:inline-flex;align-items:center;gap:8px;padding:9px 20px;border-radius:10px;font-weight:600;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm1 7V3.5L18.5 7H15z"/></svg>
+              <span>Chọn file</span>
+            </button>
+            <a href="{{ url_for('parking_import_template') }}" style="color:#0070f4;font-size:14px;font-weight:500;text-decoration:none;">Tải file mẫu</a>
           </div>
         </div>
       </form>
@@ -754,7 +818,28 @@
     });
   });
 
+  var serverScopedGate = {{ (current_gate_obj.name if current_gate_obj else '')|tojson }};
+
+  function syncAreaListForGate(gateAreaIds) {
+    document.querySelectorAll('.kv-area-radio-row[data-area-row]').forEach(function (row) {
+      var id = row.dataset.areaRow;
+      row.hidden = Boolean(gateAreaIds && gateAreaIds.indexOf(id) === -1);
+    });
+    var checkedArea = document.querySelector('input[name="kv_area_filter"]:checked');
+    if (checkedArea && checkedArea.value !== 'all' && gateAreaIds && gateAreaIds.indexOf(checkedArea.value) === -1) {
+      var allArea = document.querySelector('input[name="kv_area_filter"][value="all"]');
+      if (allArea) allArea.checked = true;
+    }
+  }
+
   function applyParkingFilters() {
+    var gateEl = document.querySelector('input[name="kv_gate_filter"]:checked');
+    var gateVal = gateEl ? gateEl.value : 'all';
+    var gateAreaIds = (gateVal !== 'all' && gateEl && gateEl.dataset.areaIds !== undefined)
+      ? gateEl.dataset.areaIds.split(',').filter(Boolean)
+      : null;
+    syncAreaListForGate(gateAreaIds);
+
     var areaEl = document.querySelector('input[name="kv_area_filter"]:checked');
     var statusEl = document.querySelector('input[name="kv_status_filter"]:checked');
     var occEl = document.querySelector('input[name="kv_occ_filter"]:checked');
@@ -766,13 +851,21 @@
     // Filter Table Rows + Pagination
     var rows = Array.prototype.slice.call(document.querySelectorAll('.kv-slot-row'));
     var matchedRows = [];
+    var sumTotal = 0, sumAvail = 0, sumOcc = 0, sumMaint = 0;
     rows.forEach(function (row) {
       var st = row.dataset.slotStatus;
       var areaOk = areaVal === 'all' || row.dataset.area === areaVal;
+      var gateOk = !gateAreaIds || gateAreaIds.indexOf(row.dataset.area) !== -1;
+      if (areaOk && gateOk) {
+        sumTotal += 1;
+        if (st === 'available') sumAvail += 1;
+        else if (st === 'occupied') sumOcc += 1;
+        else if (st === 'maintenance') sumMaint += 1;
+      }
       var stOk = statusVal === 'all' || (statusVal === 'active' && st !== 'maintenance') || (statusVal === 'inactive' && st === 'maintenance');
       var occOk = occVal === 'all' || (occVal === 'available' && st === 'available') || (occVal === 'occupied' && st === 'occupied');
       var qOk = !q || (row.dataset.search || '').indexOf(q) !== -1;
-      var show = areaOk && stOk && occOk && qOk;
+      var show = areaOk && gateOk && stOk && occOk && qOk;
       if (show) matchedRows.push(row);
       else {
         row.hidden = true;
@@ -781,6 +874,25 @@
         if (det) det.hidden = true;
       }
     });
+    var elTot = document.getElementById('kv-sum-total');
+    var elAv = document.getElementById('kv-sum-avail');
+    var elOc = document.getElementById('kv-sum-occ');
+    var elMn = document.getElementById('kv-sum-maint');
+    if (elTot) elTot.textContent = sumTotal;
+    if (elAv) elAv.textContent = sumAvail;
+    if (elOc) elOc.textContent = sumOcc;
+    if (elMn) elMn.textContent = sumMaint;
+
+    var exportLink = document.getElementById('kv-parking-export-link');
+    if (exportLink) {
+      var eu = new URL(exportLink.href, window.location.origin);
+      eu.searchParams.set('gate', gateVal || 'all');
+      eu.searchParams.set('area', areaVal || 'all');
+      eu.searchParams.set('status', statusVal || 'all');
+      if (q) eu.searchParams.set('q', q);
+      else eu.searchParams.delete('q');
+      exportLink.href = eu.pathname + eu.search;
+    }
 
     var pageSize = pageSizeSel ? Number(pageSizeSel.value) || 15 : 15;
     var totalMatched = matchedRows.length;
@@ -809,7 +921,8 @@
     // Filter Grid View Sections
     document.querySelectorAll('.parking-section').forEach(function (section) {
       var areaMatch = (areaVal === 'all' || section.dataset.area === areaVal);
-      if (!areaMatch) {
+      var gateMatch = (!gateAreaIds || gateAreaIds.indexOf(section.dataset.area) !== -1);
+      if (!areaMatch || !gateMatch) {
         section.hidden = true;
         return;
       }
@@ -877,6 +990,21 @@
   });
   {% endif %}
 
+  document.querySelectorAll('input[name="kv_gate_filter"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      if (serverScopedGate && r.value !== serverScopedGate) {
+        var swForm = document.getElementById('kv-sidebar-gate-switch');
+        var swInp = document.getElementById('kv-sidebar-gate-id');
+        if (swForm && swInp) {
+          swInp.value = r.dataset.gateId || '0';
+          swForm.submit();
+          return;
+        }
+      }
+      currentPage = 1;
+      applyParkingFilters();
+    });
+  });
   document.querySelectorAll('input[name="kv_area_filter"], input[name="kv_status_filter"], input[name="kv_occ_filter"]').forEach(function (r) {
     r.addEventListener('change', function () { currentPage = 1; applyParkingFilters(); });
   });
@@ -888,13 +1016,60 @@
     resetBtn.addEventListener('click', function () {
       if (searchInput) searchInput.value = '';
       var a = document.querySelector('input[name="kv_area_filter"][value="all"]');
+      var g = document.querySelector('input[name="kv_gate_filter"][value="all"]');
       var s = document.querySelector('input[name="kv_status_filter"][value="active"]');
       if (a) a.checked = true;
+      if (g) g.checked = true;
       if (s) s.checked = true;
       currentPage = 1;
       applyParkingFilters();
     });
   }
+  var importBtn = document.getElementById('kv-open-import-btn');
+  var importDlg = document.getElementById('parking-import-dialog');
+  var importForm = document.getElementById('parking-import-form');
+  var importFile = document.getElementById('parking-import-file');
+  var importPick = document.getElementById('parking-import-pick');
+  var importDrop = document.getElementById('parking-import-dropzone');
+  if (importBtn && importDlg) {
+    importBtn.addEventListener('click', function () {
+      if (importFile) importFile.value = '';
+      if (typeof importDlg.showModal === 'function') importDlg.showModal();
+      else importDlg.setAttribute('open', '');
+    });
+  }
+  if (importPick && importFile) {
+    importPick.addEventListener('click', function (e) { e.stopPropagation(); importFile.click(); });
+  }
+  if (importDrop && importFile) {
+    importDrop.addEventListener('click', function (e) {
+      if (e.target.tagName !== 'A' && e.target !== importPick) importFile.click();
+    });
+    importDrop.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      importDrop.style.borderColor = '#0070f4';
+      importDrop.style.background = '#eff6ff';
+    });
+    importDrop.addEventListener('dragleave', function () {
+      importDrop.style.borderColor = '#cbd5e1';
+      importDrop.style.background = '#fafbfc';
+    });
+    importDrop.addEventListener('drop', function (e) {
+      e.preventDefault();
+      importDrop.style.borderColor = '#cbd5e1';
+      importDrop.style.background = '#fafbfc';
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length && importForm) {
+        importFile.files = e.dataTransfer.files;
+        importForm.submit();
+      }
+    });
+  }
+  if (importFile && importForm) {
+    importFile.addEventListener('change', function () {
+      if (importFile.files && importFile.files.length) importForm.submit();
+    });
+  }
+
   if (openAddSlotTopBtn && slotAddDlg) {
     openAddSlotTopBtn.addEventListener('click', function () {
       if (slotAddNameInput) slotAddNameInput.value = '';

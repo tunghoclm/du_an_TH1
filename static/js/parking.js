@@ -28,6 +28,31 @@
     }
     $('area-name')?.addEventListener('input', previewSlots);
     $('area-slot-count')?.addEventListener('input', previewSlots);
+    function syncAreaWheelGroup(keepSpecific) {
+        const wgSel = $('area-wheel-group');
+        const specWrap = $('area-specific-type-field');
+        const specSel = $('area-type');
+        if (!wgSel || !specWrap || !specSel) return;
+        const wg = wgSel.value || 'all';
+        if (wg === 'all') {
+            specWrap.hidden = true;
+            specSel.value = '';
+            return;
+        }
+        specWrap.hidden = false;
+        const firstOpt = specSel.options[0];
+        if (firstOpt) firstOpt.textContent = wg === '2w' ? 'Tất cả xe 2 bánh' : 'Tất cả xe 4 bánh';
+        Array.from(specSel.options).forEach(opt => {
+            if (!opt.value) return;
+            const match = (opt.dataset.wheelGroup || '2w') === wg;
+            opt.hidden = !match;
+            opt.disabled = !match;
+        });
+        const cur = specSel.options[specSel.selectedIndex];
+        if (!keepSpecific || (cur && cur.hidden)) specSel.value = '';
+    }
+    $('area-wheel-group')?.addEventListener('change', () => syncAreaWheelGroup(false));
+
     let editingAreaMeta = null;
     document.querySelectorAll('[data-edit-area]').forEach(button => {
         button.addEventListener('click', () => {
@@ -36,7 +61,25 @@
             $('area-title').textContent = editing ? 'Sửa khu vực' : 'Thêm khu vực';
             $('area-id').value = button.dataset.id;
             $('area-name').value = button.dataset.name;
-            $('area-type').value = button.dataset.type || 'all';
+            const rawType = button.dataset.type || 'all';
+            const wgSel = $('area-wheel-group');
+            const specSel = $('area-type');
+            if (wgSel && specSel) {
+                if (rawType === 'all') {
+                    wgSel.value = 'all';
+                    syncAreaWheelGroup(false);
+                } else if (rawType.startsWith('wg:')) {
+                    wgSel.value = rawType.slice(3);
+                    syncAreaWheelGroup(false);
+                } else {
+                    const matched = Array.from(specSel.options).find(o => o.value === rawType);
+                    wgSel.value = matched ? (matched.dataset.wheelGroup || '2w') : 'all';
+                    syncAreaWheelGroup(true);
+                    specSel.value = matched ? rawType : '';
+                }
+            } else if (specSel) {
+                specSel.value = rawType;
+            }
             if ($('area-note')) $('area-note').value = button.dataset.note || '';
             if ($('area-modal-delete-btn')) {
                 const delBtn = $('area-modal-delete-btn');

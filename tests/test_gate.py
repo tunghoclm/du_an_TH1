@@ -808,7 +808,8 @@ class GateTests(unittest.TestCase):
         self.assertIn('id="kv-dash-gate-filter"', dash_page.text)
         self.assertIn('id="kv-dash-gate-reset"', dash_page.text)
         self.assertIn('Đặt lại', dash_page.text)
-        self.assertIn('data-gate-option="Tất cả các cổng"', dash_page.text)
+        self.assertIn('data-gate-option="Cổng chính"', dash_page.text)
+        self.assertNotIn('data-gate-option="Tất cả các cổng"', dash_page.text)
         self.assertIn('data-gate-option="Cổng Đông"', dash_page.text)
 
         api_east = self.client.get('/api/dashboard?gates=Cổng Đông&range=today')
@@ -816,7 +817,7 @@ class GateTests(unittest.TestCase):
         self.assertEqual(api_east.json['stats']['period_parking_revenue'], 20000)
         self.assertEqual(len(api_east.json['recent_records']), 1)
 
-        api_central = self.client.get('/api/dashboard?gates=Tất cả các cổng&range=today')
+        api_central = self.client.get('/api/dashboard?gates=Cổng chính&range=today')
         self.assertEqual(api_central.status_code, 200)
         self.assertEqual(api_central.json['stats']['period_parking_revenue'], 10000)
 
@@ -867,10 +868,10 @@ class GateTests(unittest.TestCase):
         self.assertIn('<h2>Khu C</h2>', upd_norm)
         self.assertNotIn('<h2>Khu A</h2>', upd_norm)
 
-        # Export CSV
+        # Export Excel (.xlsx)
         exp = self.client.get('/parking/export')
         self.assertEqual(exp.status_code, 200)
-        self.assertIn('text/csv', exp.content_type)
+        self.assertIn('spreadsheetml', exp.content_type)
 
         # Creating a new area while Cổng Tây is active attaches it to Cổng Tây automatically
         self.client.post('/gate/select', data={'gate_id': str(west['id'])})

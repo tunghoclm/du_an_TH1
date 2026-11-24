@@ -18,15 +18,25 @@
 
   <div class="topbar-navigation">
   <nav class="primary-nav" id="primary-navigation" aria-label="Điều hướng chính">
-    {{ nav_link('index', 'Tổng quan', active_page == 'dashboard') }}
-    {{ nav_link('parking', 'Bãi đỗ', active_page == 'parking', 'Sơ đồ & Quản lý xe') }}
-    {{ nav_link('pricing', 'Bảng giá', active_page == 'pricing') }}
-    {{ nav_link('history', 'Lịch sử', active_page == 'history') }}
-    {{ nav_link('invoices', 'Hóa đơn', _invoices_active, 'Hóa đơn thu phí gửi xe') }}
-    {% if _is_staff %}
+    {% if not _is_staff or has_perm('dashboard.view') %}
+      {{ nav_link('index', 'Tổng quan', active_page == 'dashboard') }}
+    {% endif %}
+    {% if not _is_staff or has_perm('parking.view') %}
+      {{ nav_link('parking', 'Bãi đỗ', active_page == 'parking', 'Sơ đồ & Quản lý xe') }}
+    {% endif %}
+    {% if not _is_staff or has_perm('pricing.view') %}
+      {{ nav_link('pricing', 'Bảng giá', active_page == 'pricing') }}
+    {% endif %}
+    {% if not _is_staff or has_perm('history.view') %}
+      {{ nav_link('history', 'Lịch sử', active_page == 'history') }}
+    {% endif %}
+    {% if not _is_staff or has_perm('invoices.view') %}
+      {{ nav_link('invoices', 'Hóa đơn', _invoices_active, 'Hóa đơn thu phí gửi xe') }}
+    {% endif %}
+    {% if _is_staff and has_perm('customers.view') %}
       {{ nav_link('customers', 'Khách hàng', active_page == 'customers') }}
     {% endif %}
-    {% if _is_admin %}
+    {% if _is_staff and (has_perm('staff.view') or has_perm('payroll.view')) %}
       <div class="dropdown-wrap topbar-employee-dropdown" data-header-dropdown data-hover-dropdown>
         <button type="button"
                 class="topbar-link{% if active_page in ('accounts', 'employee_schedule', 'employee_timesheet', 'employee_payroll', 'employee_settings') %} active{% endif %}"
@@ -36,15 +46,21 @@
           Nhân viên
         </button>
         <div class="popover topbar-popover employee-menu-popover" id="employee-menu-popover" hidden>
-          <a href="{{ url_for('accounts') }}" class="{% if active_page == 'accounts' %}active{% endif %}">Danh sách nhân viên</a>
-          <a href="{{ url_for('employee_schedule') }}" class="{% if active_page == 'employee_schedule' %}active{% endif %}">Lịch làm việc</a>
-          <a href="{{ url_for('employee_timesheet') }}" class="{% if active_page == 'employee_timesheet' %}active{% endif %}">Bảng chấm công</a>
-          <a href="{{ url_for('employee_payroll') }}" class="{% if active_page == 'employee_payroll' %}active{% endif %}">Bảng lương</a>
-          <a href="{{ url_for('employee_settings') }}" class="{% if active_page == 'employee_settings' %}active{% endif %}">Thiết lập nhân viên</a>
+          {% if has_perm('staff.view') %}
+            <a href="{{ url_for('accounts') }}" class="{% if active_page == 'accounts' %}active{% endif %}">Danh sách nhân viên</a>
+          {% endif %}
+          {% if has_perm('payroll.view') %}
+            <a href="{{ url_for('employee_schedule') }}" class="{% if active_page == 'employee_schedule' %}active{% endif %}">Lịch làm việc</a>
+            <a href="{{ url_for('employee_timesheet') }}" class="{% if active_page == 'employee_timesheet' %}active{% endif %}">Bảng chấm công</a>
+            <a href="{{ url_for('employee_payroll') }}" class="{% if active_page == 'employee_payroll' %}active{% endif %}">Bảng lương</a>
+          {% endif %}
+          {% if _is_admin %}
+            <a href="{{ url_for('employee_settings') }}" class="{% if active_page == 'employee_settings' %}active{% endif %}">Thiết lập nhân viên</a>
+          {% endif %}
         </div>
       </div>
     {% endif %}
-    {% if _is_staff %}
+    {% if _is_staff and has_perm('reports.view') %}
       <a href="{{ url_for('statistics') }}" class="topbar-link topbar-report{% if active_page == 'statistics' %} active{% endif %}"{% if active_page == 'statistics' %} aria-current="page"{% endif %}>Báo cáo</a>
     {% endif %}
     <div class="dropdown-wrap topbar-more" data-header-dropdown hidden>
@@ -76,6 +92,7 @@
         </div>
       </div>
       <div class="gate-popover-list" id="gate-popover-list">
+        {% if allow_all_gates %}
         <form method="post" action="{{ url_for('select_active_gate') }}" class="gate-popover-item-form" data-gate-name="tất cả các cổng">
           <input type="hidden" name="gate_id" value="0">
           <button type="submit" class="gate-popover-item{% if not selected_gate %} active{% endif %}">
@@ -88,6 +105,8 @@
             {% endif %}
           </button>
         </form>
+        {% endif %}
+        {% if allow_main_gate %}
         <form method="post" action="{{ url_for('select_active_gate') }}" class="gate-popover-item-form" data-gate-name="cổng chính">
           <input type="hidden" name="gate_id" value="-1">
           <button type="submit" class="gate-popover-item{% if selected_gate and selected_gate.id == -1 %} active{% endif %}">
@@ -100,6 +119,7 @@
             {% endif %}
           </button>
         </form>
+        {% endif %}
         {% for g in active_gates %}
         <form method="post" action="{{ url_for('select_active_gate') }}" class="gate-popover-item-form" data-gate-name="{{ g.name|lower }}">
           <input type="hidden" name="gate_id" value="{{ g.id }}">

@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 from xml.sax.saxutils import escape
 
 from config import FONTS_DIR
+import parking_permissions
 
 try:
     from openpyxl import Workbook
@@ -144,6 +145,9 @@ def enrich_employee(row):
     item['worked_minutes'] = 0
     item['worked_hours'] = 0.0
     item['worked_hours_label'] = '0h 00p'
+    item['permissions'] = parking_permissions.parse_permissions(
+        item.get('permissions_json'), item.get('role') or 'manager', item['work_branches_list']
+    )
     _recalculate_payroll(item)
     return item
 
@@ -363,6 +367,9 @@ def employee_context(staff_rows, args, active_gates=None):
         query.update(overrides)
         return urlencode({key: value for key, value in query.items() if value != ''})
 
+    for emp in paged:
+        emp['perm_summary'] = parking_permissions.summarize_permissions(emp['permissions'], gate_choices)
+
     return {
         'employees': paged,
         'filtered_employees': filtered,
@@ -375,6 +382,9 @@ def employee_context(staff_rows, args, active_gates=None):
         'selected_work_branches': selected_work_branches,
         'salary_types': SALARY_TYPES,
         'salary_templates': SALARY_TEMPLATES,
+        'perm_groups': parking_permissions.PERMISSION_GROUPS,
+        'perm_presets': parking_permissions.ROLE_PRESETS,
+        'other_perms': parking_permissions.OTHER_PERMISSIONS,
         'filters': filters,
         'query_string': query_string,
         'page': page,

@@ -117,13 +117,7 @@
   var vehicleRows = document.getElementById('vehicle-rows');
   function syncVehicleRow(row) {
     var hasPlate = Boolean(row.querySelector('[name="plate"]').value.trim());
-    var monthly = row.querySelector('[name="ticket_type"]').value === 'month';
-    var months = row.querySelector('[name="months"]');
-    row.classList.toggle('is-monthly', monthly);
-    row.querySelector('[data-customer-months]').hidden = !monthly;
-    // Keep one months value per row, including turn tickets, for the server's paired lists.
-    months.type = monthly ? 'number' : 'hidden';
-    months.required = monthly && hasPlate;
+    row.querySelector('[name="months"]').required = hasPlate;
     row.querySelector('[name="vehicle_type_id"]').required = hasPlate;
   }
   function numberVehicleRows() {
@@ -145,7 +139,6 @@
       } else {
         row.querySelector('[name="plate"]').value = '';
         row.querySelector('[name="vehicle_type_id"]').value = '';
-        row.querySelector('[name="ticket_type"]').value = 'turn';
         row.querySelector('[name="months"]').value = '1';
         syncVehicleRow(row);
       }
@@ -159,7 +152,6 @@
     var row = vehicleRows.firstElementChild.cloneNode(true);
     row.querySelector('[name="plate"]').value = '';
     row.querySelector('[name="vehicle_type_id"]').value = '';
-    row.querySelector('[name="ticket_type"]').value = 'turn';
     row.querySelector('[name="months"]').value = '1';
     vehicleRows.appendChild(row);
     bindVehicleRow(row);
@@ -172,7 +164,101 @@
       if (section) section.open = true;
     }, true);
   });
-  document.getElementById('open-add-customer').addEventListener('click', function () { addDialog.showModal(); });
+  var pageEl = document.querySelector('.customer-page');
+  var priceInfo = {};
+  var vietqrCfg = {};
+  try { priceInfo = JSON.parse(pageEl.dataset.priceInfo || '{}'); } catch (e) { priceInfo = {}; }
+  try { vietqrCfg = JSON.parse(pageEl.dataset.vietqr || '{}'); } catch (e) { vietqrCfg = {}; }
+  function formatVnd(n) {
+    return (Number(n) || 0).toLocaleString('vi-VN') + ' đ';
+  }
+  function setupPaymentBox(dialog, rowWrapSelector, rowSelector) {
+    if (!dialog) return function () {};
+    var box = dialog.querySelector('[data-payment-box]');
+    var rowsWrap = dialog.querySelector(rowWrapSelector);
+    if (!box || !rowsWrap) return function () {};
+    var totalEl = box.querySelector('[data-payment-total]');
+    var noteEl = box.querySelector('[data-payment-note]');
+    var qrWrap = box.querySelector('[data-payment-qr]');
+    var qrImg = box.querySelector('[data-payment-qr-img]');
+    var qrAmt = box.querySelector('[data-payment-qr-amount]');
+    var qrMemo = box.querySelector('[data-payment-qr-memo]');
+
+    function sync() {
+      var rows = Array.from(rowsWrap.querySelectorAll(rowSelector));
+      var activeCount = 0;
+      var total = 0;
+      var missingTypes = [];
+      var plates = [];
+      rows.forEach(function (row) {
+        var plateInp = row.querySelector('[name="plate"]');
+        var typeSel = row.querySelector('[name="vehicle_type_id"]');
+        var monthsInp = row.querySelector('[name="months"]');
+        var plate = plateInp ? plateInp.value.trim() : '';
+        var typeId = typeSel ? typeSel.value : '';
+        if (!plate && !typeId) return;
+        activeCount += 1;
+        if (plate) plates.push(plate);
+        var months = Math.max(1, parseInt(monthsInp ? monthsInp.value : '1', 10) || 1);
+        var info = typeId ? priceInfo[typeId] : null;
+        if (typeId && (!info || info.month === null || info.month === undefined)) {
+          var optText = typeSel.options[typeSel.selectedIndex] ? typeSel.options[typeSel.selectedIndex].text : 'Loại xe';
+          if (!missingTypes.includes(optText)) missingTypes.push(optText);
+        } else if (info && info.month !== null && info.month !== undefined) {
+          total += Number(info.month) * months;
+        }
+      });
+
+      totalEl.textContent = formatVnd(total);
+      if (activeCount === 0) {
+        noteEl.textContent = 'Chọn loại xe và số tháng thuê để tính tiền vé tháng.';
+        noteEl.classList.remove('is-warn');
+      } else if (missingTypes.length) {
+        noteEl.textContent = 'Chưa có giá vé tháng cho: ' + missingTypes.join(', ') + '. Vui lòng cài đặt ở trang Giá xe.';
+        noteEl.classList.add('is-warn');
+      } else if (total > 0) {
+        noteEl.textContent = 'Tính cho ' + activeCount + ' phương tiện đăng ký vé tháng.';
+        noteEl.classList.remove('is-warn');
+      } else {
+        noteEl.textContent = 'Chọn loại xe để tính số tiền cần thanh toán.';
+        noteEl.classList.remove('is-warn');
+      }
+
+      var checked = box.querySelector('input[name="payment_method"]:checked');
+      var method = checked ? checked.value : 'cash';
+      var showQr = method === 'transfer' && total > 0 && vietqrCfg.bin && vietqrCfg.account;
+      qrWrap.hidden = !showQr;
+      if (method === 'transfer' && total === 0) {
+        noteEl.textContent = 'Chọn loại xe có giá tháng (> 0 đ) để tạo mã VietQR.';
+        noteEl.classList.remove('is-warn');
+      }
+      if (showQr) {
+        var codeInp = dialog.querySelector('[data-profile-code]');
+        var custCode = (codeInp && codeInp.value.trim()) || pageEl.dataset.nextCode || 'KH';
+        var memo = ('VE-THANG-' + custCode).slice(0, 50);
+        qrAmt.textContent = formatVnd(total);
+        qrMemo.textContent = memo;
+        qrImg.src = 'https://img.vietqr.io/image/' + vietqrCfg.bin + '-' +
+          encodeURIComponent(vietqrCfg.account) + '-' + (vietqrCfg.template || 'compact2') +
+          '.png?amount=' + total + '&addInfo=' + encodeURIComponent(memo) +
+          '&accountName=' + encodeURIComponent(vietqrCfg.name || '');
+      }
+    }
+
+    rowsWrap.addEventListener('input', sync);
+    rowsWrap.addEventListener('change', sync);
+    rowsWrap.addEventListener('click', function () { setTimeout(sync, 0); });
+    box.addEventListener('change', sync);
+    var addBtn = dialog.querySelector('#add-vehicle-row, #add-edit-vehicle-row');
+    if (addBtn) addBtn.addEventListener('click', function () { setTimeout(sync, 0); });
+    sync();
+    return sync;
+  }
+
+  var syncAddPayment = setupPaymentBox(addDialog, '#vehicle-rows', '[data-vehicle-row]');
+  var syncEditPayment = setupPaymentBox(editDialog, '#edit-vehicle-rows', '[data-edit-vrow]');
+
+  document.getElementById('open-add-customer').addEventListener('click', function () { addDialog.showModal(); syncAddPayment(); });
   document.querySelectorAll('[data-close-dialog]').forEach(function (button) { button.addEventListener('click', function () { button.closest('dialog').close(); }); });
   function updateAvatar(dialog) {
     var words = dialog.querySelector('[data-customer-name]').value.trim().split(/\s+/).filter(Boolean);
@@ -188,6 +274,7 @@
       editForm.querySelector('[data-profile-username]').value = button.dataset.username;
       editDialog.querySelectorAll('[role="alert"]').forEach(function (alert) { alert.hidden = true; });
       updateAvatar(editDialog);
+      syncEditPayment();
       editDialog.showModal();
     });
   });

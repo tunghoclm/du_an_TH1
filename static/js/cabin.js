@@ -903,9 +903,10 @@
                 const plateEl = $('plate');
                 if (plateEl) { plateEl.focus(); plateEl.select?.(); }
             } else {
-                const exitBtn = $('cabin-exit-action');
-                if (exitBtn && !exitBtn.disabled) {
-                    exitBtn.click();
+                const primaryBtn = $('cabin-primary-action');
+                const activeSlot = document.querySelector('[data-cabin-slot][aria-pressed="true"]');
+                if (primaryBtn && !primaryBtn.disabled && activeSlot?.dataset.status === 'occupied') {
+                    primaryBtn.click();
                 } else {
                     const exitTab = document.querySelector('.cabin-tab.exit');
                     location.assign(exitTab?.href || '/exit');
@@ -1088,18 +1089,24 @@
         details.forEach(item => { item.hidden = !slot || item.dataset.cabinDetail !== slot.dataset.cabinSlot; });
         const emptyEl = $('cabin-ticket-empty');
         if (emptyEl) emptyEl.hidden = !!slot;
+        const footerEl = $('cabin-ticket-footer');
+        if (footerEl) footerEl.hidden = !slot;
         const occupied = slot?.dataset.status === 'occupied';
         const available = slot?.dataset.status === 'available';
-        if (exit) exit.disabled = !occupied;
+        if (exit) exit.disabled = !slot;
         if (primary) primary.disabled = !(occupied || available);
         const primaryLabel = $('cabin-primary-label');
-        if (primaryLabel) primaryLabel.textContent = available ? 'Xe vào' : 'Thanh toán';
+        if (primaryLabel) primaryLabel.textContent = available ? 'Nhận xe vào ô này' : 'Xử lý xe ra & Thu phí';
         const totalLabel = $('cabin-total-label');
-        if (totalLabel) totalLabel.textContent = 'Tổng tiền';
+        if (totalLabel) totalLabel.textContent = occupied ? 'Phí tạm tính' : (available ? 'Trạng thái' : 'Bảo trì');
         if (totalCount) totalCount.textContent = occupied ? '1' : '0';
         if (tabLabel) tabLabel.textContent = slot ? slot.dataset.cabinSlot : '1-5';
         const totalEl = $('cabin-total');
-        if (totalEl) totalEl.textContent = occupied ? Number(slot.dataset.fee || 0).toLocaleString('vi-VN') : '0';
+        if (totalEl) {
+            totalEl.textContent = occupied
+                ? (Number(slot.dataset.fee || 0).toLocaleString('vi-VN') + ' đ')
+                : (available ? 'Ô trống' : 'Ngừng nhận xe');
+        }
     }
     function filterLanesRows(query) {
         const q = normalize((query || '').trim());
@@ -1169,7 +1176,19 @@
         if (target) location.assign(target);
     }
     primary?.addEventListener('click', () => continueTransaction(false));
-    exit?.addEventListener('click', () => continueTransaction(true));
+    document.querySelectorAll('[data-cabin-deselect]').forEach(btn => {
+        btn.addEventListener('click', () => selectSlot(null));
+    });
+    document.querySelectorAll('[data-pick-slot-btn]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = slots.find(s => s.dataset.cabinSlot === btn.dataset.pickSlotBtn);
+            if (!target) return;
+            target.hidden = false;
+            setGridVisible(true);
+            selectSlot(target);
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+    });
     $('cabin-note-btn')?.addEventListener('click', () => continueTransaction(false));
     function isIpCameraSource(val) {
         if (!val) return false;

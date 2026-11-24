@@ -29,9 +29,16 @@ class CustomerDirectoryTests(unittest.TestCase):
         return self.module.parking_customers.customer_context(args)
 
     def csv_rows(self, url='/customers/export'):
+        from io import BytesIO
+        import openpyxl
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        return list(csv.reader(StringIO(response.data.decode('utf-8-sig'))))
+        self.assertIn('spreadsheetml', response.content_type)
+        wb = openpyxl.load_workbook(BytesIO(response.data), data_only=True)
+        ws = wb.active
+        rows = [[cell if cell is not None else '' for cell in row] for row in ws.iter_rows(values_only=True)]
+        wb.close()
+        return rows
 
     def test_totals_combine_recorded_exit_fees_and_month_payments_once(self):
         user_id = self.customer()

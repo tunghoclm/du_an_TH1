@@ -15,23 +15,33 @@
   <div class="cabin-shell">
     <header class="cabin-topbar">
       <div class="cabin-topbar-left">
+        {% set _is_admin = (current_user_role == 'admin') %}
+        {% set _gate_ztype = selected_gate.zone_type if selected_gate else 'gate_inout' %}
         <nav class="cabin-tabs" aria-label="Chức năng cabin">
+          {% if _is_admin or has_perm('parking.view') or has_perm('gate.view') %}
           <a href="{{ url_for('gate') }}" class="cabin-tab parking{% if active_page == 'gate' %} active{% endif %}"{% if active_page == 'gate' %} aria-current="page"{% endif %}>
             <span class="menu-content"><span class="btn-icon-min">{{ icon('parking', 16) }}</span><span class="tab-title">BÃI ĐỖ</span></span>
             <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
           </a>
+          {% endif %}
+          {% if (_is_admin or has_perm('gate.exit')) and _gate_ztype != 'gate_in' %}
           <a href="{{ url_for('exit_gate') }}" class="cabin-tab exit{% if active_page == 'exit' %} active{% endif %}"{% if active_page == 'exit' %} aria-current="page"{% endif %}>
             <span class="menu-content"><span class="btn-icon-min">{{ icon('exit', 16) }}</span><span class="tab-title">Xe ra</span></span>
             <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
           </a>
+          {% endif %}
+          {% if (_is_admin or has_perm('gate.entry')) and _gate_ztype != 'gate_out' %}
           <a href="{{ url_for('entry') }}" class="cabin-tab entry{% if active_page == 'entry' %} active{% endif %}"{% if active_page == 'entry' %} aria-current="page"{% endif %}>
             <span class="menu-content"><span class="btn-icon-min">{{ icon('entry', 16) }}</span><span class="tab-title">Xe vào</span></span>
             <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
           </a>
+          {% endif %}
+          {% if (_is_admin or has_perm('gate.view')) and _gate_ztype == 'gate_inout' %}
           <a href="{{ url_for('gate_lanes') }}" class="cabin-tab lanes{% if active_page == 'lanes' %} active{% endif %}"{% if active_page == 'lanes' %} aria-current="page"{% endif %}>
             <span class="menu-content"><span class="btn-icon-min">{{ icon('lanes', 16) }}</span><span class="tab-title">2 làn</span></span>
             <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
           </a>
+          {% endif %}
         </nav>
         <form action="{{ url_for('gate') }}" method="get" class="cabin-search" role="search">
           {{ icon('search', 16) }}
@@ -39,20 +49,22 @@
         </form>
       </div>
       <div class="cabin-topbar-right">
-        <div class="cabin-ticket-tabs">
-          <div class="cabin-ticket-tab active">
-            <span class="menu-content">
-              <span class="name-tab" id="cabin-ticket-tab-label">{{ 'Xe vào' if active_page == 'entry' else ('Xe ra' if active_page == 'exit' else ('Lịch sử' if active_page == 'lanes' else '1-5')) }}</span>
-              <a href="{{ url_for('gate') }}" class="close-tab" aria-label="Đóng phiếu xe">{{ icon('close', 10) }}</a>
-            </span>
-            <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-active') }}</span>
-          </div>
-          <a href="{{ url_for('entry') }}" class="cabin-new-ticket" aria-label="Tạo phiếu xe mới" title="Tạo phiếu xe mới">{{ icon('plus', 18) }}</a>
+        <div class="cabin-status-strip" aria-label="Trạng thái cabin">
+          <span class="cabin-gate-badge" title="Cổng đang vận hành">
+            <span class="cabin-live-dot" aria-hidden="true"></span>
+            <span>{{ selected_gate.name if selected_gate else 'Toàn bãi xe' }}</span>
+          </span>
+          {% if counts is defined and counts %}
+          <span class="cabin-cap-pill" title="Số chỗ trống hiện tại">
+            Trống <strong>{{ counts.available }}</strong>/{{ counts.total }}
+          </span>
+          {% endif %}
+          {% if open_shift %}
+          <span class="cabin-shift-pill" title="Ca trực đang mở">Đang trực ca</span>
+          {% endif %}
         </div>
         <div class="cabin-tools">
-          <button type="button" class="cabin-tool" aria-label="Thông báo" title="Thông báo">{{ icon('bell-solid', 15) }}</button>
-          <span class="cabin-tool-sep" aria-hidden="true"></span>
-          <button type="button" id="cabin-refresh" class="cabin-tool" aria-label="Làm mới cabin" title="Làm mới dữ liệu">{{ icon('refresh', 15) }}</button>
+          <button type="button" id="cabin-refresh" class="cabin-tool" aria-label="Làm mới cabin" title="Làm mới dữ liệu (F5)">{{ icon('refresh', 15) }}</button>
           <span class="cabin-tool-sep" aria-hidden="true"></span>
           <div class="cabin-menu-wrap">
             <button type="button" id="cabin-menu-toggle" class="cabin-user-pill" aria-label="Menu cabin" title="{{ current_user_fullname or session.get('username') or 'Tài khoản' }}" aria-controls="cabin-menu" aria-expanded="false">
@@ -65,70 +77,82 @@
                   <span class="cabin-drawer-avatar" aria-hidden="true">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#D9EAFF"/><circle cx="12" cy="9.5" r="3.5" fill="#4A90E2"/><path d="M6 19.5c1.3-2.6 3.5-4 6-4s4.7 1.4 6 4" fill="#4A90E2"/></svg>
                   </span>
-                  <span class="cabin-drawer-username">{{ current_user_fullname or session.get('username') or 'Tài khoản' }}</span>
+                  <div class="cabin-drawer-user-meta">
+                    <span class="cabin-drawer-username">{{ current_user_fullname or session.get('username') or 'Tài khoản' }}</span>
+                    <span class="cabin-drawer-role">{{ role_label }}{% if selected_gate %} · {{ selected_gate.name }}{% endif %}</span>
+                  </div>
                 </div>
                 <button type="button" id="cabin-menu-close" class="cabin-drawer-close" aria-label="Đóng menu">×</button>
               </div>
 
               <div class="cabin-drawer-content">
-                <!-- Nhóm 1: Chuyển chế độ nhanh (2 cột giống KiotViet POS) -->
+                {% set _is_admin = (current_user_role == 'admin') %}
+                <!-- Nhóm 1: Chế độ vận hành Cabin -->
                 <div class="cabin-drawer-section is-grid">
-                  <a href="{{ url_for('index') }}" target="_blank" rel="noopener" class="cabin-drawer-grid-item">
-                    <span class="cabin-drawer-badge">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-                    </span>
-                    <span>Trang quản lý</span>
-                  </a>
-                  <a href="{{ url_for('parking') }}" target="_blank" rel="noopener" class="cabin-drawer-grid-item">
-                    <span class="cabin-drawer-badge">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
-                    </span>
-                    <span>Quản lý khu và ô đỗ</span>
-                  </a>
-                  <a href="{{ url_for('gate_lanes') }}" class="cabin-drawer-grid-item">
-                    <span class="cabin-drawer-badge">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"/><path d="M12 4v16"/></svg>
-                    </span>
-                    <span>Cabin 2 làn</span>
-                  </a>
+                  {% if _is_admin or has_perm('gate.view') or has_perm('parking.view') %}
                   <a href="{{ url_for('parking_monitor') }}" target="_blank" rel="noopener" class="cabin-drawer-grid-item">
                     <span class="cabin-drawer-badge">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
                     </span>
                     <span>Màn hình phụ</span>
                   </a>
+                  {% endif %}
+                  {% if _is_admin or has_perm('dashboard.view') %}
+                  <a href="{{ url_for('index') }}" target="_blank" rel="noopener" class="cabin-drawer-grid-item">
+                    <span class="cabin-drawer-badge">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                    </span>
+                    <span>Trang quản lý</span>
+                  </a>
+                  {% endif %}
+                  {% if _is_admin or has_perm('parking.edit') or has_perm('parking.create') %}
+                  <a href="{{ url_for('parking') }}" target="_blank" rel="noopener" class="cabin-drawer-grid-item">
+                    <span class="cabin-drawer-badge">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+                    </span>
+                    <span>Quản lý khu &amp; ô đỗ</span>
+                  </a>
+                  {% endif %}
                 </div>
 
-                <!-- Nhóm 2: Báo cáo -->
+                <!-- Nhóm 2: Nghiệp vụ ca trực & tra cứu -->
                 <div class="cabin-drawer-section">
                   <button type="button" id="open-cabin-eod-report" class="cabin-menu-item">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
                     <span>Báo cáo cuối ngày</span>
                   </button>
-                </div>
-
-                <!-- Nhóm 3: Nghiệp vụ tra cứu & hóa đơn -->
-                <div class="cabin-drawer-section">
+                  {% if _is_admin or has_perm('history.view') %}
+                  <a href="{{ url_for('history') }}" target="_blank" rel="noopener" class="cabin-menu-item">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+                    <span>Lịch sử vào / ra</span>
+                  </a>
+                  {% endif %}
+                  {% if _is_admin or has_perm('invoices.view') %}
                   <a href="{{ url_for('invoices') }}" target="_blank" rel="noopener" class="cabin-menu-item">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg>
                     <span>Hóa đơn thu phí</span>
                   </a>
+                  {% endif %}
+                  {% if _is_admin or has_perm('customers.view') %}
                   <a href="{{ url_for('customers') }}" target="_blank" rel="noopener" class="cabin-menu-item">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                    <span>Xem danh sách vé tháng</span>
+                    <span>Khách hàng &amp; vé tháng</span>
                   </a>
+                  {% endif %}
                 </div>
 
-                <!-- Nhóm 4: Cài đặt & Phím tắt -->
+                <!-- Nhóm 3: Cài đặt cabin & Phím tắt -->
                 <div class="cabin-drawer-section">
                   <button type="button" id="open-cabin-settings" class="cabin-menu-item">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                    <span>Cài đặt chung</span>
+                    <span>Cài đặt cabin</span>
                   </button>
+                  {% if _is_admin or has_perm('pricing.view') or has_perm('pricing.edit') %}
                   <a href="{{ url_for('pricing') }}" target="_blank" rel="noopener" class="cabin-menu-item">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
                     <span>Thiết lập giá</span>
                   </a>
+                  {% endif %}
                   <button type="button" id="cabin-fullscreen" class="cabin-menu-item" aria-pressed="false">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
                     <span>Toàn màn hình</span>
@@ -150,7 +174,7 @@
                   </div>
                 </div>
 
-                <!-- Nhóm 5: Tài khoản -->
+                <!-- Nhóm 4: Tài khoản -->
                 <div class="cabin-drawer-section is-last">
                   <a href="{{ url_for('settings') }}#password" target="_blank" rel="noopener" class="cabin-menu-item">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>

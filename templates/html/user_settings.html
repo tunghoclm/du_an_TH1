@@ -137,7 +137,8 @@
     </div>
   </div>
 
-  <form method="POST" action="{{ url_for('me_add_vehicle') }}" class="form-grid" style="grid-template-columns:1.2fr 1fr 1fr 1fr auto;align-items:end;">
+  <form method="POST" action="{{ url_for('me_add_vehicle') }}" id="me-add-vehicle-form" class="form-grid" style="grid-template-columns:1.2fr 1fr 1fr auto;align-items:end;" data-customer-code="KH{{ '%06d'|format(me.id) }}" data-price-info='{{ price_info|tojson }}' data-vietqr='{{ {"bin": vietqr_bank_bin, "bankName": vietqr_bank_name, "account": vietqr_account_number, "name": vietqr_account_name, "template": vietqr_template}|tojson }}'>
+    <input type="hidden" name="ticket_type" value="month">
     <div class="form-field">
       <label>Biển số xe *</label>
       <input type="text" name="plate" value="{{ prefill.plate if prefill else '' }}" required placeholder="VD: 59A1-12345">
@@ -151,20 +152,73 @@
       </select>
     </div>
     <div class="form-field">
-      <label>Loại vé</label>
-      <select name="ticket_type">
-        {% for code, label in ticket_labels.items() %}
-          <option value="{{ code }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="form-field">
-      <label>Số tháng (nếu vé tháng)</label>
-      <input type="number" name="months" min="1" max="{{ max_months }}" value="1">
+      <label>Số tháng thuê *</label>
+      <input type="number" name="months" min="1" max="{{ max_months }}" value="1" required>
     </div>
     <div>
       <button type="submit" class="btn btn-primary">Đăng ký xe</button>
     </div>
+    <div style="grid-column:1 / -1;margin-top:8px;padding:12px 14px;border:1px solid #dbeafe;border-radius:10px;background:#f8fbff;display:grid;gap:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;">
+        <span>Tổng thanh toán vé tháng:</span>
+        <strong id="me-add-total" style="color:#0070f4;font-size:16px;">0 đ</strong>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:13px;">
+        <span style="color:#475569;">Phương thức:</span>
+        {% for code, label in payment_methods.items() %}
+          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="radio" name="payment_method" value="{{ code }}"{% if loop.first %} checked{% endif %}>
+            <span>{{ 'Chuyển khoản (VietQR)' if code == 'transfer' else label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      <div id="me-add-qr" hidden style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;">
+        <img id="me-add-qr-img" src="" alt="Mã VietQR" width="132" height="132" style="border-radius:6px;border:1px solid #e2e8f0;">
+        <div style="font-size:12px;color:#475569;display:grid;gap:2px;">
+          <b style="color:#0f172a;">{{ vietqr_bank_name }} · {{ vietqr_account_number }}</b>
+          <span>Chủ TK: {{ vietqr_account_name }}</span>
+          <span>Số tiền: <strong id="me-add-qr-amount">0 đ</strong></span>
+          <span>Nội dung: <code id="me-add-qr-memo">VE-THANG-KH{{ '%06d'|format(me.id) }}</code></span>
+        </div>
+      </div>
+    </div>
   </form>
+  <script>
+  (function () {
+    var form = document.getElementById('me-add-vehicle-form');
+    if (!form) return;
+    var prices = JSON.parse(form.dataset.priceInfo || '{}');
+    var qrCfg = JSON.parse(form.dataset.vietqr || '{}');
+    var custCode = form.dataset.customerCode || 'KH';
+    var typeSel = form.querySelector('[name="vehicle_type_id"]');
+    var monthsInp = form.querySelector('[name="months"]');
+    var totalEl = document.getElementById('me-add-total');
+    var qrWrap = document.getElementById('me-add-qr');
+    var qrImg = document.getElementById('me-add-qr-img');
+    var qrAmt = document.getElementById('me-add-qr-amount');
+    var qrMemo = document.getElementById('me-add-qr-memo');
+    function sync() {
+      var info = prices[typeSel.value];
+      var m = Math.max(1, parseInt(monthsInp.value, 10) || 1);
+      var amt = info && info.month != null ? Number(info.month) * m : 0;
+      totalEl.textContent = amt.toLocaleString('vi-VN') + ' đ';
+      var pm = form.querySelector('input[name="payment_method"]:checked');
+      var showQr = pm && pm.value === 'transfer' && amt > 0 && qrCfg.bin && qrCfg.account;
+      qrWrap.hidden = !showQr;
+      qrWrap.style.display = showQr ? 'flex' : 'none';
+      if (showQr) {
+        var memo = ('VE-THANG-' + custCode).slice(0, 50);
+        qrAmt.textContent = amt.toLocaleString('vi-VN') + ' đ';
+        if (qrMemo) qrMemo.textContent = memo;
+        qrImg.src = 'https://img.vietqr.io/image/' + qrCfg.bin + '-' + encodeURIComponent(qrCfg.account) + '-' +
+          (qrCfg.template || 'compact2') + '.png?amount=' + amt + '&addInfo=' + encodeURIComponent(memo) +
+          '&accountName=' + encodeURIComponent(qrCfg.name || '');
+      }
+    }
+    form.addEventListener('input', sync);
+    form.addEventListener('change', sync);
+    sync();
+  })();
+  </script>
 </section>
 {% endblock %}
