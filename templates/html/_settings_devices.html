@@ -1,0 +1,250 @@
+<form method="POST" action="{{ url_for('settings', section='devices') }}" id="device-settings-form">
+  <input type="hidden" name="setting_type" value="devices">
+
+  <div class="dashboard-bottom">
+    <!-- Cột trái: Camera 2 làn -->
+    <section class="panel settings-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Camera 2 làn (Vào / Ra)</h2>
+          <p>Gán thiết bị camera hoặc đường dẫn RTSP/HTTP cho từng làn xe</p>
+        </div>
+        <button type="button" class="btn btn-outline" id="scan-cameras-btn">Quét camera</button>
+      </div>
+
+      <div class="form-grid" style="grid-template-columns: 1fr; gap: 14px; padding: 18px 20px;">
+        <div id="detected-cameras-box" style="display:none; padding: 10px 12px; background: #f4f8ff; border: 1px solid #cce0ff; border-radius: 8px; font-size: 12px;">
+          <strong style="display:block; margin-bottom:6px; color:#005bb5;">Thiết bị camera phát hiện được:</strong>
+          <div id="detected-cameras-list" style="display:flex; flex-direction:column; gap:6px;"></div>
+        </div>
+
+        <div class="form-field">
+          <label for="entry_plate_camera">Camera biển số · Làn vào</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="entry_plate_camera" name="entry_plate_camera" style="flex:1;"
+                   value="{{ device_settings.entry_plate_camera }}"
+                   placeholder="Để trống (tự chọn) hoặc nhập Device ID / URL IP Webcam (VD: http://192.168.1.15:8080/video)"
+                   list="detected-camera-options">
+            <button type="button" class="btn btn-outline test-ip-cam-btn" data-target="entry_plate_camera" style="white-space:nowrap;">Kiểm tra</button>
+          </div>
+          <small class="ip-cam-test-status" data-status-for="entry_plate_camera" style="display:none;margin-top:4px;font-size:12px;"></small>
+        </div>
+
+        <div class="form-field">
+          <label for="entry_overview_camera">Camera toàn cảnh · Làn vào</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="entry_overview_camera" name="entry_overview_camera" style="flex:1;"
+                   value="{{ device_settings.entry_overview_camera }}"
+                   placeholder="Để trống (tự chọn) hoặc nhập Device ID / URL IP Webcam (VD: http://192.168.1.15:8080/video)"
+                   list="detected-camera-options">
+            <button type="button" class="btn btn-outline test-ip-cam-btn" data-target="entry_overview_camera" style="white-space:nowrap;">Kiểm tra</button>
+          </div>
+          <small class="ip-cam-test-status" data-status-for="entry_overview_camera" style="display:none;margin-top:4px;font-size:12px;"></small>
+        </div>
+
+        <div class="form-field">
+          <label for="exit_plate_camera">Camera biển số · Làn ra</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="exit_plate_camera" name="exit_plate_camera" style="flex:1;"
+                   value="{{ device_settings.exit_plate_camera }}"
+                   placeholder="Để trống (tự chọn) hoặc nhập Device ID / URL IP Webcam (VD: http://192.168.1.15:8080/video)"
+                   list="detected-camera-options">
+            <button type="button" class="btn btn-outline test-ip-cam-btn" data-target="exit_plate_camera" style="white-space:nowrap;">Kiểm tra</button>
+          </div>
+          <small class="ip-cam-test-status" data-status-for="exit_plate_camera" style="display:none;margin-top:4px;font-size:12px;"></small>
+        </div>
+
+        <div class="form-field">
+          <label for="exit_overview_camera">Camera toàn cảnh · Làn ra</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="exit_overview_camera" name="exit_overview_camera" style="flex:1;"
+                   value="{{ device_settings.exit_overview_camera }}"
+                   placeholder="Để trống (tự chọn) hoặc nhập Device ID / URL IP Webcam (VD: http://192.168.1.15:8080/video)"
+                   list="detected-camera-options">
+            <button type="button" class="btn btn-outline test-ip-cam-btn" data-target="exit_overview_camera" style="white-space:nowrap;">Kiểm tra</button>
+          </div>
+          <small class="ip-cam-test-status" data-status-for="exit_overview_camera" style="display:none;margin-top:4px;font-size:12px;"></small>
+        </div>
+
+        <datalist id="detected-camera-options"></datalist>
+      </div>
+    </section>
+
+    <!-- Cột phải: Barrier & Máy in hóa đơn -->
+    <section class="panel settings-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Barrier &amp; Máy in hóa đơn</h2>
+          <p>Thiết lập cổng kết nối barrier 2 làn và máy in hóa đơn</p>
+        </div>
+      </div>
+
+      <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap: 14px; padding: 18px 20px;">
+        <div class="form-field">
+          <label for="entry_barrier_port">Cổng Barrier Làn vào</label>
+          <input type="text" id="entry_barrier_port" name="entry_barrier_port"
+                 value="{{ device_settings.entry_barrier_port }}"
+                 placeholder="VD: COM3 hoặc 192.168.1.50:5000">
+        </div>
+
+        <div class="form-field">
+          <label for="exit_barrier_port">Cổng Barrier Làn ra</label>
+          <input type="text" id="exit_barrier_port" name="exit_barrier_port"
+                 value="{{ device_settings.exit_barrier_port }}"
+                 placeholder="VD: COM4 hoặc 192.168.1.51:5000">
+        </div>
+
+        <div class="form-field">
+          <label for="barrier_baudrate">Giao thức / Baudrate</label>
+          <select id="barrier_baudrate" name="barrier_baudrate">
+            {% for opt in ['9600', '19200', '38400', '115200', 'TCP/IP', 'Modbus RTU'] %}
+              <option value="{{ opt }}" {% if device_settings.barrier_baudrate == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="printer_port">Cổng kết nối máy in hóa đơn</label>
+          <input type="text" id="printer_port" name="printer_port"
+                 value="{{ device_settings.printer_port }}"
+                 placeholder="VD: Mặc định trình duyệt, USB 80mm, COM7, 192.168.1.70:9100">
+        </div>
+
+        <div class="form-field" style="grid-column: 1 / -1;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600;">
+            <input type="checkbox" name="auto_open_barrier" value="1"
+                   {% if device_settings.auto_open_barrier == '1' %}checked{% endif %}
+                   style="width:auto; height:auto;">
+            <span>Tự động gửi tín hiệu mở barrier sau khi xác nhận xe vào / xe ra</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-footer" style="padding: 14px 20px;">
+        <button type="submit" class="btn btn-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
+          Lưu cấu hình thiết bị
+        </button>
+      </div>
+    </section>
+  </div>
+</form>
+
+<script>
+(() => {
+  const scanBtn = document.getElementById('scan-cameras-btn');
+  const box = document.getElementById('detected-cameras-box');
+  const list = document.getElementById('detected-cameras-list');
+  const datalist = document.getElementById('detected-camera-options');
+  if (!scanBtn) return;
+
+  scanBtn.addEventListener('click', async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      box.style.display = 'block';
+      list.textContent = 'Trình duyệt không hỗ trợ quét thiết bị camera.';
+      return;
+    }
+    try {
+      // Request temporary stream if labels are hidden, then stop immediately
+      if (navigator.mediaDevices.getUserMedia) {
+        const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }).catch(() => null);
+        if (tmp) tmp.getTracks().forEach(t => t.stop());
+      }
+      const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+      box.style.display = 'block';
+      list.innerHTML = '';
+      datalist.innerHTML = '';
+      if (!cams.length) {
+        list.textContent = 'Không tìm thấy camera nào đang kết nối.';
+        return;
+      }
+      cams.forEach((cam, idx) => {
+        const label = cam.label || `Camera ${idx + 1}`;
+        const opt = document.createElement('option');
+        opt.value = cam.deviceId;
+        opt.label = label;
+        datalist.appendChild(opt);
+
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;';
+        const info = document.createElement('span');
+        info.textContent = `${label} (${cam.deviceId.slice(0, 12)}…)`;
+        const btns = document.createElement('span');
+        btns.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;';
+        [
+          ['entry_plate_camera', 'Biển số vào'],
+          ['entry_overview_camera', 'Toàn cảnh vào'],
+          ['exit_plate_camera', 'Biển số ra'],
+          ['exit_overview_camera', 'Toàn cảnh ra'],
+        ].forEach(([fieldId, text]) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'btn btn-outline';
+          b.style.cssText = 'padding:2px 7px;font-size:11px;min-height:24px;';
+          b.textContent = text;
+          b.addEventListener('click', () => {
+            const input = document.getElementById(fieldId);
+            if (input) input.value = cam.deviceId;
+          });
+          btns.appendChild(b);
+        });
+        row.appendChild(info);
+        row.appendChild(btns);
+        list.appendChild(row);
+      });
+    } catch (_) {
+      box.style.display = 'block';
+      list.textContent = 'Không thể truy cập danh sách camera.';
+    }
+  });
+
+  document.querySelectorAll('.test-ip-cam-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const targetId = btn.dataset.target;
+      const input = document.getElementById(targetId);
+      const statusEl = document.querySelector(`[data-status-for="${targetId}"]`);
+      const url = (input?.value || '').trim();
+      if (!statusEl) return;
+      if (!url) {
+        statusEl.style.display = 'block';
+        statusEl.style.color = '#b91c1c';
+        statusEl.textContent = 'Hãy nhập URL IP Webcam (VD: http://192.168.1.15:8080/video) trước khi kiểm tra.';
+        return;
+      }
+      btn.disabled = true;
+      statusEl.style.display = 'block';
+      statusEl.style.color = '#475569';
+      statusEl.textContent = 'Đang kiểm tra kết nối camera…';
+      try {
+        const res = await fetch('/api/camera/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          statusEl.style.color = '#b91c1c';
+          statusEl.textContent = res.status === 404
+            ? 'Server chưa cập nhật route mới (404). Hãy tắt và chạy lại app.py.'
+            : `Lỗi phản hồi từ server (HTTP ${res.status}).`;
+          return;
+        }
+        const data = await res.json();
+        if (data.ok) {
+          if (data.normalized_url && input) input.value = data.normalized_url;
+          statusEl.style.color = '#15803d';
+          statusEl.textContent = data.message;
+        } else {
+          statusEl.style.color = '#b91c1c';
+          statusEl.textContent = data.message || 'Không kết nối được tới camera.';
+        }
+      } catch (_) {
+        statusEl.style.color = '#b91c1c';
+        statusEl.textContent = 'Lỗi mạng khi kiểm tra camera.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+})();
+</script>

@@ -1,15 +1,31 @@
 # 🅿️ Demo: Bãi đỗ xe thông minh (Smart Parking System)
 
 Dự án demo hệ thống bãi đỗ xe thông minh, nhận diện biển số xe tự động bằng
-**OpenCV + EasyOCR** (deep learning, chính xác hơn Tesseract), quản lý xe
+**YOLOv8 (dò vùng biển số) + OpenCV + EasyOCR** (đọc ký tự), quản lý xe
 vào/ra và tính phí bằng **Python (Flask)**, lưu dữ liệu bằng **SQLite (SQL)**,
 giao diện web bằng **HTML/CSS**.
+
+> **Dò vùng biển số — YOLOv8 hay contour?** Hệ thống dùng **YOLOv8** (model
+> `cache/yolo/plate_yolov8n.pt`) để tìm vùng biển số trong ảnh, chính xác hơn
+> cách dò cạnh contour với ảnh thực tế (nhiều chi tiết, nhiều xe...). Nếu **chưa
+> có model YOLO** (chưa tải được, hoặc máy không cài `ultralytics`), hệ thống
+> **tự động quay về** cách dò contour cũ — không báo lỗi. Đặt biến môi trường
+> `PLATE_DETECTOR=contour` nếu muốn tắt hẳn YOLO để so sánh kết quả.
 
 > **Vì sao đổi từ Tesseract sang EasyOCR?** Tesseract-OCR được huấn luyện cho
 > văn bản in tài liệu, nên đọc biển số xe (font đặc thù, ảnh nghiêng, ánh sáng
 > không đều) thường ra kết quả sai/rối. EasyOCR dùng mô hình deep learning
 > (CRAFT + CRNN), chịu được ảnh thực tế tốt hơn nhiều — và vẫn hoàn toàn miễn
 > phí, mã nguồn mở, cài bằng `pip` mà không cần cài thêm phần mềm hệ thống.
+>
+> **Luồng nhận diện** (`py/plate_recognition.py`, `py/plate_yolo.py`, `py/plate_preprocess.py`):
+> ảnh → **YOLOv8** dò vùng biển số (bounding box) → OpenCV **cắt vùng biển** (nới rộng
+> thêm 15% để giữ ký tự ở mép) → **tăng tương phản (CLAHE khi cần)** →
+> chuẩn hoá kích thước → **EasyOCR** đọc chữ/số → ghép/đặt dấu `-`.
+>
+> **Hai chế độ xử lý:** camera ưu tiên độ trễ thấp, đọc trực tiếp các dòng chữ
+> khi phân đoạn rõ; ảnh tải lên thử thêm chỉnh phối cảnh, ánh sáng và làm nét khi
+> kết quả ban đầu chưa tốt. Luôn giữ ứng viên gốc để tránh warp làm mất ký tự.
 
 ## 1. Cấu trúc dự án
 
@@ -22,17 +38,25 @@ smart_parking/
 ├── cache/                     # File sinh ra sau khi chạy setup
 │   ├── venv/                  #   môi trường ảo Python
 │   ├── easyocr_models/        #   model EasyOCR đã tải
+│   ├── yolo/                  #   model YOLOv8 dò biển số (tùy chọn)
 │   ├── parking.db             #   database SQLite
 │   └── tmp/                   #   ảnh tạm giữa bước Nhận diện và Xác nhận
 ├── py/                        # Các file Python
 │   ├── config.py              #   đường dẫn dùng chung
 │   ├── database.py            #   Thao tác SQLite
-│   ├── plate_recognition.py   #   OCR biển số (OpenCV + EasyOCR)
+│   ├── parking_fees.py        #   Cộng phí các khung giờ trong suốt lượt gửi
+│   ├── export_stats.py        #   Xuất báo cáo Thống kê ra Excel (.xlsx) / PDF
+│   ├── plate_yolo.py          #   Dò vùng biển số bằng YOLOv8 (tùy chọn)
+│   ├── plate_preprocess.py    #   Phân dòng, chỉnh phối cảnh, ánh sáng vùng biển số
+│   ├── plate_recognition.py   #   OCR biển số (YOLOv8/OpenCV + EasyOCR)
 │   ├── plate_api.py
 │   ├── plate_utils.py
+│   ├── download_yolo_model.py #   Tải model YOLOv8 về cache/yolo/
 │   └── generate_sample_plate.py  # Tạo ảnh biển số mẫu để test
 ├── SQL/
 │   └── schema.sql             # Cấu trúc bảng dữ liệu
+├── assets/
+│   └── fonts/                 # font DejaVu Sans (kèm giấy phép) để xuất báo cáo PDF tiếng Việt
 ├── templates/
 │   ├── html/                  # Các file HTML (Flask templates)
 │   └── css/                   # Các file CSS (phục vụ qua route /css/<file>)
@@ -42,6 +66,22 @@ smart_parking/
 ```
 
 ## 2. Cài đặt (CHỈ LÀM 1 LẦN DUY NHẤT)
+
+### Tải mã nguồn từ nhánh `tung`
+
+Cài Python (trên Windows chọn **Add Python to PATH**) và Git, sau đó chạy:
+
+```bash
+git clone --branch tung --single-branch https://github.com/tunghoclm/du_an_TH1.git
+cd du_an_TH1
+```
+
+Nếu tải ZIP trên GitHub, chọn nhánh **tung**, bấm **Code → Download ZIP**, rồi giải nén
+và mở terminal trong thư mục chứa `app.py`. Các lệnh `cd smart_parking` bên dưới
+chỉ là ví dụ; dùng tên thư mục vừa tải về.
+
+Không cần sao chép database, môi trường ảo hay model từ máy người khác: chạy script
+cài đặt bên dưới để tạo chúng trên máy của bạn. Lần cài đầu cần Internet.
 
 Không cần cài thêm phần mềm OCR hệ thống nào — EasyOCR thuần Python. Có script
 tự động lo hết mọi bước (tạo venv, cài thư viện, tải sẵn model EasyOCR, khởi
@@ -62,9 +102,11 @@ setup.bat
 
 Script sẽ:
 1. Tạo virtual environment (`cache/venv/`)
-2. Cài toàn bộ thư viện trong `requirements.txt`
+2. Cài toàn bộ thư viện trong `requirements.txt` (gồm `ultralytics`/YOLOv8 — khá nặng)
 3. **Tải sẵn model EasyOCR** (bước tốn thời gian nhất, cần Internet — chỉ tải 1 lần)
-4. Khởi tạo file database `cache/parking.db` từ các file `.sql` trong `SQL/`
+4. **Tải model YOLOv8** dò biển số về `cache/yolo/` (tùy chọn; lỗi mạng thì bỏ qua,
+   ứng dụng vẫn chạy bằng cách dò contour)
+5. Khởi tạo file database `cache/parking.db` từ các file `.sql` trong `SQL/`
 
 > Sau bước này, máy đã sẵn sàng chạy offline (trừ khi bạn xoá venv hoặc model).
 
@@ -87,6 +129,32 @@ bạn không cần nhớ lệnh `source venv/bin/activate` nữa.
 
 Mở trình duyệt tại: **http://localhost:5000**
 
+### Cập nhật để kiểm thử bản mới
+
+Nếu đã tải dự án trước đó, cập nhật nhánh `tung` rồi cài lại các thư viện mới:
+
+```bash
+git switch tung
+git pull --ff-only origin tung
+```
+
+**Windows:**
+```powershell
+.\cache\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\run.bat
+```
+
+**macOS / Linux:**
+```bash
+./cache/venv/bin/python -m pip install -r requirements.txt
+./run.sh
+```
+
+Nếu chưa có môi trường ảo, chạy `setup.bat` hoặc `./setup.sh` trước.
+Ứng dụng tự tạo hoặc cập nhật cấu trúc bảng khi khởi động. Không cần tải database,
+ảnh xe hay model từ máy thành viên khác; mỗi máy giữ dữ liệu chạy thử riêng.
+Để kiểm tra giao diện mới, mở `/gate`, `/invoices`, `/customers` và thử hộp **Thêm khách hàng**.
+
 ## 4. Cách sử dụng
 
 Tài khoản demo mặc định (đăng nhập tại `/login`):
@@ -100,30 +168,146 @@ Tài khoản demo mặc định (đăng nhập tại `/login`):
 |----------------|-----------------------------------------------------------------------------|
 | `/login`       | Đăng nhập hệ thống                                                          |
 | `/`            | Menu chính — số liệu nhanh + lối vào các chức năng                          |
-| `/parking`     | Sơ đồ bãi đỗ theo khu A/B/C (60 vị trí) — tự động cập nhật khi xe vào/ra qua OCR; có thể bấm vị trí trống để đưa vào/ra khỏi bảo trì |
-| `/gate`        | **Xe vào / ra (1 trang)** — chọn ảnh → *Nhận diện biển số* (xem ảnh có khung đánh dấu) → *Xác nhận*. Biển số chưa có trong bãi = xe **vào** (chọn loại xe, gán vị trí); biển số đang gửi = xe **ra** (tính phí, trả vị trí). Có ô ghi chú và cho sửa biển số nếu nhận diện sai |
-| `/entry`, `/exit` | Đường dẫn cũ, tự chuyển sang `/gate` |
-| `/history`     | Lịch sử toàn bộ lượt gửi xe, có bộ lọc theo biển số / trạng thái / ngày      |
-| `/statistics`  | Thống kê tổng lượt xe, doanh thu, tỉ lệ lấp đầy bãi đỗ                       |
-| `/users`       | Quản lý tài khoản (chỉ admin thấy) — thêm, khóa/mở khóa, xóa người dùng      |
+| `/parking`     | Sơ đồ khu và ô đỗ: admin quản lý khu/ô và loại xe được phép; admin/nhân viên chuyển xe, xóa xe có lý do và quản lý bảo trì |
+| `/gate`        | **Xe ra/vào** — hai làn với 8 khung camera/ảnh đối chiếu, bảng biển số, thời gian và tiền xe; mở nhận diện **Xe vào** hoặc **Xe ra** |
+| `/monitoring/parking` | **Giám sát bãi xe → Bãi xe** — xem ô có xe / ô trống theo dữ liệu quản lý; khung camera chờ tích hợp nhận diện ô đỗ |
+| `/entry`       | **Xe vào** — tải ảnh hoặc chọn camera → nhận diện → chọn loại xe / vị trí → xác nhận. Chặn xe đang gửi trong bãi |
+| `/exit`        | **Xe ra** — tải ảnh hoặc chọn camera → nhận diện → kiểm tra lượt gửi / phí, chọn phương thức thanh toán → xác nhận. Chỉ cho xe đang gửi ra bãi |
+| `/history`     | Lịch sử lượt gửi, di chuyển và xóa xe; lọc biển số, giao dịch, ngày, khung giờ theo giờ vào hoặc giờ ra/xóa |
+| `/invoices`    | Hóa đơn thu phí các lượt xe đã ra: tìm mã/biển số/khách hàng; lọc ngày giờ, tuần/tháng/quý/năm và âm lịch, khu/loại xe/phí/phương thức thanh toán; xem chi tiết, xuất CSV và in phiếu thu; khách hàng chỉ thấy xe của mình |
+| `/statistics`  | Thống kê tổng lượt xe, doanh thu, tỉ lệ lấp đầy bãi đỗ; **xuất báo cáo Excel / PDF** |
+| `/customers`   | Danh sách khách hàng với bộ lọc, hồ sơ liên hệ, phương tiện, vé tháng, lịch sử gửi xe và xuất CSV |
+| `/accounts`    | Quản lý tài khoản nhân viên & quản trị viên: cấp tài khoản, phân quyền, khóa/mở khóa |
 | `/pricing`     | Bảng giá xe — 3 bảng: **khung thời gian** (tự đặt giờ/ngày bắt đầu–kết thúc), **loại xe** (tự tạo tên), **giá theo loại xe + thời gian** (lượt/tháng). Ai cũng xem, admin/nhân viên thêm-sửa-xóa |
-| `/settings`    | Cài đặt cá nhân (ai đăng nhập cũng dùng được) — tự chọn chế độ gửi xe: **tự động** hoặc **tự chọn vị trí** |
+| `/settings`    | Cài đặt chế độ gửi xe; tab **Trợ lý AI** riêng dành cho quản trị viên để quản lý kiến thức, huấn luyện và thử chatbot nội bộ |
 
-**Phân quyền bảo trì vị trí đỗ:** tại trang `/parking`, chỉ tài khoản **admin** và
-**nhân viên (manager)** mới bấm được vào ô trống để đưa vào/ra khỏi bảo trì.
-Tài khoản **user** thường chỉ xem, không chỉnh sửa được.
+### Hỗ trợ: chatbot nội bộ và chat với đội ngũ
+
+Nút **Hỗ trợ** ở góc phải dưới xuất hiện trên các trang sau đăng nhập.
+
+- **Trợ lý AI nội bộ:** xử lý ngay trong Python trên máy chủ Smart Parking, không gọi
+  API AI bên ngoài, không cần khóa API hay tải model ngôn ngữ. Bộ hỏi–đáp mặc định
+  có 20 chủ đề: xe vào/ra, vé tháng, bảng giá, hóa đơn, camera, tài khoản và hỗ trợ.
+- **Chat với đội ngũ:** chọn quản trị viên/nhân viên đang hoạt động. Chỉ hai người tham
+  gia đọc/gửi được qua giao diện; các quản trị viên khác không tự xem hộp thư đó.
+  Hai người cần truy cập cùng một máy chủ Smart Parking để dùng chung hội thoại.
+- Lịch sử AI thuộc từng tài khoản; tin nhắn nhân viên và hồ sơ/xe/hóa đơn không được
+  đưa vào mô hình. Hội thoại không tự động trở thành dữ liệu huấn luyện.
+
+Quản trị viên mở **Cài đặt → Trợ lý AI** tại `/settings?section=ai`:
+
+1. Đặt tên, bật/tắt trợ lý, chọn ngưỡng nhận diện và câu trả lời khi chưa biết.
+2. Thêm/sửa kho kiến thức: tiêu đề, tối đa 12 cách hỏi (mỗi dòng một cách) và câu trả lời.
+   Chỉ đưa vào đây nội dung được phép chia sẻ cho mọi tài khoản.
+3. Bấm **Lưu kiến thức → Huấn luyện**. Bản biên soạn mới, kể cả mục đã tắt/xóa,
+   chỉ áp dụng cho chat khi huấn luyện thành công. Khi huấn luyện lỗi, bản cũ tiếp tục chạy.
+4. Dùng **Thử câu hỏi** để kiểm tra câu trả lời, chủ đề khớp, độ tương đồng và phiên bản.
+   Thử nghiệm này không ghi vào lịch sử chat. Độ tương đồng không phải xác suất đúng.
+5. **Xuất kho JSON** để sao lưu kiến thức hoặc **Nhập thêm JSON** để bổ sung. Nhập
+   thêm từ chối tiêu đề trùng và không thay thế dữ liệu hiện có. Tối đa 300 mục và 8 MB/tệp.
+   Tệp dùng định dạng `{"documents":[{"title":"...","questions":["..."],"answer":"...","enabled":true}]}`.
+
+Chatbot dùng TF-IDF với đặc trưng từ, cặp từ và ký tự để so khớp cách hỏi tiếng Việt
+(có/không dấu). Nó trả lại câu trả lời đã kiểm duyệt; khi điểm thấp hoặc hai chủ đề
+quá gần nhau, nó dùng lời nhắc làm rõ/liên hệ đội ngũ. Đây là **chatbot theo kho kiến
+thức**, chưa phải mô hình ngôn ngữ lớn có khả năng trò chuyện tổng quát hay suy luận
+như ChatGPT. Thêm nhiều cách hỏi thực tế và thử lại sau mỗi lần huấn luyện để cải thiện.
+Các yêu cầu như “nói rõ hơn” có thể dùng lại câu hỏi trước của chính người dùng.
+
+**Tra cứu chỗ trống hiện tại:** các câu như “bãi xe còn đang trống bao nhiêu”,
+“còn mấy chỗ đỗ”, “bãi còn chỗ không” hoặc “khu A còn bao nhiêu chỗ” được nhận diện
+trực tiếp và đọc số liệu tổng hợp mới từ SQLite mỗi lần hỏi. Không cần thêm từng
+cách hỏi vào JSON hoặc huấn luyện lại cho số liệu thay đổi. Có thể hỏi theo một khu
+hoặc loại xe đã cấu hình; ô bảo trì và ô có lượt gửi đang mở không được tính là trống.
+Câu trả lời ghi thời điểm kiểm tra (UTC+7) và phản ánh dữ liệu quản lý, không khẳng
+định trạng thái từ camera. Câu hỏi dự báo ngày mai hoặc khu chưa xác định sẽ được
+yêu cầu làm rõ. Dữ liệu cá nhân và thao tác thay đổi bãi không được cấp cho chatbot.
+
+**Ước tính phí theo giờ:** hỏi “gửi xe từ 1h sáng đến 10h đêm hết bao nhiêu”, chatbot
+hiểu là 01:00–22:00 (21 giờ) và hỏi loại xe. Trong chat, trả lời “xe máy” hoặc tên loại
+xe đã cấu hình để tiếp tục, không cần nhập lại giờ. Có thể hỏi đủ thông tin ngay:
+“gửi xe máy từ 01:00 đến 22:00 hết bao nhiêu”. Hỗ trợ giờ có phút, sáng/chiều/tối/đêm,
+AM/PM và qua nửa đêm. Nếu thiếu giờ hoặc giờ không hợp lệ, chatbot hỏi làm rõ.
+Phí được tính bằng cùng hàm với màn hình Xe ra, gồm các khung giờ, block đầu/giờ tiếp,
+miễn phí ban đầu, ân hạn và giá trần. Nếu thiếu giá, câu trả lời ghi rõ đơn giá dự phòng.
+Đây là ước tính vé lượt theo bảng giá hiện hành; chatbot không đọc vé tháng riêng hoặc
+tạo giao dịch thu tiền. Kiểm tra vé còn hạn và xác nhận phí thực tế tại Xe ra.
+
+Dữ liệu biên soạn và mô hình JSON nằm trong SQLite (`cache/parking.db`); giữ 5 phiên
+bản huấn luyện gần nhất. Phiên bản mới được áp dụng bằng giao dịch nguyên tử. Khi
+khởi động lần đầu, ứng dụng tự khởi tạo và huấn luyện dữ liệu mẫu; lần sau giữ các
+chỉnh sửa của quản trị viên. Cấu hình/khóa nhà cung cấp AI cũ được gỡ khỏi bảng settings;
+biến môi trường API AI cũ không còn được đọc. Có thể tự xóa biến cũ và tệp khóa mã hóa
+`cache/secrets/gemini.key` nếu không còn dùng cho bản triển khai trước đó.
+
+Chatbot chỉ được đọc số liệu ô đỗ tổng hợp và bảng giá bằng truy vấn cố định trên kết nối chỉ đọc;
+không có công cụ truy cập thông tin riêng của xe, hồ sơ, doanh thu hoặc thay đổi dữ liệu vận hành.
+Phân quyền được kiểm tra lại từ database, các thao tác quản trị yêu cầu CSRF và cùng
+nguồn truy cập. Giới hạn 5 câu hỏi/phút/tài khoản và một câu đang xử lý vẫn được áp dụng.
+Khi chạy cho nhiều người, đặt `FLASK_SECRET_KEY` thành chuỗi bí mật ổn định và bảo vệ
+quyền truy cập máy chủ/database. SQLite lưu dữ liệu chat dạng văn bản; chạy nội bộ
+không đồng nghĩa mã hóa dữ liệu hoặc ngăn người quản lý máy chủ đọc dữ liệu.
+
+Các bảng được tạo tự động khi khởi động. Kiểm thử hỗ trợ và huấn luyện dùng SQLite
+riêng, bao gồm kiểm tra chặn kết nối mạng; chạy `python -m unittest discover -s tests -p "test_support*.py" -v`.
+Việc bỏ API AI áp dụng cho chatbot; cấu hình API nhận diện biển số là chức năng riêng.
+
+**Nhận diện bằng camera (admin / nhân viên):**
+Giao diện gồm hai cột: bên trái hiển thị camera / ảnh cùng nút bật tắt, chọn thiết bị và tải ảnh; bên phải có hai nút **Camera / Tải ảnh**, ghi chú, biển số, loại xe, vị trí và xác nhận. Trên màn hình nhỏ, hai cột xếp dọc.
+
+1. Mở **Xe vào / ra**, chọn **Xe vào** hoặc **Xe ra**, rồi nhấn nút **Camera** ở phần Chọn hình thức nhận diện.
+2. Chọn thiết bị và bấm **Bắt đầu**. Cho phép trình duyệt dùng camera; sau khi được cấp quyền, danh sách hiển thị tên webcam tích hợp, USB hoặc camera ảo trên máy đang mở web.
+3. Camera tự quét từng khung hình; khung xanh dành cho kết quả đủ tin cậy, khung vàng dành cho vùng chưa đọc chắc chắn. Khi hai lần đọc liên tiếp khớp nhau và đủ tin cậy, hệ thống giữ ảnh, tự điền biển số và thông tin xe ngay trên trang.
+4. Kiểm tra kết quả, chọn loại xe / vị trí nếu là xe vào, rồi bấm **Xác nhận xe vào / xe ra**. Có thể sửa biển số và bấm **Cập nhật biển số**, hoặc bấm **Bắt đầu** để nhận diện lại.
+
+Nút **Bắt đầu** chuyển thành **Dừng** khi mở camera; bấm lại để dừng. Nút **Chụp** bên cạnh giữ đúng khung hình tại thời điểm bấm, dừng camera và nhận diện với cấu hình ảnh tĩnh. Ảnh chụp giữ tối đa 1920 px cạnh dài; quét trực tiếp dùng tối đa 1280 px. Nếu đang có một lượt OCR, ảnh vừa chụp chờ lượt đó kết thúc để tránh gửi chồng yêu cầu. Hệ thống nhớ thiết bị riêng cho chiều vào và ra. Kết quả chưa đủ tin cậy cần sửa và bấm **Cập nhật biển số** trước khi xác nhận. Camera tự tắt khi nhận được kết quả ổn định, rời trang hoặc chuyển sang Tải ảnh; chỉ ghi nhận xe khi xác nhận.
+
+Tốc độ quét phụ thuộc CPU và chất lượng ảnh. Bộ dò vùng biển số ưu tiên bố cục dòng ký tự, giữ cả ảnh gốc và ảnh tăng tương phản. Camera không chạy OCR toàn ảnh khi không tìm được vùng biển số; các dòng rõ được đọc trực tiếp để bỏ qua bước dò chữ tốn thời gian. Giữa hai lượt xử lý là khoảng nghỉ 80 ms, mỗi camera chỉ có một yêu cầu đang chạy. Nút Chụp không tự bật API nhận diện đám mây; vẫn cần `PLATE_API_CAMERA=1` nếu muốn gửi ảnh camera tới dịch vụ đã cấu hình.
+
+**Nhận diện từ ảnh:** nhấn **Tải ảnh**, chọn file ở cột trái để xem trước, rồi bấm **Nhận diện ảnh**. Kiểm tra kết quả ở cột phải và xác nhận. Với cả hai hình thức, khi xe vào cần chọn loại xe và một vị trí trống (trừ chế độ gán vị trí tự động).
+
+Trên máy chạy ứng dụng, mở **http://localhost:5000** để dùng camera. Nếu mở từ máy khác qua mạng LAN, cần phục vụ trang bằng **HTTPS**; trình duyệt chặn camera trên địa chỉ HTTP LAN thông thường ([quy định của API camera](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia)). Khi đổi camera, hãy đóng ứng dụng khác đang giữ thiết bị nếu không mở được.
+
+**Quản lý bãi đỗ** (`/parking`):
+
+- **Admin:** thêm/sửa/xóa khu, chọn loại xe được phép đỗ (hoặc Tất cả loại xe), thêm/sửa/xóa ô đỗ. Khi tạo khu, bắt buộc nhập số lượng ô; khu **D**, **10 ô** sẽ tạo **D01–D10**. Tên khu có dấu được chuyển thành mã không dấu để đặt tên ô. Nếu trùng tên ô đã có, toàn bộ lần tạo sẽ được hủy và báo lỗi.
+- Bấm trực tiếp ô để mở các lựa chọn **Sửa ô / Xóa ô / Bảo trì** theo quyền. Với ô đang có xe, có thêm **Chuyển / xóa xe**; xóa ô và bảo trì bị chặn. Đổi tên ô đang có xe sẽ cập nhật lượt gửi và lưu ghi chú. Xóa khu yêu cầu khu không còn xe đang gửi, đồng thời xóa các ô trong khu và giữ lịch sử cũ.
+- **Admin và nhân viên:** bấm ô đang có xe để chuyển sang ô trống **trong cùng khu**. Ghi chú lượt gửi tự lưu thời gian, người thao tác, ô nguồn và ô đích; giờ vào và phí không bị đặt lại.
+- **Xóa xe khỏi ô:** bắt buộc lý do. Ô được giải phóng, lượt gửi giữ nguyên trong lịch sử với giao dịch **Đã xóa**, kèm người thao tác và lý do; không phát sinh phí gửi xe.
+- **Bảo trì:** bấm ô trống, nhập lý do; lý do hiện trên ô bảo trì. Có thể sửa lý do hoặc kết thúc bảo trì. Không bảo trì ô đang có xe.
+- **Người dùng:** chỉ xem sơ đồ và lịch sử xe đã đăng ký của mình. Quyền chỉnh sửa được kiểm tra ở máy chủ cho từng thao tác.
+
+Bãi mới khởi tạo 3 khu A/B/C và 18 ô (6 ô mỗi khu). Các lần khởi động sau giữ cấu hình đã sửa, kể cả khi admin xóa hết các ô hoặc các khu.
+Quy định loại xe của khu áp dụng cả lúc chọn ô thủ công và lúc gán ô tự động.
+
+**Lọc khung giờ lịch sử:** chọn ngày, bấm **Chọn khung giờ** để hiện **Từ giờ / Đến giờ**, rồi chọn khung trong bảng giá hoặc nhập giờ tùy chọn. Chọn **Tất cả** để bỏ lọc giờ và thu gọn hai ô nhập. Màn hình mặc định lọc theo thời gian vào.
+Khung qua nửa đêm (ví dụ 22:00–04:59) với ngày 19/10 gồm từ 22:00 ngày 19 đến hết phút 04:59 ngày 20.
+Có thể kết hợp biển số và giao dịch Đang gửi / Đã lấy xe / Đã xóa. Ghi chú đầy đủ cũng có trong cửa sổ Chi tiết.
 
 **Cài đặt chế độ gán vị trí (`/settings`) — riêng cho từng tài khoản, người dùng tự chọn, không cần admin/nhân viên:**
 - *Tự động* — hệ thống tự chọn 1 vị trí trống bất kỳ khi có xe vào, không cần chọn tay.
-- *Tự chọn* (mặc định) — người dùng tự chọn vị trí cụ thể theo khu A/B/C khi ghi nhận xe vào.
+- *Tự chọn* (mặc định) — chọn một ô trống trong khu phù hợp với loại xe khi ghi nhận xe vào.
 
-**Cách tính phí:** khi xe vào bắt buộc chọn **loại xe**; khi xe ra, hệ thống lấy **giá vé Lượt** của loại xe
-tương ứng với **khung giờ lúc xe vào** trong trang `/pricing` (1 lượt, không tính theo số giờ). Nếu loại xe chưa có giá
-ở khung giờ hiện tại thì trang `/gate` không cho nhận xe vào và báo cần bổ sung giá. Giá vé *Tháng* chỉ để tham khảo, chưa áp dụng tự động.
-Với xe cũ chưa có loại xe (hoặc giá đã bị xóa), hệ thống dùng đơn giá dự phòng 5.000 VNĐ / giờ (biến `FEE_PER_HOUR` trong `app.py`).
+**Cách tính phí:** khi xe vào bắt buộc chọn **loại xe**. Khi xe ra, hệ thống **cộng giá vé Lượt của tất cả các khung giờ xe đã gửi** trong `/pricing`.
+Ví dụ: ô tô vào **11:37**, ra **16:13** → **Sáng 150.000đ + Chiều 150.000đ = 300.000đ**.
+Mỗi khung tính một lần cho mỗi lần xuất hiện theo ngày; khung qua nửa đêm (vd 22:00–04:59) tính một lần cho cả khung.
+Khung kết thúc lúc `12:59` bao gồm hết phút `12:59`; từ đúng `13:00:00` đã cộng phí khung bắt đầu lúc `13:00`.
+Nếu các khung chồng nhau, ưu tiên khung tạo trước. Phí tạm tính hiển thị phép cộng và được tính lại khi xác nhận xe ra.
+Vé tháng còn hạn vẫn miễn phí. Nếu chưa có giá tại giờ vào, trang `/entry` yêu cầu bổ sung giá (trừ vé tháng còn hạn).
+Khoảng chưa có giá, hoặc xe cũ chưa có loại xe, dùng đơn giá dự phòng **5.000đ/giờ**, tổng thời gian chưa có giá làm tròn lên giờ, tối thiểu một giờ.
+Các lượt đã chốt lưu số tiền thực thu trong lịch sử, không tự động sửa lại theo công thức mới.
 
-**Nếu bãi đỗ hết chỗ** (60/60 vị trí đều occupied/maintenance), trang `/gate` sẽ báo lỗi
-"Bãi đỗ đã hết chỗ trống" và không ghi nhận xe vào.
+**Nếu hết ô trống phù hợp với loại xe**, trang `/entry` báo lỗi và không ghi nhận xe vào.
+
+**Xuất báo cáo (Excel / PDF):** tại trang `/statistics`, cạnh bộ lọc thời gian có 2 nút **⬇ Excel** và
+**⬇ PDF** — xuất đúng kỳ đang xem (hôm nay, hôm qua, 7/30 ngày hoặc khoảng ngày tự chọn).
+Mỗi file gồm 3 phần: *Tổng quan* (doanh thu, lượt vào/ra), *Tình trạng theo khu vực* và *Chi tiết lượt xe* trong kỳ.
+- **Excel** (`.xlsx`, thư viện `openpyxl`): 3 sheet cùng tên với 3 phần trên, có dòng tiêu đề, bật lọc và cố định dòng đầu.
+- **PDF** (`.pdf`, thư viện `reportlab`): khổ A4 ngang, tự ngắt trang khi có nhiều lượt xe.
+- Quyền xuất giống quyền xem trang Thống kê: chỉ **admin** và **nhân viên**.
+- PDF dùng font **DejaVu Sans đi kèm sẵn trong dự án** (`assets/fonts/`) nên hiển thị đúng tiếng Việt
+  trên mọi máy, **không cần cài thêm hay cấu hình gì**. Nếu muốn dùng font khác, đặt biến môi trường
+  `REPORT_FONT` (và `REPORT_FONT_BOLD`) trỏ tới file `.ttf`.
 
 ## 5. Test nhanh không cần ảnh xe thật
 
@@ -133,34 +317,84 @@ Dùng script có sẵn để tạo ảnh biển số giả lập:
 python py/generate_sample_plate.py "51F-123.45" test_plate.jpg
 ```
 
-Sau đó tải file `test_plate.jpg` lên ở trang `/gate` (xe vào), rồi tải lại đúng ảnh đó
-lần nữa (xe ra) để thử luồng tính phí hoàn chỉnh.
+Sau đó tải file `test_plate.jpg` lên ở trang `/entry` (xe vào), rồi tải lại đúng ảnh đó
+ở trang `/exit` (xe ra) để thử luồng tính phí hoàn chỉnh. Có thể thay tải ảnh bằng cách bấm Bắt đầu trong chế độ camera.
 
-## 6. Ghi chú kỹ thuật
+Kiểm tra tự động luồng vào / ra (SQLite và ảnh tạm riêng, OCR giả lập) và vòng đời camera (MediaDevices giả lập, cần Node.js):
 
-- **Phát hiện vùng biển số**: dùng Canny edge detection + tìm contour 4 cạnh
-  lớn nhất trong ảnh (cách làm phổ biến cho bài toán ANPR đơn giản, phù hợp demo).
-  Với ảnh thực tế phức tạp (nhiều xe, góc nghiêng, ánh sáng yếu...), nên nâng cấp
-  bằng mô hình deep learning (YOLO để detect + CRNN/OCR chuyên dụng) để tăng độ chính xác.
-- **Làm sạch text OCR**: loại bỏ ký tự không phải chữ/số, chuyển về chữ hoa.
-- **OCR engine**: dùng EasyOCR với `allowlist` giới hạn chỉ chữ cái/số thường
-  gặp trên biển số, giúp giảm nhiễu so với để engine đoán tự do. Có cơ chế
-  fallback: nếu đọc vùng cắt cho kết quả ngắn/độ tin cậy thấp, sẽ thử lại
-  trên toàn ảnh gốc.
-- **Nếu vẫn cần chính xác hơn nữa** (dùng cho ảnh biển số Việt Nam thực tế,
-  nhiều xe/góc chụp khó), có thể cân nhắc nâng cấp thêm:
-  - **PaddleOCR** — độ chính xác rất cao, nhiều dự án ANPR Việt Nam dùng,
-    nhưng cài đặt nặng hơn EasyOCR.
-  - **YOLOv8 (huấn luyện riêng để detect vùng biển số)** kết hợp EasyOCR/PaddleOCR
-    để đọc ký tự — đây là hướng làm chuẩn cho hệ thống ANPR thực tế, thay vì
-    dùng contour-detection đơn giản như trong demo này.
-  - Bộ dữ liệu biển số Việt Nam có sẵn trên Roboflow/Kaggle nếu muốn tự huấn luyện.
-- **Đối chiếu xe ra**: so khớp chính xác chuỗi biển số đã làm sạch. Trong thực
-  tế nên thêm thuật toán so khớp gần đúng (fuzzy matching) để xử lý sai số OCR.
+```bash
+python -m unittest discover -s tests -v
+node --test tests/gate_camera.test.js tests/parking_ui.test.js tests/history_filter.test.js
+```
+
+## 6. Nhận diện nhanh và API hỗ trợ
+
+**Camera:** cắt vùng biển bằng YOLO/contour, chuẩn hóa vùng đọc tối đa 480 px, tìm
+một hoặc hai dòng ký tự rồi gọi trực tiếp bộ nhận dạng EasyOCR khi có thể. Nếu
+phân đoạn không chắc chắn, chuyển sang CRAFT. Mỗi khung có số lần thử giới hạn;
+camera chờ 150 ms sau phản hồi rồi mới gửi khung tiếp theo. Chỉ giữ kết quả khi
+hai lần đọc liên tiếp khớp nhau, đúng định dạng và có độ tin cậy từ 0,65. Có hiển
+thị thời gian xử lý và độ tin cậy; đây là điểm của OCR, không phải bảo đảm đúng.
+
+**Ảnh khó:** giữ ảnh gốc, thử lấy đủ bốn góc trong vùng rộng hơn quanh khung phát
+hiện để tránh mất dòng dưới, sau đó thử chỉnh nghiêng/phối cảnh, cân bằng ánh
+sáng, CLAHE, làm nét nhẹ và ngưỡng thích nghi. Ứng viên được chọn theo định dạng,
+sự đồng thuận và độ tin cậy. Chấp nhận biển một hoặc hai dòng, kể cả series hai
+chữ. Không tự thêm các chữ số đã mất. Ảnh cháy sáng hoặc nhòe nặng vẫn có thể cần
+chụp lại hoặc sửa biển thủ công.
+
+**API tùy chọn:** đã tích hợp [Plate Recognizer Snapshot](https://api.platerecognizer.com/v1/api-reference/).
+Mặc định chạy trên máy. Muốn dùng API, tạo token ở nhà cung cấp và đặt trong môi
+trường của máy chạy Flask trước khi khởi động. Ví dụ PowerShell:
+
+```powershell
+$env:PLATE_API_TOKEN = 'token-cua-ban'
+$env:PLATE_API_MODE = 'fallback'
+$env:PLATE_API_CAMERA = '1'
+.\run.bat
+```
+
+Cấu hình này cho phép gửi ảnh/khung camera lên nhà cung cấp khi OCR trên máy chưa
+đủ tốt. Chi phí và hạn mức phụ thuộc tài khoản API. Không đưa token vào mã nguồn
+hoặc JavaScript; không cần gửi token trong cuộc trò chuyện.
+
+| Biến môi trường | Mặc định | Ý nghĩa |
+|---|---|---|
+| `PLATE_API_TOKEN` | Trống | Không có token thì chỉ dùng OCR trên máy |
+| `PLATE_API_MODE` | `fallback` | `fallback`: OCR yếu mới gọi API; `first`: ưu tiên API; `off`: tắt API |
+| `PLATE_API_CAMERA` | `0` | Đặt `1` để cho phép API với khung camera |
+| `PLATE_API_REGIONS` | `vn` | Gợi ý quốc gia cho API |
+| `PLATE_API_MIN_SCORE` | `0.8` | Chỉ nhận kết quả API đủ tin cậy và đúng định dạng |
+| `PLATE_API_TIMEOUT` | `5` | Số giây chờ dịch vụ (giới hạn 0,5–30 giây) |
+| `PLATE_API_URL` | Snapshot Cloud | Có thể trỏ tới máy chủ Snapshot SDK riêng |
+| `PLATE_GPU` | `auto` | EasyOCR tự dùng CUDA nếu có; `0` ép chạy CPU |
+| `PLATE_DETECTOR` | `auto` | Đặt `contour` để tắt YOLO |
+| `PLATE_YOLO_MODEL` | `cache/yolo/plate_yolov8n.pt` | Thay bằng mô hình phát hiện biển số đã huấn luyện riêng |
+| `PLATE_YOLO_CONF` | `0.25` | Ngưỡng phát hiện vùng biển số |
+
+Camera gọi API cách nhau ít nhất 3 giây. Khi lỗi mạng, sai token hoặc hết hạn mức,
+hệ thống tạm ngừng gọi API (60 giây; 300 giây với lỗi xác thực) và tiếp tục OCR
+trên máy. Không gửi chồng yêu cầu OCR vào model dùng chung. Việc ghi nhận xe vẫn
+cần người dùng bấm Xác nhận; không dùng so khớp gần đúng để tự cho xe ra.
+
+**Đo lại trên máy của bạn** (model thật, ảnh giả lập, không đụng dữ liệu bãi xe và
+không gọi API):
+
+```powershell
+python tests/benchmark_plate.py --repeat 2 --output cache/tmp/plate-benchmark.json
+```
+
+Bài đo gồm biển một/hai dòng, nghiêng, mờ nhẹ, tương phản thấp, lóa nhẹ và méo
+phối cảnh; báo thời gian trung vị và kết quả đúng/sai riêng cho camera và ảnh.
+Tốc độ sau khi nạp model khác lần chạy đầu. Bộ ảnh giả lập không đại diện cho
+độ chính xác với mọi biển số thực tế. Có thể thay model YOLO bằng model được
+huấn luyện trên bộ ảnh tại bãi xe để đánh giá thêm.
+
+Thông số bộ nhận dạng tham khảo từ [tài liệu EasyOCR](https://www.jaided.ai/easyocr/documentation/).
 
 ## 7. Hướng phát triển thêm (nếu mở rộng)
 
-- Tích hợp camera trực tiếp (OpenCV `VideoCapture`) thay vì upload ảnh thủ công.
+- Tối ưu tốc độ nhận diện camera hoặc bổ sung theo dõi nhiều biển số trong cùng khung hình.
 - Thêm xác thực người dùng (nhân viên trông xe) và phân quyền.
 - Dùng mô hình OCR chuyên biển số (ví dụ EasyOCR, hoặc model huấn luyện riêng)
   để tăng độ chính xác với biển số Việt Nam.

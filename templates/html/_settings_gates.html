@@ -1,0 +1,320 @@
+{% macro render_gate_row(g) %}
+{% set row_key = 'central' if g.is_central else ('gate-' ~ g.id) %}
+<tr class="kv-gate-row{% if g.is_central %} is-central{% endif %}" data-gate-row="{{ row_key }}" tabindex="0" aria-expanded="false">
+  <td data-col="name">
+    <div class="kv-gate-name-cell">
+      <span class="kv-gate-chevron" aria-hidden="true">▸</span>
+      <div>
+        <div class="kv-gate-title-line">
+          <strong>{{ g.name }}</strong>
+          {% if g.is_central %}
+            <span class="kv-center-tag">Mặc định</span>
+          {% endif %}
+        </div>
+        {% if g.is_central and g.subtitle %}
+          <div class="kv-zone-note">{{ g.subtitle }}</div>
+        {% elif g.note %}
+          <div class="kv-zone-note">{{ g.note }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </td>
+  <td data-col="location">{{ g.location or '—' }}</td>
+  <td data-col="lane">
+    {% if g.zone_type == 'gate_in' %}
+      <span class="badge badge-green"><span></span>Làn vào</span>
+    {% elif g.zone_type == 'gate_out' %}
+      <span class="badge badge-amber"><span></span>Làn ra</span>
+    {% elif g.zone_type == 'gate_inout' %}
+      <span class="badge badge-blue"><span></span>2 làn (Vào &amp; Ra)</span>
+    {% else %}
+      <span class="badge">{{ zone_type_labels.get(g.zone_type, g.zone_type) }}</span>
+    {% endif %}
+  </td>
+  <td data-col="staff" class="right"><strong>{{ g.staff_count }}</strong></td>
+  <td data-col="status">
+    {% if g.status == 'active' %}
+      <span class="badge badge-green"><span></span>Đang hoạt động</span>
+    {% else %}
+      <span class="badge badge-red"><span></span>Ngừng hoạt động</span>
+    {% endif %}
+  </td>
+  <td data-col="hours">{{ g.operating_hours or '24/7' }}</td>
+  <td data-col="vehicle">{{ g.vehicle_type_name or 'Tất cả loại xe' }}</td>
+</tr>
+<tr class="kv-gate-detail-row" data-gate-detail="{{ row_key }}" hidden>
+  <td colspan="7">
+    <div class="kv-gate-detail-card">
+      <div class="kv-detail-tabs" role="tablist" aria-label="Chi tiết cổng {{ g.name }}">
+        <button type="button" class="kv-detail-tab active" role="tab" aria-selected="true" data-detail-tab="info">Thông tin</button>
+        <button type="button" class="kv-detail-tab" role="tab" aria-selected="false" data-detail-tab="staff">Nhân viên ({{ g.staff_count }})</button>
+      </div>
+
+      <div class="kv-detail-pane active" data-detail-pane="info">
+        <dl class="kv-detail-kv-grid">
+          <div>
+            <dt>Tên cổng</dt>
+            <dd>{{ g.name }}{% if g.is_central and g.subtitle %} — {{ g.subtitle }}{% endif %}</dd>
+          </div>
+          <div>
+            <dt>Vị trí / Khu vực</dt>
+            <dd>{{ g.location or '—' }}</dd>
+          </div>
+          <div>
+            <dt>Thiết lập làn</dt>
+            <dd>{{ zone_type_labels.get(g.zone_type, g.zone_type) }}</dd>
+          </div>
+          <div>
+            <dt>Giờ hoạt động</dt>
+            <dd>{{ g.operating_hours or '24/7' }}</dd>
+          </div>
+          <div>
+            <dt>Loại xe áp dụng</dt>
+            <dd>{{ g.vehicle_type_name or 'Tất cả loại xe' }}</dd>
+          </div>
+          <div>
+            <dt>Trạng thái</dt>
+            <dd>{{ 'Đang hoạt động' if g.status == 'active' else 'Ngừng hoạt động' }}</dd>
+          </div>
+          <div class="kv-detail-kv-full">
+            <dt>Ghi chú</dt>
+            <dd>{{ g.note or '—' }}</dd>
+          </div>
+        </dl>
+
+        <div class="kv-detail-actions">
+          {% if g.is_central %}
+            <button type="button" class="btn btn-primary btn-sm"
+              data-edit-gate
+              data-central="1"
+              data-id="0"
+              data-name="Cổng chính"
+              data-zone_type="{{ g.zone_type }}"
+              data-location="{{ g.location or '' }}"
+              data-vehicle_type_id="{{ g.vehicle_type_id or '' }}"
+              data-vehicle_type_ids="{{ g.vehicle_type_ids or '' }}"
+              data-operating_hours="{{ g.operating_hours or '24/7' }}"
+              data-status="{{ g.status }}"
+              data-note="{{ g.note or '' }}">Cập nhật</button>
+            <button type="button" class="btn btn-outline btn-sm" disabled title="Cổng trung tâm mặc định luôn hoạt động">Ngừng hoạt động</button>
+            <button type="button" class="btn btn-danger btn-sm" disabled title="Không thể xóa cổng trung tâm">Xóa</button>
+          {% else %}
+            <button type="button" class="btn btn-primary btn-sm"
+              data-edit-gate
+              data-id="{{ g.id }}"
+              data-name="{{ g.name }}"
+              data-zone_type="{{ g.zone_type }}"
+              data-location="{{ g.location or '' }}"
+              data-vehicle_type_id="{{ g.vehicle_type_id or '' }}"
+              data-vehicle_type_ids="{{ g.vehicle_type_ids or '' }}"
+              data-operating_hours="{{ g.operating_hours or '24/7' }}"
+              data-status="{{ g.status }}"
+              data-note="{{ g.note or '' }}">Cập nhật</button>
+            <form method="post" action="{{ url_for('toggle_zone', zone_id=g.id) }}">
+              <button type="submit" class="btn btn-outline btn-sm">{{ 'Ngừng hoạt động' if g.status == 'active' else 'Kích hoạt lại' }}</button>
+            </form>
+            <form method="post" action="{{ url_for('delete_zone', zone_id=g.id) }}" onsubmit="return confirm('Xóa cổng {{ g.name }}?');">
+              <button type="submit" class="btn btn-danger btn-sm">Xóa</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="kv-detail-pane" data-detail-pane="staff" hidden>
+        <div class="table-scroll">
+          <table class="kv-detail-staff-table" aria-label="Nhân viên tại {{ g.name }}">
+            <thead>
+              <tr>
+                <th>Nhân viên</th>
+                <th>Tên đăng nhập</th>
+                <th>Phân quyền</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for u in g.staff %}
+              <tr>
+                <td><a href="{{ url_for('accounts') }}" class="kv-store-link"><strong>{{ u.fullname }}</strong></a></td>
+                <td>{{ u.username }}</td>
+                <td>{{ u.role_label }}</td>
+                <td>
+                  {% if u.active_zone and (u.active_zone|lower == g.name|lower or g.is_central) %}
+                    <span class="badge badge-green"><span></span>Đang trực ca</span>
+                  {% elif u.status == 'active' %}
+                    <span class="badge badge-blue"><span></span>Đang hoạt động</span>
+                  {% else %}
+                    <span class="badge badge-red"><span></span>Tạm khóa</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="4" class="empty-cell">
+                  Chưa có nhân viên nào được phân công trực tại {{ g.name }}.
+                  <a href="{{ url_for('accounts') }}" class="kv-store-link">Phân công tại Quản lý nhân viên →</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </td>
+</tr>
+{% endmacro %}
+
+<section class="panel kv-zones-card" id="kv-sec-gates">
+  <div class="panel-heading">
+    <div>
+      <h2>Cài đặt cổng</h2>
+      <p>Quản lý thông tin, phân làn và nhân viên trực tại các cổng của bãi xe.</p>
+    </div>
+  </div>
+
+  <div class="kv-zones-toolbar">
+    <form method="get" action="{{ url_for('settings') }}" class="kv-zones-filter-form" id="gate-filter-form">
+      <input type="hidden" name="section" value="gates">
+      <select name="zone_status" onchange="this.form.submit()" aria-label="Lọc trạng thái cổng">
+        <option value="" {% if not zone_status %}selected{% endif %}>Tất cả trạng thái</option>
+        <option value="active" {% if zone_status == 'active' %}selected{% endif %}>Đang hoạt động</option>
+        <option value="inactive" {% if zone_status == 'inactive' %}selected{% endif %}>Ngừng hoạt động</option>
+      </select>
+      <select name="lane_type" onchange="this.form.submit()" aria-label="Lọc theo loại làn">
+        <option value="" {% if not lane_type %}selected{% endif %}>Tất cả loại làn</option>
+        <option value="gate_in" {% if lane_type == 'gate_in' %}selected{% endif %}>Làn vào</option>
+        <option value="gate_out" {% if lane_type == 'gate_out' %}selected{% endif %}>Làn ra</option>
+        <option value="gate_inout" {% if lane_type == 'gate_inout' %}selected{% endif %}>2 làn (Vào &amp; Ra)</option>
+      </select>
+      <div class="kv-zones-search">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="search" name="zone_q" value="{{ zone_q }}" placeholder="Tìm theo tên cổng, vị trí...">
+      </div>
+    </form>
+
+    <div class="kv-zones-toolbar-actions">
+      <button type="button" class="kv-btn-outline-primary" id="open-add-gate">+ Tạo cổng</button>
+      <div class="kv-col-options-wrap">
+        <button type="button" class="kv-btn-icon-only" id="kv-col-options-btn" title="Tùy chọn hiển thị cột" aria-haspopup="true" aria-expanded="false">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+        </button>
+        <div class="kv-col-options-popover" id="kv-col-options-popover" hidden>
+          <div class="kv-col-options-title">Hiển thị cột</div>
+          <label><input type="checkbox" data-col-toggle="name" checked> Tên cổng</label>
+          <label><input type="checkbox" data-col-toggle="location" checked> Vị trí / Khu vực</label>
+          <label><input type="checkbox" data-col-toggle="lane" checked> Thiết lập làn</label>
+          <label><input type="checkbox" data-col-toggle="staff" checked> SL nhân viên</label>
+          <label><input type="checkbox" data-col-toggle="status" checked> Trạng thái</label>
+          <label><input type="checkbox" data-col-toggle="hours" checked> Giờ hoạt động</label>
+          <label><input type="checkbox" data-col-toggle="vehicle" checked> Loại xe áp dụng</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-scroll">
+    <table class="kv-zones-table" id="kv-gates-table" aria-label="Danh sách cổng kiểm soát">
+      <thead>
+        <tr>
+          <th data-col="name">Tên cổng</th>
+          <th data-col="location">Vị trí / Khu vực</th>
+          <th data-col="lane">Thiết lập làn</th>
+          <th data-col="staff" class="right">SL nhân viên</th>
+          <th data-col="status">Trạng thái</th>
+          <th data-col="hours">Giờ hoạt động</th>
+          <th data-col="vehicle">Loại xe áp dụng</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if central_gate %}
+          {{ render_gate_row(central_gate) }}
+        {% endif %}
+        {% for g in gates %}
+          {{ render_gate_row(g) }}
+        {% endfor %}
+        {% if not central_gate and not gates %}
+        <tr>
+          <td colspan="7" class="empty-cell">Không tìm thấy cổng phù hợp với bộ lọc hiện tại.</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<dialog id="gate-dialog" class="customer-dialog kv-compact-dialog" aria-labelledby="gate-dialog-title">
+  <form method="post" action="{{ url_for('save_zone') }}">
+    <input type="hidden" name="zone_id" id="gate-id" value="">
+    <input type="hidden" name="is_central" id="gate-is-central" value="0">
+    <div class="customer-dialog-heading">
+      <h2 id="gate-dialog-title">Tạo cổng</h2>
+      <button type="button" data-close-dialog aria-label="Đóng">×</button>
+    </div>
+    <div class="customer-dialog-body">
+      <div class="customer-form-grid">
+        <div class="form-field">
+          <label for="gate-name">Tên cổng <span class="required">*</span></label>
+          <input id="gate-name" name="name" placeholder="VD: Cổng A, Cổng chính, Cổng 1" required maxlength="80">
+        </div>
+        <div class="form-field">
+          <label for="gate-lane-type">Thiết lập làn <span class="required">*</span></label>
+          <select id="gate-lane-type" name="zone_type" required>
+            <option value="gate_in">Làn vào</option>
+            <option value="gate_out">Làn ra</option>
+            <option value="gate_inout" selected>2 làn (Vào &amp; Ra)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="gate-location">Vị trí / Khu vực</label>
+          <input id="gate-location" name="location" placeholder="{{ store_settings.store_address or 'VD: Mặt tiền cổng chính, Hầm B1' }}" maxlength="160">
+        </div>
+        <div class="form-field">
+          <label for="gate-hours">Giờ hoạt động</label>
+          <input id="gate-hours" name="operating_hours" list="gate-hours-presets" value="24/7" placeholder="VD: 24/7 hoặc 06:00 - 22:00" maxlength="60">
+          <datalist id="gate-hours-presets">
+            <option value="24/7">
+            <option value="06:00 - 22:00">
+            <option value="05:30 - 23:00">
+            <option value="07:00 - 21:00">
+          </datalist>
+        </div>
+        <div class="form-field">
+          <label for="gate-status">Trạng thái</label>
+          <select id="gate-status" name="status">
+            <option value="active">Đang hoạt động</option>
+            <option value="inactive">Ngừng hoạt động</option>
+          </select>
+        </div>
+        <div class="form-field" style="grid-column: 1 / -1;">
+          <div class="kv-vt-head">
+            <label>Loại xe áp dụng <span class="kv-vt-hint">(Không chọn mục nào = Tất cả loại xe)</span></label>
+            <div class="kv-vt-presets">
+              <button type="button" class="kv-vt-preset-btn" data-vt-preset="all">Tất cả</button>
+              <button type="button" class="kv-vt-preset-btn" data-vt-preset="2w">Xe 2 bánh</button>
+              <button type="button" class="kv-vt-preset-btn" data-vt-preset="4w">Xe 4 bánh</button>
+            </div>
+          </div>
+          <div class="kv-vt-checkboxes" id="gate-vt-group">
+            {% for vt in vehicle_types %}
+              {% set vt_lower = vt.name|lower %}
+              {% set fallback_w = '4w' if ('ô tô' in vt_lower or 'o to' in vt_lower or 'xe tải' in vt_lower or '4 bánh' in vt_lower) else '2w' %}
+              {% set wheel_val = vt.wheel_group or fallback_w %}
+              <label class="kv-vt-check-item">
+                <input type="checkbox" name="vehicle_type_ids" value="{{ vt.id }}" data-wheel="{{ wheel_val }}">
+                <span>{{ vt.name }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="form-field" style="grid-column: 1 / -1;">
+          <label for="gate-note">Ghi chú</label>
+          <input id="gate-note" name="note" placeholder="VD: Cổng dành cho ô tô / giờ cao điểm" maxlength="255">
+        </div>
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-dialog>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>

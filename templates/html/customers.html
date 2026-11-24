@@ -1,0 +1,285 @@
+{% extends '_layout.html' %}
+{% from '_management_icons.html' import icon %}
+{% from '_customer_period_filter.html' import period_filter %}
+{% set active_page = 'customers' %}
+{% set is_admin = current_user_role == 'admin' %}
+{% block title %}Quản lý Khách hàng & Phương tiện — Smart Parking{% endblock %}
+{% block breadcrumb %}Khách hàng{% endblock %}
+{% block body_class %}invoice-screen customer-screen{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/css/invoices.css"><link rel="stylesheet" href="/css/users.css"><link rel="stylesheet" href="/css/customers.css">{% endblock %}
+
+{% macro sort_link(field, label) -%}<a href="{{ url_for('customers') }}?{{ query_string(sort=field, direction='asc' if filters.sort == field and filters.direction == 'desc' else 'desc', page=1) }}" class="invoice-sort" title="Sắp xếp theo {{ label|lower }}">{{ label }} {{ icon('sort',13) }}</a>{%- endmacro %}
+
+{% macro profile_fields(prefix, values, creating=false) -%}
+<div class="customer-form-top"><div class="customer-form-grid">
+  <div class="form-field"><label for="{{ prefix }}-fullname">Tên khách hàng <span class="required">*</span></label><input id="{{ prefix }}-fullname" name="fullname" value="{{ values.fullname or '' }}" placeholder="Bắt buộc" maxlength="160" autocomplete="name" required data-customer-name autofocus></div>
+  <div class="form-field"><label for="{{ prefix }}-code">Mã khách hàng</label><input id="{{ prefix }}-code" value="{{ values.code or '' }}" placeholder="Tự động" readonly tabindex="-1" data-profile-code></div>
+  <div class="form-field"><label for="{{ prefix }}-phone">Điện thoại</label><input id="{{ prefix }}-phone" type="tel" name="phone" value="{{ values.phone or '' }}" placeholder="Nhập số điện thoại" maxlength="32"></div>
+  <div class="customer-split-pair">
+    <div class="form-field"><label for="{{ prefix }}-dob">Ngày sinh</label><input id="{{ prefix }}-dob" type="date" name="dob" value="{{ values.dob or '' }}" data-profile-dob></div>
+    <div class="form-field"><label for="{{ prefix }}-gender">Giới tính</label><select id="{{ prefix }}-gender" name="gender" data-profile-gender><option value="">Chọn giới tính</option><option value="Nam"{% if values.gender == 'Nam' %} selected{% endif %}>Nam</option><option value="Nữ"{% if values.gender == 'Nữ' %} selected{% endif %}>Nữ</option><option value="Khác"{% if values.gender == 'Khác' %} selected{% endif %}>Khác</option></select></div>
+  </div>
+  <div class="form-field"><label for="{{ prefix }}-email">Email</label><input id="{{ prefix }}-email" type="email" name="email" value="{{ values.email or '' }}" placeholder="Nhập email" maxlength="254"></div>
+  <div class="form-field"><label for="{{ prefix }}-username">Tên đăng nhập <span class="required">*</span></label><input id="{{ prefix }}-username" name="username" required value="{{ values.username or '' }}" placeholder="Tên tài khoản khách hàng" data-profile-username></div>
+  {% if creating %}<div class="form-field"><label for="{{ prefix }}-password">Mật khẩu khởi tạo <span class="required">*</span></label><input id="{{ prefix }}-password" type="password" name="password" autocomplete="new-password" minlength="{{ min_password_len }}" placeholder="Tối thiểu {{ min_password_len }} ký tự" required></div>{% endif %}
+</div><label class="customer-form-avatar" for="{{ prefix }}-avatar-file"><span data-customer-avatar>KH</span><small>Khách hàng</small><img class="avatar-preview-img" hidden alt="Ảnh đại diện"><span class="customer-avatar-hover"><span class="customer-avatar-upload-btn">Thêm ảnh</span><span class="customer-avatar-hint">Mỗi ảnh không vượt quá 2Mb</span></span><input id="{{ prefix }}-avatar-file" type="file" accept="image/*" data-avatar-input hidden><input type="hidden" name="avatar_data" value="" data-avatar-data></label></div>
+{%- endmacro %}
+
+{% macro address_fields(prefix, values) -%}
+<details class="customer-form-section" open><summary>Địa chỉ</summary><div class="customer-form-section-body"><div class="form-field"><label for="{{ prefix }}-address">Địa chỉ</label><input id="{{ prefix }}-address" name="address" value="{{ values.address or '' }}" placeholder="Nhập địa chỉ" maxlength="500" autocomplete="street-address"></div><div class="customer-address-3col"><div class="form-field"><label for="{{ prefix }}-province">Tỉnh / Thành phố</label><input id="{{ prefix }}-province" name="province" value="{{ values.province or '' }}" placeholder="Tìm Tỉnh/Thành phố" maxlength="120" data-profile-province></div><div class="form-field"><label for="{{ prefix }}-district">Quận / Huyện</label><input id="{{ prefix }}-district" name="district" value="{{ values.district or '' }}" placeholder="Tìm Quận/Huyện" maxlength="120" data-profile-district></div><div class="form-field"><label for="{{ prefix }}-ward">Phường / Xã</label><input id="{{ prefix }}-ward" name="ward" value="{{ values.ward or '' }}" placeholder="Tìm Phường/Xã" maxlength="120" data-profile-ward></div></div></div></details>
+{%- endmacro %}
+
+{% macro note_fields(prefix, values) -%}
+<details class="customer-form-section" open><summary>Ghi chú</summary><div class="customer-form-section-body"><div class="form-field"><label class="visually-hidden" for="{{ prefix }}-note">Ghi chú khách hàng</label><textarea id="{{ prefix }}-note" name="customer_note" rows="3" maxlength="2000" placeholder="Nhập ghi chú về khách hàng gửi xe">{{ values.customer_note or '' }}</textarea></div></div></details>
+{%- endmacro %}
+
+{% block content %}
+<section class="invoice-page customer-page" aria-label="Quản lý khách hàng gửi xe" data-open-customer="{{ open_customer_id }}" data-next-code="{{ next_customer_code }}" data-price-info='{{ price_info|tojson }}' data-vietqr='{{ {"bin": vietqr_bank_bin, "bankName": vietqr_bank_name, "account": vietqr_account_number, "name": vietqr_account_name, "template": vietqr_template}|tojson }}'>
+  <div class="invoice-toolbar">
+    <h1>Khách hàng <span>{{ customer_count }}</span></h1>
+    <div class="invoice-search">{{ icon('search') }}<input type="search" name="q" form="customer-filters" value="{{ filters.q }}" placeholder="Theo mã, tên, điện thoại, biển số" aria-label="Tìm khách hàng"><button type="submit" form="customer-filters" aria-label="Tìm kiếm khách hàng">{{ icon('filter') }}</button></div>
+    <div class="invoice-actions"><button type="button" class="invoice-action invoice-mobile-filter" id="customer-filter-toggle" aria-controls="customer-filter-sidebar" aria-expanded="false">{{ icon('filter') }} Bộ lọc</button>{% if has_perm('customers.create') %}<button type="button" class="invoice-action invoice-action-primary" id="open-add-customer" aria-label="Thêm khách hàng">{{ icon('plus') }} <span>Khách hàng</span></button>{% endif %}{% if has_perm('customers.export') %}<a class="invoice-action" id="customer-export" href="{{ url_for('customers_export') }}?{{ query_string() }}" aria-label="Xuất file khách hàng">{{ icon('export') }} <span>Xuất file</span></a>{% endif %}<details class="invoice-column-picker customer-column-picker"><summary class="invoice-action invoice-action-square" aria-label="Cài đặt cột khách hàng" title="Cài đặt cột">{{ icon('columns') }}</summary><div><b>Cột hiển thị</b>{% for code,label in [('phone','Điện thoại'),('vehicles','Phương tiện'),('monthly','Vé tháng'),('fee','Tổng phí'),('status','Trạng thái')] %}<label><input type="checkbox" data-customer-column="{{ code }}" checked> {{ label }}</label>{% endfor %}</div></details></div>
+  </div>
+  {% for error in filter_errors %}<div class="error-banner" role="alert">{{ error }}</div>{% endfor %}
+  <div class="invoice-workspace">
+    <aside class="invoice-filters" id="customer-filter-sidebar" aria-label="Bộ lọc khách hàng"><form id="customer-filters" method="get" action="{{ url_for('customers') }}">
+      <input type="hidden" name="sort" value="{{ filters.sort }}"><input type="hidden" name="direction" value="{{ filters.direction }}">
+      <div class="invoice-filter-group"><label for="customer-group">Nhóm khách hàng</label><select id="customer-group" name="group" data-customer-auto-submit>{% for code,label in groups %}<option value="{{ code }}"{% if filters.group == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      {% for control in customer_time_controls %}{{ period_filter(control, period_groups) }}{% endfor %}
+      <div class="invoice-filter-group"><label>Tổng phí đã ghi nhận</label><div class="customer-amount-range"><label>Từ<input name="min_fee" type="number" min="0" step="1" value="{{ filters.min_fee }}" placeholder="Giá trị" aria-label="Tổng phí tối thiểu"></label><label>Đến<input name="max_fee" type="number" min="0" step="1" value="{{ filters.max_fee }}" placeholder="Giá trị" aria-label="Tổng phí tối đa"></label></div></div>
+      <div class="invoice-filter-group"><label for="customer-vehicle-type">Loại phương tiện</label><select id="customer-vehicle-type" name="vehicle_type" data-customer-auto-submit><option value="">Tất cả loại xe</option>{% for type in vehicle_types %}<option value="{{ type.id }}"{% if filters.vehicle_type == type.id|string %} selected{% endif %}>{{ type.name }}</option>{% endfor %}</select></div>
+      <fieldset class="customer-status-filter"><legend>Trạng thái</legend>{% for value,label in [('', 'Tất cả'),('active','Đang hoạt động'),('locked','Đã khóa')] %}<label><input type="radio" name="status" value="{{ value }}"{% if filters.status == value %} checked{% endif %} data-customer-auto-submit> {{ label }}</label>{% endfor %}</fieldset>
+      <button type="submit" class="invoice-action invoice-action-primary invoice-apply">Áp dụng bộ lọc</button><a class="invoice-reset" href="{{ url_for('customers') }}">Đặt lại bộ lọc</a>
+    </form></aside>
+    <div class="invoice-results customer-results">
+      <div class="invoice-selection" id="customer-selection" hidden><span>Đã chọn <b id="customer-selected-count">0</b> khách hàng</span><a id="customer-export-selected" href="#">{{ icon('export',16) }} Xuất file đã chọn</a></div>
+      <div class="invoice-table-scroll"><table class="invoice-table customer-table" aria-label="Danh sách khách hàng">
+        <thead><tr><th class="invoice-check"><input id="customer-select-all" type="checkbox" aria-label="Chọn tất cả khách hàng trên trang"></th><th>{{ sort_link('code','Mã khách hàng') }}</th><th>{{ sort_link('name','Tên khách hàng') }}</th><th data-customer-cell="phone">Điện thoại</th><th data-customer-cell="vehicles">{{ sort_link('vehicles','Phương tiện') }}</th><th data-customer-cell="monthly">{{ sort_link('monthly','Vé tháng còn hạn') }}</th><th class="invoice-money" data-customer-cell="fee">{{ sort_link('fee','Tổng phí') }}</th><th data-customer-cell="status">Trạng thái</th></tr></thead>
+        <tbody>
+          <tr class="invoice-summary"><td colspan="4" data-customer-summary-leading>Tổng cộng <span>({{ customer_count }} khách hàng)</span></td><td data-customer-cell="vehicles">{{ total_vehicle_count }}</td><td data-customer-cell="monthly">{{ total_monthly_count }}</td><td class="invoice-money" data-customer-cell="fee">{{ total_customer_fee|vnd }}</td><td data-customer-cell="status"></td></tr>
+          {% for customer in customers %}
+          <tr class="customer-row" data-customer-row="{{ customer.id }}"><td class="invoice-check"><input type="checkbox" data-select-customer="{{ customer.id }}" aria-label="Chọn khách hàng {{ customer.code }}"></td><td><button type="button" class="invoice-code" data-toggle-customer="{{ customer.id }}" aria-expanded="false" aria-controls="customer-detail-{{ customer.id }}">{{ customer.code }}</button></td><td class="customer-name-cell">{{ customer.fullname }}</td><td data-customer-cell="phone">{{ customer.phone or '—' }}</td><td data-customer-cell="vehicles">{{ customer.vehicle_count }}</td><td data-customer-cell="monthly">{{ customer.monthly_count }}</td><td class="invoice-money" data-customer-cell="fee">{{ customer.total_fee|vnd }}</td><td data-customer-cell="status"><span class="customer-state {{ 'active' if customer.status == 'active' else 'locked' }}">{{ 'Hoạt động' if customer.status == 'active' else 'Đã khóa' }}</span></td></tr>
+          <tr class="customer-detail-row" id="customer-detail-{{ customer.id }}" hidden><td colspan="8" data-customer-colspan>
+            <section class="customer-detail" aria-label="Hồ sơ {{ customer.fullname }}">
+              <div class="customer-tabs" role="tablist" aria-label="Chi tiết {{ customer.code }}">{% for key,label in [('info','Thông tin'),('vehicles','Phương tiện & vé'),('history','Lịch sử gửi xe')] %}<button type="button" role="tab" id="customer-tab-{{ customer.id }}-{{ key }}" aria-controls="customer-panel-{{ customer.id }}-{{ key }}" aria-selected="{{ 'true' if key == 'info' else 'false' }}" tabindex="{{ '0' if key == 'info' else '-1' }}" data-customer-tab="{{ key }}">{{ label }}</button>{% endfor %}<button type="button" class="customer-detail-close" data-close-customer="{{ customer.id }}" aria-label="Đóng hồ sơ {{ customer.code }}">{{ icon('close') }}</button></div>
+              <div class="customer-tab-panel" role="tabpanel" id="customer-panel-{{ customer.id }}-info" aria-labelledby="customer-tab-{{ customer.id }}-info" data-customer-panel="info">
+                <div class="customer-profile-heading"><div class="customer-profile-avatar">{% if customer.avatar %}<img src="{{ customer.avatar }}" alt="">{% else %}{{ customer.initials }}{% endif %}</div><div><h2>{{ customer.fullname }} <small>{{ customer.code }}</small></h2><p>Tài khoản: <b>{{ customer.username }}</b><span>Ngày tạo: {{ customer.created_label }}</span><span>Nhóm: {{ customer.group_label }}</span></p></div></div>
+                <dl class="customer-profile-grid"><div><dt>Điện thoại</dt><dd>{{ customer.phone or 'Chưa cập nhật' }}</dd></div><div><dt>Email</dt><dd>{{ customer.email or 'Chưa cập nhật' }}</dd></div><div><dt>Trạng thái tài khoản</dt><dd>{{ 'Đang hoạt động' if customer.status == 'active' else 'Đã khóa' }}</dd></div><div><dt>Phương tiện đăng ký</dt><dd>{{ customer.vehicle_count }} xe · {{ customer.parking_count }} xe đang trong bãi</dd></div><div><dt>Vé tháng còn hạn</dt><dd>{{ customer.monthly_count }} vé</dd></div><div><dt>Lần vào bãi cuối</dt><dd>{{ customer.last_visit_label }}</dd></div><div class="customer-address"><dt>Địa chỉ</dt><dd>{{ customer.address or 'Chưa cập nhật' }}</dd></div></dl>
+                <p class="customer-profile-note">{{ customer.customer_note or 'Chưa có ghi chú' }}</p>
+                <div class="customer-detail-actions">{% if has_perm('customers.delete') %}<form method="post" action="{{ url_for('remove_user',user_id=customer.id) }}" data-confirm-action="Xóa tài khoản {{ customer.username }} và các phương tiện đã đăng ký?"><button type="submit" class="invoice-action customer-danger">Xóa</button></form>{% endif %}{% if has_perm('customers.edit') %}<button type="button" class="invoice-action invoice-action-primary" data-edit-customer data-id="{{ customer.id }}" data-action="{{ url_for('customer_profile_save',user_id=customer.id) }}" data-code="{{ customer.code }}" data-username="{{ customer.username }}" data-fullname="{{ customer.fullname }}" data-phone="{{ customer.phone or '' }}" data-email="{{ customer.email or '' }}" data-dob="{{ customer.dob or '' }}" data-gender="{{ customer.gender or '' }}" data-address="{{ customer.address or '' }}" data-province="{{ customer.province or '' }}" data-district="{{ customer.district or '' }}" data-ward="{{ customer.ward or '' }}" data-customer-note="{{ customer.customer_note or '' }}" data-avatar="{{ customer.avatar or '' }}" data-vehicles='{{ customer.vehicles|tojson }}'>{{ icon('edit') }} Chỉnh sửa</button>{% endif %}{% if is_admin and has_perm('customers.edit') %}<form method="post" action="{{ url_for('toggle_user',user_id=customer.id) }}" data-confirm-action="{{ 'Khóa' if customer.status == 'active' else 'Mở khóa' }} tài khoản {{ customer.username }}?"><button type="submit" class="invoice-action">{{ 'Ngừng hoạt động' if customer.status == 'active' else 'Mở hoạt động' }}</button></form>{% endif %}</div>
+              </div>
+              <div class="customer-tab-panel" role="tabpanel" id="customer-panel-{{ customer.id }}-vehicles" aria-labelledby="customer-tab-{{ customer.id }}-vehicles" data-customer-panel="vehicles" hidden>
+                <div class="customer-panel-heading"><h2>Phương tiện đăng ký <span>{{ customer.vehicle_count }}</span></h2>{% if has_perm('monthly.create') or has_perm('monthly.renew') %}<button type="button" class="invoice-action invoice-action-primary" data-edit-customer data-id="{{ customer.id }}" data-action="{{ url_for('customer_profile_save',user_id=customer.id) }}" data-code="{{ customer.code }}" data-username="{{ customer.username }}" data-fullname="{{ customer.fullname }}" data-phone="{{ customer.phone or '' }}" data-email="{{ customer.email or '' }}" data-address="{{ customer.address or '' }}" data-customer-note="{{ customer.customer_note or '' }}" data-avatar="{{ customer.avatar or '' }}" data-vehicles='{{ customer.vehicles|tojson }}'>{{ icon('plus') }} Đăng ký xe / Gia hạn vé</button>{% endif %}</div>
+                {% if customer.vehicles %}<table class="customer-subtable"><thead><tr><th>Biển số</th><th>Loại xe</th><th>Loại vé</th><th>Thời hạn vé tháng</th><th>Trạng thái gửi xe</th><th></th></tr></thead><tbody>{% for v in customer.vehicles %}<tr><td><b>{{ v.plate_number }}</b></td><td>{{ v.vehicle_type_name or 'Chưa phân loại' }}</td><td>{{ v.ticket_label }}</td><td>{{ v.expires_on|vdate if v.expires_on else '—' }}</td><td><span class="customer-state {{ 'active' if v.in_parking else '' }}">{{ 'Đang trong bãi' if v.in_parking else 'Ngoài bãi' }}</span></td><td><a href="{{ url_for('history',plate=v.plate_number) }}">Tra cứu lượt gửi</a></td></tr>{% endfor %}</tbody></table>{% else %}<p class="customer-panel-empty">Khách hàng chưa đăng ký phương tiện.</p>{% endif %}
+              </div>
+              <div class="customer-tab-panel" role="tabpanel" id="customer-panel-{{ customer.id }}-history" aria-labelledby="customer-tab-{{ customer.id }}-history" data-customer-panel="history" hidden>
+                <div class="customer-panel-heading"><h2>Lịch sử gửi xe</h2><span>{{ customer.visit_count }} lượt · Phí gửi xe {{ customer.parking_fee|vnd }} · Vé tháng {{ customer.monthly_fee|vnd }}</span></div>
+                {% if customer.history %}<table class="customer-subtable"><thead><tr><th>Mã lượt</th><th>Biển số</th><th>Thời gian vào</th><th>Thời gian ra</th><th>Vị trí</th><th class="right">Phí thu</th></tr></thead><tbody>{% for r in customer.history[:20] %}<tr><td>#{{ r.id }}</td><td><a href="{{ url_for('history',plate=r.plate_number) }}">{{ r.plate_number }}</a></td><td>{{ r.entry_label }}</td><td>{{ r.exit_label }}</td><td>{{ r.slot_name or '—' }}</td><td class="right">{{ r.fee|vnd if r.fee is not none else '—' }}</td></tr>{% endfor %}</tbody></table>{% if customer.history|length > 20 %}<p class="customer-history-note">Hiển thị 20 lượt gần nhất. Chọn biển số để tra cứu toàn bộ lịch sử.</p>{% endif %}{% else %}<p class="customer-panel-empty">Chưa có lượt gửi xe của các phương tiện đang liên kết.</p>{% endif %}
+              </div>
+            </section>
+          </td></tr>
+          {% else %}<tr><td colspan="8" class="invoice-empty" data-customer-colspan>{{ icon('users',42) }}<h2>Không tìm thấy khách hàng</h2><p>Thay đổi bộ lọc hoặc thêm khách hàng để đăng ký phương tiện.</p><a href="{{ url_for('customers') }}">Đặt lại bộ lọc</a></td></tr>{% endfor %}
+        </tbody>
+      </table></div>
+      <div class="invoice-pagination"><div><span>Hiển thị {{ first_item }}–{{ last_item }} / {{ customer_count }} khách hàng</span><label>Số dòng <select name="per_page" form="customer-filters" data-customer-auto-submit aria-label="Số khách hàng mỗi trang">{% for size in [20,50,100] %}<option value="{{ size }}"{% if per_page == size %} selected{% endif %}>{{ size }}</option>{% endfor %}</select></label></div><nav aria-label="Phân trang khách hàng">{% if page > 1 %}<a aria-label="Trang trước" href="{{ url_for('customers') }}?{{ query_string(page=page-1) }}">{{ icon('left',16) }}</a>{% else %}<span aria-disabled="true">{{ icon('left',16) }}</span>{% endif %}<span class="invoice-page-number">{{ page }} / {{ pages }}</span>{% if page < pages %}<a aria-label="Trang sau" href="{{ url_for('customers') }}?{{ query_string(page=page+1) }}">{{ icon('right',16) }}</a>{% else %}<span aria-disabled="true">{{ icon('right',16) }}</span>{% endif %}</nav></div>
+    </div>
+  </div>
+  <p class="customer-stat-note">Số liệu lượt gửi và tổng phí được tính theo các phương tiện đang liên kết với khách hàng.</p>
+</section>
+
+<dialog id="add-customer-dialog" class="customer-dialog"{% if open_modal %} data-open-on-load{% endif %} aria-labelledby="add-customer-title">
+  <form method="post" action="{{ url_for('add_customer') }}">
+    <div class="customer-dialog-heading"><h2 id="add-customer-title">Thêm khách hàng</h2><button type="button" data-close-dialog aria-label="Đóng form thêm khách hàng">{{ icon('close',20) }}</button></div>
+    <div class="customer-dialog-body">
+      {% if form_errors %}<div class="error-banner" role="alert">{% for error in form_errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+      {{ profile_fields('new',form or {},true) }}
+      {{ address_fields('new',form or {}) }}
+      <details class="customer-form-section" open><summary>Phương tiện & vé gửi xe <small>Không bắt buộc</small></summary><div class="customer-form-section-body">{% include '_customer_vehicle_rows.html' %}</div></details>
+      {{ note_fields('new',form or {}) }}
+    </div>
+    <div class="customer-dialog-footer"><button type="button" class="invoice-action" data-close-dialog>Bỏ qua</button><button type="submit" class="invoice-action invoice-action-primary">Lưu</button></div>
+  </form>
+</dialog>
+
+<form method="post" action="" id="edit-vehicle-action-form" hidden>
+  <input type="hidden" name="next" value="customers">
+  <input type="hidden" name="months" id="edit-vehicle-months-val" value="1">
+  <input type="hidden" name="payment_method" id="edit-vehicle-payment-val" value="cash">
+</form>
+
+<dialog id="edit-customer-dialog" class="customer-dialog"{% if open_edit_modal %} data-open-on-load{% endif %} aria-labelledby="edit-customer-title"><form method="post"{% if edit_form %} action="{{ url_for('customer_profile_save',user_id=edit_form.id) }}"{% endif %}><div class="customer-dialog-heading"><h2 id="edit-customer-title">Sửa khách hàng</h2><button type="button" data-close-dialog aria-label="Đóng form chỉnh sửa khách hàng">{{ icon('close',20) }}</button></div><div class="customer-dialog-body">{% if edit_errors %}<div class="error-banner" role="alert">{% for error in edit_errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}{{ profile_fields('edit',edit_form or {}) }}{{ address_fields('edit',edit_form or {}) }}{% if is_admin %}<details class="customer-form-section"><summary>Đặt lại mật khẩu <small>Để trống nếu không đổi</small></summary><div class="customer-form-section-body"><div class="customer-form-grid"><div class="form-field"><label for="edit-new-password">Mật khẩu mới</label><input id="edit-new-password" type="password" name="new_password" autocomplete="new-password" minlength="{{ min_password_len }}" placeholder="Tối thiểu {{ min_password_len }} ký tự"></div><div class="form-field"><label for="edit-confirm-password">Nhập lại mật khẩu mới</label><input id="edit-confirm-password" type="password" name="confirm_password" autocomplete="new-password" minlength="{{ min_password_len }}" placeholder="Xác nhận mật khẩu mới"></div></div></div></details>{% endif %}<details class="customer-form-section" open><summary>Phương tiện đã đăng ký</summary><div class="customer-form-section-body"><div class="registered-vehicle-list" id="edit-existing-vehicles-list"><p class="registered-vehicle-empty">Khách hàng chưa đăng ký phương tiện.</p></div></div></details><details class="customer-form-section" open><summary>Đăng ký thêm phương tiện mới <small>Không bắt buộc</small></summary><div class="customer-form-section-body"><div class="customer-vehicle-rows" id="edit-vehicle-rows"><div class="customer-vehicle-row" data-edit-vrow><input type="hidden" name="ticket_type" value="month"><div class="form-field"><label>Biển số xe</label><input name="plate" placeholder="VD: 59A1-12345"></div><div class="form-field"><label>Loại xe</label><select name="vehicle_type_id"><option value="">Chọn loại xe</option>{% for vt in vehicle_types %}<option value="{{ vt.id }}">{{ vt.name }}</option>{% endfor %}</select></div><div class="form-field" data-edit-months><label>Số tháng thuê</label><input type="number" name="months" min="1" max="{{ max_months }}" value="1"></div><button type="button" class="customer-remove-vehicle" data-remove-edit-vrow title="Xóa dòng">{{ icon('close',18) }}</button></div></div><div class="customer-vehicle-footer"><button type="button" id="add-edit-vehicle-row">{{ icon('plus',17) }} Thêm dòng phương tiện</button></div>{% include '_monthly_payment_box.html' %}</div></details>{{ note_fields('edit',edit_form or {}) }}</div><div class="customer-dialog-footer"><button type="button" class="invoice-action" data-close-dialog>Bỏ qua</button><button type="submit" class="invoice-action invoice-action-primary">Lưu thay đổi</button></div></form></dialog>
+{% endblock %}
+{% block extra_js %}
+<script src="/static/js/customers.js" defer></script>
+<script>
+document.querySelectorAll('[data-avatar-input]').forEach(function (inp) {
+  inp.addEventListener('change', function () {
+    var file = inp.files && inp.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Mỗi ảnh không vượt quá 2Mb.');
+      inp.value = '';
+      return;
+    }
+    var wrap = inp.closest('.customer-form-avatar');
+    var img = wrap && wrap.querySelector('.avatar-preview-img');
+    var hid = wrap && wrap.querySelector('[data-avatar-data]');
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      var res = ev.target && ev.target.result ? String(ev.target.result) : '';
+      if (hid) hid.value = res;
+      if (img && res) {
+        img.src = res;
+        img.hidden = false;
+        wrap.classList.add('has-preview');
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+});
+document.querySelectorAll('[data-edit-customer]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var dlg = document.getElementById('edit-customer-dialog');
+    if (!dlg) return;
+    var wrap = dlg.querySelector('.customer-form-avatar');
+    var dobInp = dlg.querySelector('[data-profile-dob]');
+    var genderSel = dlg.querySelector('[data-profile-gender]');
+    var provInp = dlg.querySelector('[data-profile-province]');
+    var distInp = dlg.querySelector('[data-profile-district]');
+    var wardInp = dlg.querySelector('[data-profile-ward]');
+    if (dobInp) dobInp.value = btn.dataset.dob || '';
+    if (genderSel) genderSel.value = btn.dataset.gender || '';
+    if (provInp) provInp.value = btn.dataset.province || '';
+    if (distInp) distInp.value = btn.dataset.district || '';
+    if (wardInp) wardInp.value = btn.dataset.ward || '';
+    var img = wrap && wrap.querySelector('.avatar-preview-img');
+    var hid = wrap && wrap.querySelector('[data-avatar-data]');
+    if (hid) hid.value = '';
+    if (img && wrap) {
+      if (btn.dataset.avatar) {
+        img.src = btn.dataset.avatar;
+        img.hidden = false;
+        wrap.classList.add('has-preview');
+      } else {
+        img.src = '';
+        img.hidden = true;
+        wrap.classList.remove('has-preview');
+      }
+    }
+    var vWrap = document.getElementById('edit-existing-vehicles-list');
+    var actForm = document.getElementById('edit-vehicle-action-form');
+    if (vWrap) {
+      var vlist = [];
+      try { vlist = JSON.parse(btn.dataset.vehicles || '[]'); } catch (e) { vlist = []; }
+      vWrap.innerHTML = '';
+      if (!vlist.length) {
+        vWrap.innerHTML = '<p class="registered-vehicle-empty">Khách hàng chưa đăng ký phương tiện.</p>';
+      } else {
+        var pageEl = document.querySelector('.customer-page');
+        var priceInfo = {};
+        var qrCfg = {};
+        try { priceInfo = JSON.parse(pageEl.dataset.priceInfo || '{}'); } catch (e) {}
+        try { qrCfg = JSON.parse(pageEl.dataset.vietqr || '{}'); } catch (e) {}
+        var pmOptions = '{% for code, label in payment_methods.items() %}<option value="{{ code }}">{{ "Chuyển khoản (VietQR)" if code == "transfer" else label }}</option>{% endfor %}';
+
+        vlist.forEach(function (v) {
+          var card = document.createElement('div');
+          card.className = 'registered-vehicle-card';
+          card.innerHTML =
+            '<div class="customer-form-grid">' +
+              '<div class="form-field"><label>Biển số</label><input type="text" readonly value="' + (v.plate_number || '') + '"></div>' +
+              '<div class="form-field"><label>Loại xe</label><input type="text" readonly value="' + (v.vehicle_type_name || 'Chưa phân loại') + '"></div>' +
+              '<div class="form-field"><label>Loại vé</label><input type="text" readonly value="' + (v.ticket_label || '') + '"></div>' +
+              '<div class="form-field"><label>Thời hạn</label><input type="text" readonly value="' + (v.expires_on || '—') + '"></div>' +
+              '<div class="form-field"><label>Gia hạn (tháng)</label><input type="number" min="1" max="{{ max_months }}" value="1" class="reg-renew-months"></div>' +
+              '<div class="form-field"><label>Phương thức thanh toán</label><select class="reg-renew-method">' + pmOptions + '</select></div>' +
+              '<div class="form-field"><label>Số tiền cần thanh toán</label><input type="text" readonly class="reg-renew-amount" value="0 đ"></div>' +
+              '<div class="form-field"><label>Thao tác</label><div class="registered-vehicle-actions">' +
+                '<button type="button" class="invoice-action invoice-action-primary" data-renew-vid="' + v.id + '">Gia hạn &amp; thanh toán</button>' +
+                '<button type="button" class="invoice-action customer-danger" data-del-vid="' + v.id + '">Hủy xe</button>' +
+              '</div></div>' +
+            '</div>' +
+            '<div class="customer-payment-qr reg-renew-qr" hidden>' +
+              '<img class="reg-renew-qr-img" src="" alt="Mã VietQR gia hạn vé tháng" width="132" height="132">' +
+              '<div class="customer-payment-qr-info">' +
+                '<b>' + (qrCfg.bankName || '') + ' · ' + (qrCfg.account || '') + '</b>' +
+                '<span>Chủ TK: ' + (qrCfg.name || '') + '</span>' +
+                '<span>Số tiền: <strong class="reg-renew-qr-amt">0 đ</strong></span>' +
+                '<span>Nội dung: <code class="reg-renew-qr-memo">VE-THANG</code></span>' +
+              '</div>' +
+            '</div>';
+
+          var mInp = card.querySelector('.reg-renew-months');
+          var pmSel = card.querySelector('.reg-renew-method');
+          var amtInp = card.querySelector('.reg-renew-amount');
+          var qrBox = card.querySelector('.reg-renew-qr');
+          var qrImg = card.querySelector('.reg-renew-qr-img');
+          var qrAmt = card.querySelector('.reg-renew-qr-amt');
+          var qrMemo = card.querySelector('.reg-renew-qr-memo');
+
+          function syncCard() {
+            var m = Math.max(1, parseInt(mInp.value, 10) || 1);
+            var info = v.vehicle_type_id ? priceInfo[v.vehicle_type_id] : null;
+            var unit = info && info.month != null ? Number(info.month) : null;
+            var total = unit !== null ? unit * m : 0;
+            amtInp.value = unit === null ? 'Chưa có giá tháng' : total.toLocaleString('vi-VN') + ' đ';
+            var showQr = pmSel.value === 'transfer' && total > 0 && qrCfg.bin && qrCfg.account;
+            qrBox.hidden = !showQr;
+            if (showQr) {
+              var memo = ('VE-THANG-' + (btn.dataset.code || 'KH')).slice(0, 50);
+              qrAmt.textContent = total.toLocaleString('vi-VN') + ' đ';
+              qrMemo.textContent = memo;
+              qrImg.src = 'https://img.vietqr.io/image/' + qrCfg.bin + '-' + encodeURIComponent(qrCfg.account) + '-' +
+                (qrCfg.template || 'compact2') + '.png?amount=' + total + '&addInfo=' + encodeURIComponent(memo) +
+                '&accountName=' + encodeURIComponent(qrCfg.name || '');
+            }
+          }
+
+          mInp.addEventListener('input', syncCard);
+          pmSel.addEventListener('change', syncCard);
+          card.querySelector('[data-renew-vid]').addEventListener('click', function () {
+            if (!actForm) return;
+            document.getElementById('edit-vehicle-months-val').value = mInp.value || '1';
+            document.getElementById('edit-vehicle-payment-val').value = pmSel.value || 'cash';
+            actForm.action = '/users/' + btn.dataset.id + '/vehicles/' + v.id + '/renew';
+            actForm.submit();
+          });
+          card.querySelector('[data-del-vid]').addEventListener('click', function () {
+            if (!actForm || !confirm('Hủy đăng ký xe này?')) return;
+            actForm.action = '/users/' + btn.dataset.id + '/vehicles/' + v.id + '/delete';
+            actForm.submit();
+          });
+          syncCard();
+          vWrap.appendChild(card);
+        });
+      }
+    }
+  });
+});
+(function () {
+  var wrap = document.getElementById('edit-vehicle-rows');
+  var addBtn = document.getElementById('add-edit-vehicle-row');
+  if (!wrap) return;
+  function bindEditRow(row) {
+    var rm = row.querySelector('[data-remove-edit-vrow]');
+    if (rm) {
+      rm.addEventListener('click', function () {
+        if (wrap.querySelectorAll('[data-edit-vrow]').length > 1) row.remove();
+        else row.querySelectorAll('input').forEach(function (i) { if (i.name === 'plate') i.value = ''; });
+      });
+    }
+  }
+  wrap.querySelectorAll('[data-edit-vrow]').forEach(bindEditRow);
+  if (addBtn) {
+    addBtn.addEventListener('click', function () {
+      var first = wrap.querySelector('[data-edit-vrow]');
+      if (!first) return;
+      var clone = first.cloneNode(true);
+      clone.querySelectorAll('input').forEach(function (i) { if (i.name === 'plate') i.value = ''; });
+      wrap.appendChild(clone);
+      bindEditRow(clone);
+    });
+  }
+})();
+</script>
+{% endblock %}

@@ -1,222 +1,478 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xe vào / ra - Smart Parking</title>
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='entry_exit.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='gate.css') }}">
-</head>
-<body>
-<div class="wrap narrow">
+{% extends "_cabin_layout.html" %}
+{% set active_page = direction %}
+{% set is_entry = (direction == 'entry') %}
+{% set has_preview = (preview_url is not none and preview_url != '') %}
+{% set occ_rate = ((counts.occupied * 100 / counts.total)|round|int) if counts and counts.total else 0 %}
 
-    <!-- ============ TIÊU ĐỀ ============ -->
-    <header class="topbar">
-        <div class="topbar-left">
-            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
-            <div>
-                <h1>🚗 Xe vào / ra</h1>
-                <p>Chọn ảnh biển số → Nhận diện → Xác nhận. Biển số chưa có trong bãi là xe vào, đang gửi là xe ra.</p>
-            </div>
-        </div>
-        <div class="topbar-right">
-            <div class="user-chip">
-                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
-                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
-            </div>
-        </div>
-    </header>
+{% block title %}{{ 'Xe vào bãi' if is_entry else 'Xe ra bãi' }} — Smart Parking{% endblock %}
+{% block breadcrumb %}{{ 'Cổng xe vào bãi' if is_entry else 'Cổng xe ra bãi' }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/entry_exit.css">
+{% endblock %}
 
-    <!-- ============ THÔNG BÁO ============ -->
-    <div class="toasts" id="toasts">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-            <div class="toast toast-{{ category }}" role="status">
-                <span>{{ message }}</span>
-                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
-            </div>
-            {% endfor %}
-        {% endwith %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>
+      {{ 'XE VÀO BÃI' if is_entry else 'XE RA BÃI' }}
+      <span class="simulation-label">
+        <span class="live-dot"></span>
+        {{ 'LÀN VÀO · AI OCR' if is_entry else 'LÀN RA · AI OCR' }}
+      </span>
+    </h1>
+    <p>
+      {% if is_entry %}
+        Nhận diện biển số phương tiện vào bãi, phân loại xe và gán vị trí ô đỗ
+      {% else %}
+        Nhận diện biển số phương tiện rời bãi, đối chiếu lượt gửi và tính phí tự động theo khung giờ
+      {% endif %}
+    </p>
+  </div>
+  <div class="heading-actions">
+    <div class="segmented">
+      <a href="{{ url_for('entry') }}" class="{% if is_entry %}selected{% endif %}">Làn Xe Vào</a>
+      <a href="{{ url_for('exit_gate') }}" class="{% if not is_entry %}selected{% endif %}">Làn Xe Ra</a>
     </div>
-
-    <div class="card">
-        <form method="POST" enctype="multipart/form-data" id="gate-form">
-            <input type="hidden" name="token" value="{{ token }}">
-            <input type="hidden" name="checked_plate" value="{{ plate if mode else '' }}">
-
-            <div class="field">
-                <label for="image">Chọn hình ảnh biển số:</label>
-                <input type="file" id="image" name="image" accept="image/*" capture="environment">
-            </div>
-
-            <div class="field">
-                <label for="note">Ghi chú (nếu không nhận diện được biển số):</label>
-                <input type="text" id="note" name="note" value="{{ note }}" maxlength="200">
-            </div>
-
-            <div class="field">
-                <label for="plate">Biển số vừa nhận diện được:</label>
-                <input type="text" id="plate" name="plate" value="{{ plate }}" placeholder="Chưa nhận diện" autocomplete="off">
-                {% if token %}
-                <p class="field-hint">Nhận diện sai? Sửa lại biển số (gõ <code>61T3-2222</code> hoặc <code>61T32222</code> đều được) rồi bấm <strong>Nhận diện biển số</strong> để cập nhật thông tin bên dưới.</p>
-                {% endif %}
-            </div>
-
-            {% if token %}
-            <!-- ================= ẢNH BIỂN SỐ ĐÃ NHẬN DIỆN (nằm trước khung xe vào / xe ra) ================= -->
-            <div class="preview-section">
-                <div class="preview-head">
-                    <span class="badge-blue">Hình ảnh biển số vừa chọn</span>
-                    {% if plate %}<span class="badge-green">{{ plate }}</span>{% endif %}
-                </div>
-                {% if preview_url %}
-                <div class="preview-box"><img src="{{ preview_url }}" alt="Ảnh biển số đã nhận diện"></div>
-                {% endif %}
-            </div>
-            {% endif %}
-
-            {% if registered %}
-            <div class="reg-info {{ 'reg-month' if reg_month_ok }}{{ ' reg-expired' if reg_expired }}">
-                ✅ <strong>Xe đã đăng ký</strong> — tài khoản <strong>{{ registered['fullname'] }}</strong> ({{ registered['username'] }})
-                · {{ registered['vehicle_type_name'] or 'chưa chọn loại xe' }}
-                · {{ 'Vé tháng' if registered['ticket_type'] == 'month' else 'Vé lượt' }}
-                {% if registered['ticket_type'] == 'month' %}
-                    · hết hạn {{ registered['expires_on'] }}
-                    {% if reg_month_ok %}<span class="reg-note">(còn hạn)</span>
-                    {% else %}<span class="reg-note">(ĐÃ HẾT HẠN — tính phí như vé lượt)</span>{% endif %}
-                {% endif %}
-            </div>
-            {% elif suggest %}
-            <div class="reg-suggest">
-                💡 Biển số này gần giống xe đã đăng ký <strong>{{ suggest['plate_number'] }}</strong> (tài khoản {{ suggest['username'] }}).
-                Nếu đúng là xe đó, hãy sửa ô biển số rồi bấm <em>Nhận diện biển số</em> lại.
-            </div>
-            {% endif %}
-
-            {% if mode == 'exit' %}
-            <!-- ================= XE RA ================= -->
-            <div class="mode-panel mode-exit">
-                <div class="mode-title">🚪 XE RA BÃI — biển số <strong>{{ plate }}</strong> đang gửi trong bãi</div>
-                <table class="info-table">
-                    <tr><td>Loại xe</td><td>{{ record['vehicle_type_name'] or '—' }}</td></tr>
-                    <tr><td>Vị trí đỗ</td><td>{{ record['slot_name'] or '—' }}</td></tr>
-                    <tr><td>Giờ vào</td><td>{{ record['entry_time'].replace('T', ' ') }}</td></tr>
-                    <tr><td>Đã gửi</td><td>{{ fee_preview.duration }}</td></tr>
-                    <tr><td>Phí tạm tính</td><td><strong>{{ '{:,}'.format(fee_preview.fee).replace(',', '.') }} VNĐ</strong>
-                        <span class="muted">({{ fee_preview.note }})</span></td></tr>
-                    {% if record['note'] %}<tr><td>Ghi chú lúc vào</td><td>{{ record['note'] }}</td></tr>{% endif %}
-                </table>
-                <p class="field-hint">Phí được chốt lại tại thời điểm bấm Xác nhận.</p>
-            </div>
-
-            {% elif mode == 'entry' %}
-            <!-- ================= XE VÀO ================= -->
-            <div class="mode-panel mode-entry">
-                <div class="mode-title">🚗 XE VÀO BÃI — biển số <strong>{{ plate }}</strong> chưa có trong bãi</div>
-
-                {% if reg_type %}
-                <div class="field">
-                    <label>Loại xe:</label>
-                    <input type="hidden" name="vehicle_type_id" value="{{ reg_type.id }}">
-                    <div class="reg-info">
-                        <strong>{{ reg_type.name }}</strong> (theo đăng ký của tài khoản)
-                        {% if reg_month_ok %}· vé tháng còn hạn, không tính phí lượt
-                        {% elif reg_type.price %}· {{ '{:,}'.format(reg_type.price.amount).replace(',', '.') }}đ/lượt (khung {{ reg_type.price.period_name }})
-                        {% else %}· <span class="reg-note">chưa có giá lúc {{ now.strftime('%H:%M') }}</span>
-                        {% endif %}
-                    </div>
-                </div>
-                {% else %}
-                <div class="field">
-                    <label for="vehicle_type_id">Loại xe:</label>
-                    <select name="vehicle_type_id" id="vehicle_type_id" class="vehicle-select" required>
-                        <option value="" disabled {{ 'selected' if not form.get('vehicle_type_id') }}>— Chọn loại xe —</option>
-                        {% for t in type_options %}
-                            {% if t.price or reg_month_ok %}
-                            <option value="{{ t.id }}" {{ 'selected' if form.get('vehicle_type_id') == t.id|string }}>{{ t.name }}{% if t.price %} — {{ '{:,}'.format(t.price.amount).replace(',', '.') }}đ/lượt (khung {{ t.price.period_name }}){% else %} — vé tháng{% endif %}</option>
-                            {% else %}
-                            <option value="{{ t.id }}" disabled>{{ t.name }} — chưa có giá lúc {{ now.strftime('%H:%M') }}</option>
-                            {% endif %}
-                        {% endfor %}
-                    </select>
-                    <p class="field-hint">Giá tính theo khung giờ lúc xe vào ({{ now.strftime('%H:%M') }}). Xem chi tiết tại <a href="{{ url_for('pricing') }}">Giá xe</a>.</p>
-                    {% if not type_options %}
-                        <div class="no-slots-message">⚠️ Chưa có loại xe nào. Hãy nhờ nhân viên/admin tạo ở trang Giá xe.</div>
-                    {% endif %}
-                </div>
-                {% endif %}
-
-                {% if entry_mode == 'auto' %}
-                    {% if no_slots %}
-                        <div class="no-slots-message">⚠️ Bãi đỗ đã hết chỗ trống.</div>
-                    {% else %}
-                        <div class="auto-mode-note">
-                            🤖 Chế độ <strong>tự động</strong> đang bật cho tài khoản của bạn (đổi tại <a href="{{ url_for('settings') }}">Cài đặt</a>).
-                            Hệ thống sẽ tự chọn 1 vị trí trống khi xác nhận.
-                        </div>
-                    {% endif %}
-                {% else %}
-                    <div class="field">
-                        <label>Chọn vị trí đỗ:</label>
-                        {% if no_slots %}
-                            <div class="no-slots-message">⚠️ Bãi đỗ đã hết chỗ trống, không có vị trí nào để chọn.</div>
-                        {% endif %}
-                        {% for area, slots in slots_by_area.items() %}
-                            {% if slots %}
-                            <p class="area-label">Khu {{ area }}</p>
-                            <div class="slot-picker-grid">
-                                {% for slot in slots %}
-                                <input type="radio" name="slot_name" id="slot-{{ slot['slot_name'] }}"
-                                       value="{{ slot['slot_name'] }}" {{ 'checked' if form.get('slot_name') == slot['slot_name'] }}>
-                                <label for="slot-{{ slot['slot_name'] }}" class="slot-option">
-                                    <strong>{{ slot['slot_name'] }}</strong>
-                                    <span>Trống</span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
-                {% endif %}
-            </div>
-            {% endif %}
-
-            <div class="button-row">
-                <button type="submit" name="action" value="recognize" class="btn btn-navy">🔍 Nhận diện biển số</button>
-                <button type="submit" name="action" value="confirm" class="btn btn-green"
-                        {% if not mode or (mode == 'entry' and no_slots) %}disabled{% endif %}>
-                    💾 {% if mode == 'exit' %}Xác nhận xe ra{% elif mode == 'entry' %}Xác nhận xe vào{% else %}Xác nhận{% endif %}
-                </button>
-            </div>
-        </form>
-
-    </div>
+    <a href="{{ url_for('gate') }}" class="btn btn-outline">Tổng quan 2 làn</a>
+  </div>
 </div>
 
-<script>
-    // Nhận diện (OCR) mất vài giây: khóa nút + báo "Đang xử lý" để tránh bấm nhiều lần.
-    (function () {
-        var form = document.getElementById('gate-form');
-        var buttons = form.querySelectorAll('button[type=submit]');
-        var originals = [];
-        buttons.forEach(function (b) { originals.push(b.innerHTML); });
+{% if counts is defined and counts %}
+<div class="monitor-summary">
+  <div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+    <div>
+      <span>Tổng sức chứa</span>
+      <strong>{{ counts.total }} chỗ</strong>
+      <small>Hệ thống bãi xe thông minh</small>
+    </div>
+  </div>
+  <div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8"/><path d="M7 14h.01"/><path d="M17 14h.01"/><rect width="18" height="8" x="3" y="10" rx="2"/><path d="M5 18v2"/><path d="M19 18v2"/></svg>
+    <div>
+      <span>Đang trong bãi</span>
+      <strong>{{ counts.occupied }} xe</strong>
+      <small>Chiếm {{ occ_rate }}% công suất</small>
+    </div>
+  </div>
+  <div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+    <div>
+      <span>Sẵn sàng tiếp nhận</span>
+      <strong>{{ counts.available }} chỗ trống</strong>
+      <small>Bảo trì: {{ counts.maintenance }} vị trí</small>
+    </div>
+  </div>
+  <div class="monitor-area-summary">
+    {% if area_stats %}
+      {% for area_name, a in area_stats.items() %}
+        <span>Khu {{ area_name }}: <b>{{ a.available }} trống</b></span>
+      {% endfor %}
+    {% else %}
+      <span>Chế độ: <b>{{ 'Xe vào bãi' if is_entry else 'Xe ra bãi' }}</b></span>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
 
-        form.addEventListener('submit', function (e) {
-            var submitter = e.submitter;
-            // Hoãn việc khóa nút tới sau khi trình duyệt đã gom xong dữ liệu form (để vẫn gửi được name=action)
-            setTimeout(function () {
-                buttons.forEach(function (b) { b.disabled = true; });
-                if (submitter) submitter.innerHTML = '⏳ Đang xử lý...';
-            }, 0);
-        });
+<form method="POST"
+      action="{{ url_for('entry' if is_entry else 'exit_gate') }}"
+      enctype="multipart/form-data"
+      id="gate-form"
+      class="lanes-grid"
+      data-direction="{{ direction }}"
+      data-camera-url="{{ url_for('gate_camera', direction=direction) }}"
+      data-vietqr-bin="{{ vietqr_bank_bin }}"
+      data-vietqr-bank-name="{{ vietqr_bank_name }}"
+      data-vietqr-account="{{ vietqr_account_number }}"
+      data-vietqr-name="{{ vietqr_account_name }}"
+      data-vietqr-template="{{ vietqr_template }}">
 
-        // Quay lại bằng nút Back của trình duyệt: khôi phục trạng thái nút
-        window.addEventListener('pageshow', function (ev) {
-            if (ev.persisted) location.reload();
-        });
-    })();
-    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
-</script>
-</body>
-</html>
+  <input type="hidden" name="token" id="gate-token" value="{{ token }}">
+  <input type="hidden" name="checked_plate" id="checked-plate" value="{{ plate }}">
+  <input type="hidden" name="source" id="source-select" value="{{ source }}">
+
+  <!-- CỘT TRÁI: CAMERA TRỰC TIẾP / TẢI ẢNH -->
+  <section class="panel lane-panel gate-media">
+    {% if counts is defined and counts %}
+    <div class="gate-kpi-strip" aria-label="Tình trạng bãi xe">
+      <div class="gate-kpi-chip">
+        <span>Đang trong bãi</span>
+        <strong>{{ counts.occupied }}<small>/{{ counts.total }} chỗ ({{ occ_rate }}%)</small></strong>
+      </div>
+      <div class="gate-kpi-chip">
+        <span>Chỗ còn trống</span>
+        <strong class="is-available">{{ counts.available }} chỗ</strong>
+      </div>
+      <div class="gate-kpi-chip is-areas">
+        <span>Theo khu</span>
+        <div class="gate-area-pills">
+          {% if area_stats %}
+            {% for area_name, a in area_stats.items() %}
+              <span>Khu {{ area_name }}: <b>{{ a.available }}</b></span>
+            {% endfor %}
+          {% else %}
+            <span>Bảo trì: <b>{{ counts.maintenance }}</b></span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="lane-heading">
+      <div>
+        <span class="lane-icon {{ 'entry' if is_entry else 'exit' }}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+        </span>
+        <div>
+          <h2 id="media-source-label">{{ 'Camera trực tiếp' if source == 'camera' else 'Ảnh tải lên' }}</h2>
+          <p>{{ 'Camera AI nhận diện biển số làn vào' if is_entry else 'Camera AI nhận diện biển số làn ra' }}</p>
+        </div>
+      </div>
+
+      <div class="segmented" role="group" aria-label="Chọn nguồn hình ảnh">
+        <button type="button"
+                class="{% if source == 'camera' %}selected{% endif %}"
+                data-source="camera"
+                aria-pressed="{{ 'true' if source == 'camera' else 'false' }}">
+          Camera trực tiếp
+        </button>
+        <button type="button"
+                class="{% if source == 'upload' %}selected{% endif %}"
+                data-source="upload"
+                aria-pressed="{{ 'true' if source == 'upload' else 'false' }}">
+          Tải ảnh biển số
+        </button>
+      </div>
+    </div>
+
+    <div class="gate-cameras-pair">
+      <!-- Camera 1: Nhận diện biển số / Ảnh tải lên -->
+      <div class="camera-frame">
+        <div class="lane-photo-head">
+          <span>Camera biển số · {{ 'vào' if is_entry else 'ra' }}</span>
+          <span class="lane-photo-tag">{{ 'IN-OCR' if is_entry else 'OUT-OCR' }}</span>
+        </div>
+        <div class="camera-video-layer">
+          <video id="camera-video" playsinline muted hidden></video>
+          <img id="camera-ip-stream" class="preview-img" alt="Camera IP trực tiếp" hidden>
+          <canvas id="camera-overlay" hidden></canvas>
+
+          {% if has_preview %}
+            <img id="camera-snapshot"
+                 class="preview-img"
+                 src="{{ preview_url }}"
+                 alt="Ảnh nhận diện biển số">
+          {% else %}
+            <img id="camera-snapshot" class="preview-img" alt="Ảnh nhận diện biển số" hidden>
+          {% endif %}
+
+          <div class="camera-empty-state" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+            <strong>{{ 'Camera nhận diện làn vào' if is_entry else 'Camera nhận diện làn ra' }}</strong>
+            <span>Bấm "Bắt đầu" để quét hoặc chọn "Tải ảnh biển số"</span>
+          </div>
+        </div>
+        <span class="gate-cam-corner">{{ 'IN-OCR' if is_entry else 'OUT-OCR' }}</span>
+      </div>
+
+      <!-- Camera 2: Toàn cảnh -->
+      <div class="lane-photo-box gate-overview-frame" data-overview-box="{{ direction }}">
+        <div class="lane-photo-head">
+          <span>Camera toàn cảnh · {{ 'vào' if is_entry else 'ra' }}</span>
+          <button type="button" class="lane-overview-btn"
+                  data-overview-toggle="{{ direction }}"
+                  data-default-device="{{ device_settings[direction ~ '_overview_camera'] if device_settings else '' }}"
+                  aria-pressed="false">Bật toàn cảnh</button>
+        </div>
+        <video class="lane-overview-video" data-overview-video="{{ direction }}" autoplay playsinline muted hidden></video>
+        <img class="lane-overview-video" data-overview-stream="{{ direction }}" alt="Toàn cảnh IP làn {{ 'vào' if is_entry else 'ra' }}" hidden>
+        <div class="lane-photo-empty" data-overview-empty="{{ direction }}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+          <span>Toàn cảnh làn {{ 'vào' if is_entry else 'ra' }}</span>
+          <small>Nhấn "Bật toàn cảnh" để xem trực tiếp</small>
+        </div>
+        <span class="gate-cam-corner">{{ 'IN-VIEW' if is_entry else 'OUT-VIEW' }}</span>
+      </div>
+    </div>
+
+    <div class="lane-content">
+      <!-- Điều khiển Camera -->
+      {% set all_cam_vals = [device_settings.entry_plate_camera, device_settings.exit_plate_camera, device_settings.entry_overview_camera, device_settings.exit_overview_camera] if device_settings else [] %}
+      <div id="camera-controls" class="camera-Controls-bar" style="margin-top:0;" {% if source == 'upload' %}hidden{% endif %}>
+        <select id="camera-select"
+                data-default-device="{{ device_settings[direction ~ '_plate_camera'] if device_settings else '' }}"
+                data-ip-cameras="{{ all_cam_vals|join('|') }}"
+                aria-label="Chọn thiết bị camera">
+          <option value="">Mặc định (Camera chính)</option>
+        </select>
+        <button type="button" id="camera-refresh" class="btn btn-outline">Làm mới</button>
+        <button type="button" id="camera-start" class="btn btn-primary camera-toggle" aria-pressed="false">Bắt đầu</button>
+        <button type="button" id="camera-capture" class="btn btn-outline camera-capture" title="Chụp khung hình hiện tại và nhận diện biển số" disabled><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3Z"/><circle cx="12" cy="13" r="4"/></svg><span id="camera-capture-label">Chụp</span></button>
+      </div>
+
+      <div id="camera-status" class="camera-status-bar" style="margin-top:0;" {% if source == 'upload' %}hidden{% endif %}>
+        Camera đang tắt. Bấm "Bắt đầu" để quét biển số trực tiếp.
+      </div>
+
+      <!-- Điều khiển Tải ảnh -->
+      <div id="upload-panel" {% if source != 'upload' %}hidden{% endif %}>
+        <div class="form-field">
+          <label for="image">Chọn ảnh biển số xe (.jpg, .png, .webp)</label>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="file" id="image" name="image" accept=".jpg,.jpeg,.png,.webp,.bmp" style="flex:1;">
+            <button type="submit"
+                    id="image-recognize-button"
+                    name="action"
+                    value="recognize"
+                    formnovalidate
+                    class="btn btn-primary">
+              Nhận diện từ ảnh
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CỘT PHẢI: THÔNG TIN BIỂN SỐ & XÁC NHẬN VÀO / RA -->
+  <section class="panel lane-panel gate-details">
+    <div class="lane-heading">
+      <div>
+        <span class="lane-icon {{ 'entry' if is_entry else 'exit' }}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+        <div>
+          <h2>{{ 'Phiếu xe vào' if is_entry else 'Phiếu xe ra' }}</h2>
+          <p>{{ 'Nhận diện biển số và chọn vị trí đỗ' if is_entry else 'Đối chiếu phương tiện và xác nhận thu phí' }}</p>
+        </div>
+      </div>
+      {% if plate %}
+        <span class="plate">{{ plate }}</span>
+      {% else %}
+        <span class="badge badge-amber"><span></span>Chờ biển số</span>
+      {% endif %}
+    </div>
+
+    <div class="lane-content">
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="plate">Biển số nhận diện / nhập tay</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text"
+                   id="plate"
+                   name="plate"
+                   value="{{ plate }}"
+                   placeholder="VD: 51H-123.45"
+                   autocomplete="off"
+                   style="font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">
+            <button type="submit"
+                    id="recognize-button"
+                    name="action"
+                    value="recognize"
+                    formnovalidate
+                    data-has-preview="{{ 'true' if has_preview else 'false' }}"
+                    class="btn btn-outline"
+                    style="white-space:nowrap;"
+                    {% if not has_preview %}hidden{% endif %}>
+              Đối chiếu
+            </button>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label for="note">Ghi chú lượt {{ 'vào' if is_entry else 'ra' }}</label>
+          <input type="text"
+                 id="note"
+                 name="note"
+                 value="{{ note }}"
+                 placeholder="Nhập ghi chú nếu cần...">
+        </div>
+      </div>
+
+      <div id="gate-result">
+        {% include '_gate_result.html' %}
+      </div>
+
+      {% set can_confirm = (mode == 'exit') or (mode == 'entry' and not no_slots) %}
+      {% if direction == 'entry' %}
+      <div class="lane-actions" style="grid-template-columns: 1fr;">
+        <button type="submit"
+                id="confirm-button"
+                name="action"
+                value="confirm"
+                class="btn btn-primary btn-entry-confirm"
+                style="width:100%;justify-content:center;"
+                {% if not can_confirm %}disabled{% endif %}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          Xác nhận xe vào
+        </button>
+      </div>
+      {% else %}
+      <div class="lane-actions exit-lane-actions">
+        <button type="submit"
+                id="confirm-button"
+                name="action"
+                value="confirm"
+                class="btn btn-outline btn-exit-confirm"
+                title="Xác nhận cho xe ra bãi"
+                {% if not can_confirm %}disabled{% endif %}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span>Xe ra</span>
+        </button>
+        <button type="submit"
+                id="pay-button"
+                name="action"
+                value="pay"
+                class="btn btn-primary btn-exit-pay"
+                title="Thanh toán và in hóa đơn"
+                {% if not can_confirm %}disabled{% endif %}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+          <span>Thanh toán &amp; In</span>
+        </button>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+</form>
+
+{% if request.args.get('print_invoice') %}
+<iframe id="invoice-print-frame"
+        src="{{ url_for('invoice_print', record_id=request.args.get('print_invoice')|int, autoprint='1') }}"
+        style="position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;border:none;"
+        title="In hóa đơn"></iframe>
+{% endif %}
+
+{% if direction == 'exit' %}
+<!-- MODAL THANH TOÁN KIOTVIET POS -->
+<div id="pos-payment-modal" class="pos-modal-backdrop" hidden>
+  <div class="pos-modal" role="dialog" aria-modal="true" aria-labelledby="pos-modal-title">
+    <div class="pos-modal-header">
+      <div class="pos-modal-title-wrap">
+        <span class="pos-modal-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+        </span>
+        <div>
+          <h3 id="pos-modal-title">Thanh toán vé xe</h3>
+          <span class="pos-modal-subtitle">Giao dịch thu ngân làn xe ra</span>
+        </div>
+      </div>
+      <button type="button" class="pos-modal-close" id="pos-modal-close-btn" aria-label="Đóng cửa sổ">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="pos-modal-body">
+      <!-- Tóm tắt giao dịch -->
+      <div class="pos-transaction-card">
+        <div class="pos-transaction-main">
+          <div>
+            <span class="pos-label">Biển số phương tiện</span>
+            <span class="pos-plate-badge" id="pos-plate-display">{{ record.plate_number if record else '' }}</span>
+          </div>
+          <div>
+            <span class="pos-label">Vị trí đỗ &amp; Loại xe</span>
+            <strong id="pos-slot-type">{{ (record.slot_name or '—') ~ ' · ' ~ (record.vehicle_type_name or '—') if record else '—' }}</strong>
+          </div>
+          <div>
+            <span class="pos-label">Thời lượng gửi</span>
+            <span class="pos-duration-badge" id="pos-duration-display">{{ fee_preview.duration if fee_preview else '—' }}</span>
+          </div>
+        </div>
+
+        <div class="pos-amount-due-box">
+          <span class="pos-amount-label">KHÁCH CẦN TRẢ</span>
+          <div class="pos-amount-val" id="pos-fee-display" data-fee="{{ fee_preview.fee if fee_preview else 0 }}">
+            {{ "{:,}".format(fee_preview.fee).replace(",", ".") if fee_preview else "0" }} <small>VNĐ</small>
+          </div>
+          <small class="pos-amount-note" id="pos-note-display">{{ fee_preview.note if fee_preview else '' }}</small>
+        </div>
+      </div>
+
+      <!-- Chọn phương thức thanh toán -->
+      <div class="pos-method-tabs" role="tablist">
+        <button type="button" class="pos-tab active" data-pos-method="cash" role="tab" aria-selected="true">
+          <span>💵 Tiền mặt</span>
+        </button>
+        <button type="button" class="pos-tab" data-pos-method="transfer" role="tab" aria-selected="false">
+          <span>📲 Chuyển khoản VietQR</span>
+        </button>
+      </div>
+
+      <!-- Tab Tiền mặt -->
+      <div class="pos-tab-content" id="pos-tab-cash">
+        <div class="pos-cash-calculator">
+          <div class="form-field" style="margin-bottom:10px;">
+            <label for="pos-discount-input">Giảm giá (<span id="pos-discount-unit-text">VND</span>)</label>
+            <div class="pos-input-group">
+              <input type="text" id="pos-discount-input" inputmode="numeric" value="0" placeholder="0" autocomplete="off">
+              <button type="button" id="pos-discount-unit-btn" class="btn btn-outline btn-sm" title="Đổi đơn vị giảm giá (VND / %)">VND</button>
+            </div>
+          </div>
+          <div class="form-field">
+            <label for="pos-cash-given">Tiền khách đưa (VNĐ)</label>
+            <div class="pos-input-group">
+              <input type="text" id="pos-cash-given" inputmode="numeric" placeholder="Nhập số tiền..." autocomplete="off">
+              <button type="button" id="pos-exact-btn" class="btn btn-outline btn-sm">Vừa đủ</button>
+            </div>
+          </div>
+
+          <!-- Mệnh giá gợi ý -->
+          <div class="pos-chips-label">Mệnh giá gợi ý:</div>
+          <div class="pos-chips-grid" id="pos-cash-chips">
+            <button type="button" class="pos-chip" data-amount="5000">5.000</button>
+            <button type="button" class="pos-chip" data-amount="10000">10.000</button>
+            <button type="button" class="pos-chip" data-amount="20000">20.000</button>
+            <button type="button" class="pos-chip" data-amount="50000">50.000</button>
+            <button type="button" class="pos-chip" data-amount="100000">100.000</button>
+            <button type="button" class="pos-chip" data-amount="200000">200.000</button>
+            <button type="button" class="pos-chip" data-amount="500000">500.000</button>
+          </div>
+
+          <!-- Tiền thừa trả khách -->
+          <div class="pos-change-box" id="pos-change-box">
+            <span>Tiền thừa trả khách:</span>
+            <strong id="pos-change-val">0 VNĐ</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Chuyển khoản VietQR -->
+      <div class="pos-tab-content" id="pos-tab-transfer" hidden>
+        <div class="pos-qr-card">
+          <div class="pos-qr-image-wrap">
+            <img id="pos-vietqr-img" src="" alt="Mã VietQR thanh toán" width="160" height="160">
+            <div id="pos-qr-loading" class="pos-qr-loading">Đang tải mã VietQR...</div>
+          </div>
+          <div class="pos-qr-info">
+            <div class="pos-qr-bank">{{ vietqr_bank_name }} · {{ vietqr_account_number }}</div>
+            <div class="pos-qr-name">{{ vietqr_account_name }}</div>
+            <div class="pos-qr-amount" id="pos-qr-amount-text">0 VNĐ</div>
+            <div class="pos-qr-memo" id="pos-qr-memo-text">Nội dung: XE ...</div>
+            <small class="pos-qr-hint">Mở ứng dụng Ngân hàng hoặc Ví MoMo/ZaloPay để quét mã thanh toán</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Checkbox in phiếu thu -->
+      <label class="pos-print-option">
+        <input type="checkbox" id="pos-print-receipt-cb" checked>
+        <span>In phiếu thu hóa đơn ngay sau khi hoàn tất</span>
+      </label>
+    </div>
+
+    <div class="pos-modal-footer">
+      <button type="button" class="btn btn-outline" id="pos-modal-cancel-btn">Bỏ qua (Esc)</button>
+      <button type="button" class="btn btn-primary btn-pos-pay" id="pos-modal-confirm-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        <span id="pos-confirm-label">Xác nhận thanh toán</span>
+      </button>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/gate.js"></script>
+{% endblock %}

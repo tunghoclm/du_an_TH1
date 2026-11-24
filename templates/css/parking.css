@@ -1,46 +1,782 @@
-/* parking.css — riêng cho trang Bãi đỗ xe (phần chung nằm trong theme.css) */
-
-.parking-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));   /* các cột luôn rộng bằng nhau */
-    gap: 12px;
+/* Trang Sơ đồ bãi đỗ xe (KiotViet Phòng/Bàn layout) */
+.kv-parking-page {
+  display: grid;
+  gap: 16px;
 }
 
-.slot-form { display: contents; }
-
-.parking-slot {
-    width: 100%;
-    min-width: 0;
-    min-height: 82px;
-    padding: 8px 6px;
-    font-family: inherit;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    gap: 6px;
-    border: 1.5px solid transparent;
-    transition: transform .15s, box-shadow .15s;
-    user-select: none;
+.kv-parking-topbar {
+  display: grid;
+  grid-template-columns: 236px minmax(220px, 440px) 1fr;
+  align-items: center;
+  gap: 16px;
 }
 
-.parking-slot strong { font-size: 15px; }
-
-.parking-slot span {
-    font-size: 11.5px;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;      /* biển số dài -> cắt bằng dấu ... */
-    white-space: nowrap;
+.kv-parking-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.parking-slot.slot-clickable { cursor: pointer; }
-.parking-slot.slot-clickable:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 18px rgba(20, 48, 107, .12);
+.kv-parking-title-wrap h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #15171a;
+  line-height: 28px;
 }
 
-.parking-slot.available   { background: #e9f7ef; border-color: #bfe5cf; color: var(--green-d); }
-.parking-slot.occupied    { background: #fdeeee; border-color: #f2c4c4; color: var(--red-d); }
-.parking-slot.maintenance { background: #fff4e0; border-color: #f0d6a2; color: #a86800; }
+.kv-parking-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 12px 0 14px;
+  background: #fff;
+  border: 1px solid #d9dce1;
+  border-radius: 10px;
+  color: #7b8594;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.kv-parking-search:focus-within {
+  border-color: #0070f4;
+  box-shadow: 0 0 0 2px rgba(0, 112, 244, 0.12);
+}
+
+.kv-parking-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 13.5px;
+  color: #15171a;
+  padding: 0;
+}
+
+.kv-parking-search input::placeholder {
+  color: #898f98;
+}
+
+.kv-parking-sliders {
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.kv-parking-sliders:hover {
+  background: #f3f4f6;
+  color: #0070f4;
+}
+
+.kv-parking-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kv-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid #0070f4;
+  border-radius: 8px;
+  background: #0070f4;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background .15s;
+}
+
+.kv-btn-primary:hover {
+  background: #005fd1;
+}
+
+.kv-btn-white {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #d9dce1;
+  border-radius: 8px;
+  background: #fff;
+  color: #15171a;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color .15s, background .15s;
+}
+
+.kv-btn-white:hover {
+  border-color: #0070f4;
+  color: #0070f4;
+  background: #f8fbff;
+}
+
+.kv-help-wrap {
+  position: relative;
+}
+
+.kv-btn-help {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #d9dce1;
+  border-radius: 8px;
+  background: #fff;
+  color: #51565e;
+  cursor: pointer;
+}
+
+.kv-btn-help:hover {
+  border-color: #0070f4;
+  color: #0070f4;
+}
+
+.kv-help-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: 280px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+  font-size: 12.5px;
+  color: #3e464f;
+  line-height: 1.5;
+}
+
+.kv-help-popover[hidden] {
+  display: none;
+}
+
+.kv-help-popover strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #15171a;
+  font-size: 13px;
+}
+
+/* 2-Column Layout */
+.kv-parking-layout {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.kv-parking-sidebar {
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 18px;
+  position: sticky;
+  top: 16px;
+}
+
+.kv-filter-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.kv-filter-group-head h2 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #15171a;
+}
+
+.kv-filter-create-link {
+  border: 0;
+  background: transparent;
+  color: #0070f4;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.kv-filter-create-link:hover {
+  text-decoration: underline;
+}
+
+.kv-radio-list {
+  display: grid;
+  gap: 8px;
+}
+
+.kv-radio-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  color: #292e35;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.kv-radio-item input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #0070f4;
+  cursor: pointer;
+}
+
+.kv-area-radio-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.kv-area-radio-row .kv-radio-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.kv-area-edit-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity .12s, background .12s, color .12s;
+}
+
+.kv-area-radio-row:hover .kv-area-edit-btn,
+.kv-area-edit-btn:focus-visible {
+  opacity: 1;
+}
+
+.kv-area-edit-btn:hover {
+  background: #eef5ff;
+  color: #0070f4;
+}
+
+.kv-parking-main {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.kv-gate-scope-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: #eef5ff;
+  border: 1px solid #cde1fe;
+  color: #005fd1;
+  font-size: 13px;
+}
+
+.kv-gate-scope-banner strong {
+  color: #0047a3;
+}
+
+.kv-parking-summary-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.kv-summary-pills {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #525d6a;
+}
+
+.kv-summary-pills strong {
+  color: #15171a;
+  font-size: 14px;
+}
+
+.area-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #edf2f9;
+}
+
+.area-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.area-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.slot-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.slot-action-list .btn {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.kv-gate-area-checks {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.kv-gate-area-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.kv-gate-area-check:hover {
+  background: #f8fbff;
+  border-color: #0070f4;
+}
+
+/* KiotViet Thêm khu vực Modal */
+dialog.kv-area-modal {
+  width: min(520px, calc(100vw - 28px));
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.2);
+  overflow: hidden;
+}
+
+dialog.kv-area-modal::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.kv-area-modal-form {
+  display: grid;
+  background: #fff;
+}
+
+.kv-area-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px 10px;
+}
+
+.kv-area-modal-head h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #15171a;
+}
+
+.kv-area-modal-close {
+  border: 0;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  color: #51565e;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.kv-area-modal-close:hover {
+  background: #f3f4f6;
+  color: #15171a;
+}
+
+.kv-area-modal-body {
+  padding: 8px 22px 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.kv-modal-field {
+  display: grid;
+  gap: 6px;
+}
+
+.kv-modal-field label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #3e464f;
+}
+
+.kv-modal-field input,
+.kv-modal-field select,
+.kv-modal-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d9dce1;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: #15171a;
+  background: #fff;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.kv-modal-field input:focus,
+.kv-modal-field select:focus,
+.kv-modal-field textarea:focus {
+  border-color: #0070f4;
+  box-shadow: 0 0 0 2px rgba(0, 112, 244, 0.14);
+}
+
+.kv-modal-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kv-modal-hint {
+  color: #7b8594;
+  font-size: 11.5px;
+}
+
+.kv-area-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 22px 18px;
+  border-top: 1px solid #eceef1;
+}
+
+.kv-modal-cancel {
+  border: 0;
+  background: transparent;
+  color: #292e35;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.kv-modal-cancel:hover {
+  background: #f3f4f6;
+}
+
+.kv-modal-save {
+  border: 0;
+  background: #338df6;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 22px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.kv-modal-save:hover {
+  background: #0070f4;
+}
+
+/* KiotViet #/TableAndRoom Table View, View Switcher, Inline Expansion & Pagination */
+.kv-view-switch {
+  display: inline-flex;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.kv-view-btn {
+  border: 0;
+  background: transparent;
+  color: #525d6a;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.kv-view-btn.active {
+  background: #fff;
+  color: #0070f4;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.kv-parking-table-card {
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.kv-parking-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.kv-parking-table th {
+  padding: 12px 16px;
+  background: #e6f1fe;
+  color: #15171a;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.kv-parking-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #eceef1;
+  font-size: 13px;
+  color: #15171a;
+  vertical-align: middle;
+}
+
+.kv-slot-row {
+  cursor: pointer;
+  transition: background .12s;
+}
+
+.kv-slot-row:hover td {
+  background: #f5f9ff;
+}
+
+.kv-slot-row.is-expanded td {
+  background: #fff;
+  border-top: 1.5px solid #0070f4;
+  border-bottom-color: #eceef1;
+}
+
+.kv-slot-row.is-expanded td:first-child {
+  border-left: 1.5px solid #0070f4;
+}
+
+.kv-slot-row.is-expanded td:last-child {
+  border-right: 1.5px solid #0070f4;
+}
+
+.kv-slot-detail-row td {
+  padding: 0;
+  background: #fff;
+  border-left: 1.5px solid #0070f4;
+  border-right: 1.5px solid #0070f4;
+  border-bottom: 1.5px solid #0070f4;
+}
+
+.kv-slot-detail-box {
+  padding: 16px 20px;
+  background: #fafcff;
+}
+
+.kv-slot-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.kv-slot-detail-head strong {
+  font-size: 15px;
+  color: #15171a;
+}
+
+.kv-slot-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+  margin: 0 0 16px;
+}
+
+.kv-slot-detail-grid > div {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eceef1;
+}
+
+.kv-slot-detail-grid dt {
+  font-size: 12px;
+  color: #7b8594;
+  margin-bottom: 4px;
+}
+
+.kv-slot-detail-grid dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #15171a;
+}
+
+.kv-slot-detail-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.kv-slot-detail-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kv-ghost-danger {
+  border: 0;
+  background: transparent;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.kv-ghost-danger:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.kv-ghost-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.kv-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.kv-status-pill.is-inactive {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.kv-plate-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #eef5ff;
+  color: #005fd1;
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.kv-muted {
+  color: #9ca3af;
+}
+
+.kv-parking-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-top: 1px solid #eceef1;
+  font-size: 13px;
+  color: #525d6a;
+}
+
+.kv-page-size-wrap,
+.kv-page-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kv-page-size-wrap select {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #d9dce1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.kv-page-controls button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d9dce1;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.kv-page-controls button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 960px) {
+  .kv-parking-topbar {
+    grid-template-columns: 1fr;
+  }
+  .kv-parking-actions {
+    justify-content: flex-start;
+  }
+  .kv-parking-layout {
+    grid-template-columns: 1fr;
+  }
+  .kv-parking-sidebar {
+    position: static;
+  }
+}

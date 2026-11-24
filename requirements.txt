@@ -1,5 +1,9 @@
 Flask>=3.0
+lunar-vn>=1.4,<2    # Bộ lọc thời gian theo âm lịch Việt Nam (UTC+7)
 numpy>=2.0
 opencv-python-headless>=4.10
 easyocr>=1.7
 Pillow>=10.0
+openpyxl>=3.1
+reportlab>=4.0
+ultralytics>=8.1   # YOLOv8 dò vùng biển số (tùy chọn — thiếu vẫn chạy nhờ dò contour)

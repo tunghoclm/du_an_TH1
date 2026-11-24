@@ -1,0 +1,576 @@
+{% extends "_layout.html" %}
+{% from "_management_icons.html" import icon %}
+
+{% block title %}Bảng chấm công — Smart Parking{% endblock %}
+{% block breadcrumb %}Nhân viên / Bảng chấm công{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/css/invoices.css">
+<link rel="stylesheet" href="/css/customers.css">
+<link rel="stylesheet" href="/css/employees.css">
+{% endblock %}
+
+{% block content %}
+<section class="kv-sched-page" aria-label="Bảng chấm công nhân viên">
+  <div class="kv-sched-toolbar">
+    <form class="kv-sched-toolbar-left" method="get" action="{{ url_for('employee_timesheet') }}" id="ts-filter-form">
+      <input type="hidden" name="week" value="{{ week }}">
+      <input type="hidden" name="view" id="ts-view-hidden" value="{{ view_mode }}">
+      <h1 class="kv-sched-title">Bảng chấm công</h1>
+      <div class="kv-sched-search">
+        {{ icon('search', 15) }}
+        <input type="search" name="q" value="{{ q }}" placeholder="Tìm kiếm nhân viên" aria-label="Tìm kiếm nhân viên">
+      </div>
+      <select name="gate" class="kv-sched-select" onchange="this.form.submit()" aria-label="Lọc theo cổng làm việc">
+        <option value="">Tất cả các cổng</option>
+        {% for gc in gate_choices %}
+          <option value="{{ gc }}" {% if gate_filter == gc %}selected{% endif %}>{{ gc }}</option>
+        {% endfor %}
+      </select>
+      <div class="kv-sched-week-nav">
+        <a class="kv-sched-arrow" href="{{ url_for('employee_timesheet', week=prev_week, gate=gate_filter, q=q, view=view_mode) }}" title="Tuần trước" aria-label="Tuần trước">{{ icon('left', 16) }}</a>
+        <span class="kv-sched-week-label">{{ week_label }}</span>
+        <a class="kv-sched-arrow" href="{{ url_for('employee_timesheet', week=next_week, gate=gate_filter, q=q, view=view_mode) }}" title="Tuần sau" aria-label="Tuần sau">{{ icon('right', 16) }}</a>
+        <a class="kv-sched-btn-outline" href="{{ url_for('employee_timesheet', gate=gate_filter, q=q, view=view_mode) }}">Tuần này</a>
+      </div>
+    </form>
+
+    <div class="kv-sched-toolbar-right">
+      <select class="kv-sched-select" id="ts-view-mode" aria-label="Chế độ xem bảng chấm công">
+        <option value="shift" {% if view_mode == 'shift' %}selected{% endif %}>Xem theo ca</option>
+        <option value="employee" {% if view_mode == 'employee' %}selected{% endif %}>Xem theo nhân viên</option>
+      </select>
+      <button type="button" class="kv-sched-btn-outline" data-open-timesheet-modal>Chấm công</button>
+      <a class="kv-sched-btn-outline" href="{{ url_for('employee_payroll') }}">Bảng lương ↗</a>
+    </div>
+  </div>
+
+  <div class="kv-sched-grid-card">
+    <div class="invoice-table-scroll">
+      {% if view_mode == 'shift' %}
+      <table class="kv-sched-table" aria-label="Bảng chấm công theo ca">
+        <thead>
+          <tr>
+            <th>
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <span>Ca làm việc</span>
+                <a href="{{ url_for('employee_settings', tab='attendance', view='shifts') }}" class="kv-icon-edit-btn" title="Thiết lập ca làm việc">+</a>
+              </div>
+            </th>
+            {% for d in days %}
+              <th class="{% if d.is_today %}is-today{% endif %}">
+                <div class="kv-sched-day-head">
+                  <span>{{ d.label }}</span>
+                  <b>{{ d.day_num }}</b>
+                </div>
+              </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for sh in (employee_shifts or []) %}
+          <tr>
+            <td class="kv-sched-emp-cell">
+              <strong>{{ sh.name }}</strong>
+              <small>{{ sh.time_range }}</small>
+            </td>
+            {% if not shift_has_items.get(sh.name) %}
+              <td colspan="7" class="kv-ts-empty-row-cell" data-open-assign data-shift-name="{{ sh.name }}" data-work-date="{{ today }}">
+                Chọn để xếp nhân viên làm việc cho ca.
+              </td>
+            {% else %}
+              {% for d in days %}
+                {% set items = by_shift_day.get((sh.name, d.iso), []) %}
+                <td>
+                  {% for a in items %}
+                    <button type="button" class="kv-ts-block is-{{ a.status }}"
+                            data-att-status="{{ a.status }}"
+                            data-edit-att
+                            data-id="{{ a.id }}"
+                            data-user-id="{{ a.user_id }}"
+                            data-user-name="{{ a.fullname }}"
+                            data-emp-code="{{ a.employee_code or '' }}"
+                            data-work-date="{{ a.work_date }}"
+                            data-day-label="{{ d.label }}, {{ d.iso }}"
+                            data-shift-name="{{ a.shift_name }}"
+                            data-zone-name="{{ a.zone_name or 'Cổng chính' }}"
+                            data-in="{{ a.check_in_time or '' }}"
+                            data-out="{{ a.check_out_time or '' }}"
+                            data-status="{{ a.status }}"
+                            data-status-label="{{ a.status_label }}"
+                            data-note="{{ a.note or '' }}">
+                      <strong>{{ a.fullname }}</strong>
+                      <span>{{ a.check_in_label }} - {{ a.check_out_label }}</span>
+                      {% if a.status in ('unpunched', 'late', 'missing', 'leave') %}
+                        <small>{{ a.status_label }}</small>
+                      {% endif %}
+                    </button>
+                  {% endfor %}
+                  <button type="button" class="kv-sched-add-link"
+                          data-quick-att
+                          data-shift-name="{{ sh.name }}"
+                          data-work-date="{{ d.iso }}"
+                          data-day-label="{{ d.label }}, {{ d.iso }}">
+                    + Chấm công
+                  </button>
+                </td>
+              {% endfor %}
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <table class="kv-sched-table" aria-label="Bảng chấm công theo nhân viên">
+        <thead>
+          <tr>
+            <th>Nhân viên</th>
+            {% for d in days %}
+              <th class="{% if d.is_today %}is-today{% endif %}">
+                <div class="kv-sched-day-head">
+                  <span>{{ d.label }}</span>
+                  <b>{{ d.day_num }}</b>
+                </div>
+              </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for emp in employees %}
+          <tr>
+            <td class="kv-sched-emp-cell">
+              <strong>{{ emp.fullname }}</strong>
+              <small>{{ emp.code }}</small>
+            </td>
+            {% for d in days %}
+              {% set items = by_user_day.get((emp.id, d.iso), []) %}
+              <td>
+                {% for a in items %}
+                  <button type="button" class="kv-ts-block is-{{ a.status }}"
+                          data-att-status="{{ a.status }}"
+                          data-edit-att
+                          data-id="{{ a.id }}"
+                          data-user-id="{{ a.user_id }}"
+                          data-user-name="{{ emp.fullname }}"
+                          data-emp-code="{{ emp.code }}"
+                          data-work-date="{{ a.work_date }}"
+                          data-day-label="{{ d.label }}, {{ d.iso }}"
+                          data-shift-name="{{ a.shift_name }}"
+                          data-zone-name="{{ a.zone_name or 'Cổng chính' }}"
+                          data-in="{{ a.check_in_time or '' }}"
+                          data-out="{{ a.check_out_time or '' }}"
+                          data-status="{{ a.status }}"
+                          data-status-label="{{ a.status_label }}"
+                          data-note="{{ a.note or '' }}">
+                    <strong>{{ a.shift_name }}</strong>
+                    <span>{{ a.check_in_label }} - {{ a.check_out_label }}</span>
+                    {% if a.status in ('unpunched', 'late', 'missing', 'leave') %}
+                      <small>{{ a.status_label }}</small>
+                    {% endif %}
+                  </button>
+                {% endfor %}
+                <button type="button" class="kv-sched-add-link"
+                        data-quick-att
+                        data-user-id="{{ emp.id }}"
+                        data-user-name="{{ emp.fullname }}"
+                        data-emp-code="{{ emp.code }}"
+                        data-work-date="{{ d.iso }}"
+                        data-day-label="{{ d.label }}, {{ d.iso }}"
+                        data-gate="{{ emp.work_branches_list[0] if emp.work_branches_list else 'Cổng chính' }}">
+                  + Chấm công
+                </button>
+              </td>
+            {% endfor %}
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="8" class="invoice-empty">
+              {{ icon('users', 36) }}
+              <h2>Chưa có dữ liệu nhân viên</h2>
+              <p>Thêm nhân viên hoặc thay đổi bộ lọc cổng làm việc.</p>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Thanh chú thích trạng thái nổi phía dưới giống KiotViet -->
+  <div class="kv-ts-floating-legend" aria-label="Chú thích trạng thái chấm công">
+    <label class="kv-ts-legend-item" style="color:#0070f4;">
+      <input type="checkbox" data-legend-filter="completed" checked style="accent-color:#0070f4;">
+      <span>Đúng giờ</span>
+    </label>
+    <label class="kv-ts-legend-item" style="color:#9d4dff;">
+      <input type="checkbox" data-legend-filter="late" checked style="accent-color:#9d4dff;">
+      <span>Đi muộn / Về sớm</span>
+    </label>
+    <label class="kv-ts-legend-item" style="color:#ff0000;">
+      <input type="checkbox" data-legend-filter="missing" checked style="accent-color:#ff0000;">
+      <span>Chấm công thiếu</span>
+    </label>
+    <label class="kv-ts-legend-item" style="color:#ff8800;">
+      <input type="checkbox" data-legend-filter="unpunched" checked style="accent-color:#ff8800;">
+      <span>Chưa chấm công</span>
+    </label>
+    <label class="kv-ts-legend-item" style="color:#6b7280;">
+      <input type="checkbox" data-legend-filter="leave" checked style="accent-color:#a4acb5;">
+      <span>Nghỉ làm</span>
+    </label>
+  </div>
+</section>
+
+<!-- Form ẩn xóa chấm công -->
+<form method="post" action="" id="ts-delete-form" hidden>
+  <input type="hidden" name="week" value="{{ week }}">
+  <input type="hidden" name="gate" value="{{ gate_filter }}">
+  <input type="hidden" name="q" value="{{ q }}">
+  <input type="hidden" name="view_mode" value="{{ view_mode }}">
+</form>
+
+<!-- Modal Chấm công (KiotViet style) -->
+<dialog id="timesheet-modal" class="customer-dialog kv-sched-popup" aria-labelledby="timesheet-modal-title">
+  <form method="post" action="{{ url_for('employee_timesheet') }}">
+    <input type="hidden" name="week" value="{{ week }}">
+    <input type="hidden" name="filter_gate" value="{{ gate_filter }}">
+    <input type="hidden" name="filter_q" value="{{ q }}">
+    <input type="hidden" name="view_mode" value="{{ view_mode }}">
+    <input type="hidden" name="att_id" id="ts-att-id" value="">
+
+    <div class="customer-dialog-heading">
+      <div>
+        <h2 id="timesheet-modal-title">Chấm công</h2>
+        <div class="kv-ts-modal-sub" id="ts-modal-sub">
+          <span id="ts-sub-emp">Chọn nhân viên</span>
+          <span id="ts-sub-badge" class="kv-paysheet-badge is-finalized" hidden></span>
+        </div>
+      </div>
+      <button type="button" data-close-ts-dialog aria-label="Đóng">{{ icon('close', 20) }}</button>
+    </div>
+
+    <div class="customer-dialog-body">
+      <div class="customer-form-grid">
+        <div class="form-field">
+          <label for="ts-user">Nhân viên</label>
+          <select id="ts-user" name="user_id" required>
+            {% for emp in employees %}
+              <option value="{{ emp.id }}">{{ emp.fullname }} ({{ emp.code }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="ts-date">Thời gian</label>
+          <input id="ts-date" type="date" name="work_date" value="{{ today }}" required>
+        </div>
+        <div class="form-field">
+          <label for="ts-shift">Ca làm việc</label>
+          <select id="ts-shift" name="shift_name">
+            {% for s in (employee_shifts or []) %}
+              <option value="{{ s.name }}" data-start="{{ s.start }}" data-end="{{ s.end }}">{{ s.name }} ({{ s.time_range }})</option>
+            {% else %}
+              <option value="Ca sáng" data-start="06:00" data-end="14:00">Ca sáng</option>
+              <option value="Ca chiều" data-start="14:00" data-end="22:00">Ca chiều</option>
+              <option value="Ca đêm" data-start="22:00" data-end="06:00">Ca đêm</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="ts-gate">Cổng làm việc</label>
+          <select id="ts-gate" name="zone_name">
+            {% for gc in gate_choices %}
+              <option value="{{ gc }}">{{ gc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-field form-field-full">
+          <label for="ts-note">Ghi chú</label>
+          <textarea id="ts-note" name="note" rows="2" placeholder="Ghi chú chấm công" maxlength="255"></textarea>
+        </div>
+      </div>
+
+      <div class="kv-ts-tabs" role="tablist">
+        <button type="button" class="kv-ts-tab-btn is-active" data-ts-tab="checkin">Chấm công</button>
+        <button type="button" class="kv-ts-tab-btn" data-ts-tab="history">Lịch sử chấm công</button>
+        <button type="button" class="kv-ts-tab-btn" data-ts-tab="penalty">Phạt vi phạm</button>
+        <button type="button" class="kv-ts-tab-btn" data-ts-tab="bonus">Thưởng</button>
+      </div>
+
+      <div data-ts-panel="checkin">
+        <div class="kv-cat-radio-row" style="margin-bottom:12px;">
+          <label class="kv-cat-radio">
+            <input type="radio" name="work_mode" value="work" checked>
+            <span>Đi làm</span>
+          </label>
+          <label class="kv-cat-radio">
+            <input type="radio" name="work_mode" value="leave_paid">
+            <span>Nghỉ phép hưởng lương</span>
+          </label>
+          <label class="kv-cat-radio">
+            <input type="radio" name="work_mode" value="leave_unpaid">
+            <span>Nghỉ không lương</span>
+          </label>
+        </div>
+
+        <div id="ts-punch-fields">
+          <div class="kv-ts-time-row">
+            <label class="kv-cat-check" style="min-width:72px;">
+              <input type="checkbox" id="ts-in-en" name="check_in_enabled" value="1" checked>
+              <span>Vào</span>
+            </label>
+            <input id="ts-in" type="time" name="check_in_time" value="07:00">
+          </div>
+          <div class="kv-ts-time-row">
+            <label class="kv-cat-check" style="min-width:72px;">
+              <input type="checkbox" id="ts-out-en" name="check_out_enabled" value="1" checked>
+              <span>Ra</span>
+            </label>
+            <input id="ts-out" type="time" name="check_out_time" value="15:00">
+          </div>
+          <div class="form-field" style="margin-top:12px; max-width:260px;">
+            <label for="ts-status">Trạng thái</label>
+            <select id="ts-status" name="status">
+              <option value="completed">Đúng giờ</option>
+              <option value="working">Đang trong ca</option>
+              <option value="late">Đi muộn / Về sớm</option>
+              <option value="missing">Chấm công thiếu</option>
+              <option value="leave">Nghỉ làm</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div data-ts-panel="history" hidden>
+        <p id="ts-history-text" style="font-size:13px; color:#525d6d; margin:6px 0;">Chưa có lịch sử chỉnh sửa cho ca làm việc này.</p>
+      </div>
+      <div data-ts-panel="penalty" hidden>
+        <p style="font-size:13px; color:#525d6d; margin:6px 0;">Các khoản phạt vi phạm được áp dụng tự động theo cấu hình <strong>Danh mục giảm trừ</strong> trong Thiết lập nhân viên.</p>
+      </div>
+      <div data-ts-panel="bonus" hidden>
+        <p style="font-size:13px; color:#525d6d; margin:6px 0;">Các khoản thưởng được áp dụng theo <strong>Mẫu lương</strong> và <strong>Ngày lễ, tết</strong> trong Thiết lập nhân viên.</p>
+      </div>
+    </div>
+
+    <div class="kv-tpl-footer">
+      <button type="button" class="kv-tpl-btn-delete" id="ts-modal-del-btn" hidden>Hủy</button>
+      <div class="kv-tpl-footer-right">
+        <button type="button" class="invoice-action" data-close-ts-dialog>Bỏ qua</button>
+        <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal Chọn nhân viên đặt lịch ở ca trống -->
+<dialog id="ts-assign-modal" class="customer-dialog kv-workdays-dialog" aria-labelledby="ts-assign-title">
+  <form method="post" action="{{ url_for('employee_schedule') }}">
+    <input type="hidden" name="week" value="{{ week }}">
+    <input type="hidden" name="filter_gate" value="{{ gate_filter }}">
+    <input type="hidden" name="filter_q" value="{{ q }}">
+    <input type="hidden" name="shift_name" id="ts-assign-shift" value="">
+    <input type="hidden" name="work_date" id="ts-assign-date" value="{{ today }}">
+    <div class="customer-dialog-heading">
+      <h2 id="ts-assign-title">Xếp nhân viên vào ca</h2>
+      <button type="button" data-close-assign aria-label="Đóng">&times;</button>
+    </div>
+    <div class="customer-dialog-body">
+      <p style="margin:0 0 12px; font-size:13.5px; color:#15171a;">Chọn nhân viên bạn muốn đặt lịch ở ca này?</p>
+      <div class="form-field">
+        <label for="ts-assign-user">Tên nhân viên</label>
+        <select id="ts-assign-user" name="user_id" required>
+          {% for emp in employees %}
+            <option value="{{ emp.id }}">{{ emp.fullname }} ({{ emp.code }})</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-assign>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Đồng ý</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var viewSel = document.getElementById('ts-view-mode');
+  var viewHidden = document.getElementById('ts-view-hidden');
+  var filterForm = document.getElementById('ts-filter-form');
+  if (viewSel && viewHidden && filterForm) {
+    viewSel.addEventListener('change', function () {
+      viewHidden.value = viewSel.value;
+      filterForm.submit();
+    });
+  }
+
+  var dlg = document.getElementById('timesheet-modal');
+  var assignDlg = document.getElementById('ts-assign-modal');
+  var attIdInp = document.getElementById('ts-att-id');
+  var subEmp = document.getElementById('ts-sub-emp');
+  var subBadge = document.getElementById('ts-sub-badge');
+  var tsUser = document.getElementById('ts-user');
+  var tsDate = document.getElementById('ts-date');
+  var tsShift = document.getElementById('ts-shift');
+  var tsGate = document.getElementById('ts-gate');
+  var tsNote = document.getElementById('ts-note');
+  var tsInEn = document.getElementById('ts-in-en');
+  var tsOutEn = document.getElementById('ts-out-en');
+  var tsIn = document.getElementById('ts-in');
+  var tsOut = document.getElementById('ts-out');
+  var tsStatus = document.getElementById('ts-status');
+  var tsPunchFields = document.getElementById('ts-punch-fields');
+  var tsDelBtn = document.getElementById('ts-modal-del-btn');
+  var tsDelForm = document.getElementById('ts-delete-form');
+  var tsHist = document.getElementById('ts-history-text');
+
+  function syncPunchState() {
+    var mode = document.querySelector('input[name="work_mode"]:checked');
+    var isLeave = mode && (mode.value === 'leave_paid' || mode.value === 'leave_unpaid');
+    if (tsPunchFields) tsPunchFields.hidden = isLeave;
+    if (tsIn && tsInEn) tsIn.disabled = !tsInEn.checked || isLeave;
+    if (tsOut && tsOutEn) tsOut.disabled = !tsOutEn.checked || isLeave;
+  }
+  document.querySelectorAll('input[name="work_mode"]').forEach(function (r) {
+    r.addEventListener('change', syncPunchState);
+  });
+  if (tsInEn) tsInEn.addEventListener('change', syncPunchState);
+  if (tsOutEn) tsOutEn.addEventListener('change', syncPunchState);
+
+  document.querySelectorAll('[data-ts-tab]').forEach(function (tbtn) {
+    tbtn.addEventListener('click', function () {
+      var key = tbtn.dataset.tsTab;
+      document.querySelectorAll('[data-ts-tab]').forEach(function (b) { b.classList.toggle('is-active', b === tbtn); });
+      document.querySelectorAll('[data-ts-panel]').forEach(function (p) { p.hidden = (p.dataset.tsPanel !== key); });
+    });
+  });
+
+  if (tsShift && tsIn && tsOut) {
+    function syncShiftTimes() {
+      var opt = tsShift.options[tsShift.selectedIndex];
+      if (opt && opt.dataset.start && !attIdInp.value) tsIn.value = opt.dataset.start;
+      if (opt && opt.dataset.end && !attIdInp.value) tsOut.value = opt.dataset.end;
+    }
+    tsShift.addEventListener('change', syncShiftTimes);
+  }
+
+  function openDlg(d) {
+    if (!d) return;
+    if (typeof d.showModal === 'function') d.showModal();
+    else d.setAttribute('open', '');
+  }
+  function closeDlg(d) {
+    if (!d) return;
+    if (typeof d.close === 'function') d.close();
+    else d.removeAttribute('open');
+  }
+
+  document.querySelectorAll('[data-open-timesheet-modal]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (attIdInp) attIdInp.value = '';
+      if (subEmp) subEmp.textContent = 'Thêm mới chấm công';
+      if (subBadge) subBadge.hidden = true;
+      if (tsDelBtn) tsDelBtn.hidden = true;
+      document.querySelector('input[name="work_mode"][value="work"]').checked = true;
+      if (tsInEn) tsInEn.checked = true;
+      if (tsOutEn) tsOutEn.checked = true;
+      syncPunchState();
+      openDlg(dlg);
+    });
+  });
+
+  document.querySelectorAll('[data-quick-att]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (attIdInp) attIdInp.value = '';
+      if (tsUser && btn.dataset.userId) tsUser.value = btn.dataset.userId;
+      if (tsDate && btn.dataset.workDate) tsDate.value = btn.dataset.workDate;
+      if (tsShift && btn.dataset.shiftName) tsShift.value = btn.dataset.shiftName;
+      if (tsGate && btn.dataset.gate) tsGate.value = btn.dataset.gate;
+      if (subEmp) subEmp.textContent = [btn.dataset.userName || '', btn.dataset.empCode || ''].filter(Boolean).join(' | ') || 'Thêm chấm công';
+      if (subBadge) subBadge.hidden = true;
+      if (tsDelBtn) tsDelBtn.hidden = true;
+      document.querySelector('input[name="work_mode"][value="work"]').checked = true;
+      if (tsInEn) tsInEn.checked = true;
+      if (tsOutEn) tsOutEn.checked = true;
+      syncPunchState();
+      openDlg(dlg);
+    });
+  });
+
+  document.querySelectorAll('[data-edit-att]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (attIdInp) attIdInp.value = btn.dataset.id || '';
+      if (tsUser && btn.dataset.userId) tsUser.value = btn.dataset.userId;
+      if (tsDate && btn.dataset.workDate) tsDate.value = btn.dataset.workDate;
+      if (tsShift && btn.dataset.shiftName) tsShift.value = btn.dataset.shiftName;
+      if (tsGate && btn.dataset.zoneName) tsGate.value = btn.dataset.zoneName;
+      if (tsNote) tsNote.value = btn.dataset.note || '';
+      if (subEmp) subEmp.textContent = [btn.dataset.userName || '', btn.dataset.empCode || ''].filter(Boolean).join(' | ');
+      if (subBadge) {
+        subBadge.textContent = btn.dataset.statusLabel || '';
+        subBadge.hidden = !btn.dataset.statusLabel;
+      }
+      var isLeave = btn.dataset.status === 'leave';
+      document.querySelector('input[name="work_mode"][value="' + (isLeave ? 'leave_paid' : 'work') + '"]').checked = true;
+      if (tsInEn) tsInEn.checked = Boolean(btn.dataset.in) || btn.dataset.status === 'unpunched';
+      if (tsOutEn) tsOutEn.checked = Boolean(btn.dataset.out) || btn.dataset.status === 'unpunched';
+      if (tsIn && btn.dataset.in) tsIn.value = btn.dataset.in;
+      if (tsOut && btn.dataset.out) tsOut.value = btn.dataset.out;
+      if (tsStatus && btn.dataset.status && btn.dataset.status !== 'unpunched' && btn.dataset.status !== 'future') {
+        tsStatus.value = btn.dataset.status;
+      }
+      if (tsHist) {
+        tsHist.textContent = btn.dataset.id
+          ? ('Bản ghi #' + btn.dataset.id + ' — Ngày ' + (btn.dataset.workDate || '') + ' (' + (btn.dataset.statusLabel || '') + ')')
+          : 'Ca đã xếp lịch, chưa có dữ liệu chấm công thực tế.';
+      }
+      if (tsDelBtn) {
+        tsDelBtn.hidden = !btn.dataset.id;
+        tsDelBtn.dataset.delId = btn.dataset.id || '';
+      }
+      syncPunchState();
+      openDlg(dlg);
+    });
+  });
+
+  if (tsDelBtn && tsDelForm) {
+    tsDelBtn.addEventListener('click', function () {
+      var aid = tsDelBtn.dataset.delId;
+      if (!aid) return;
+      tsDelForm.action = '/employees/timesheet/' + aid + '/delete';
+      tsDelForm.submit();
+    });
+  }
+
+  document.querySelectorAll('[data-open-assign]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var shInp = document.getElementById('ts-assign-shift');
+      var dtInp = document.getElementById('ts-assign-date');
+      var titleEl = document.getElementById('ts-assign-title');
+      if (shInp) shInp.value = el.dataset.shiftName || '';
+      if (dtInp) dtInp.value = el.dataset.workDate || '';
+      if (titleEl) titleEl.textContent = (el.dataset.shiftName || 'Ca làm việc') + ' · ' + (el.dataset.workDate || '');
+      openDlg(assignDlg);
+    });
+  });
+
+  document.querySelectorAll('[data-close-ts-dialog]').forEach(function (btn) {
+    btn.addEventListener('click', function () { closeDlg(dlg); });
+  });
+  document.querySelectorAll('[data-close-assign]').forEach(function (btn) {
+    btn.addEventListener('click', function () { closeDlg(assignDlg); });
+  });
+
+  document.querySelectorAll('[data-legend-filter]').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      var st = cb.dataset.legendFilter;
+      document.querySelectorAll('[data-att-status="' + st + '"]').forEach(function (el) {
+        el.hidden = !cb.checked;
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

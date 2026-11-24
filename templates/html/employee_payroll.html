@@ -1,0 +1,391 @@
+{% extends "_layout.html" %}
+{% from "_management_icons.html" import icon %}
+
+{% block title %}Bảng tính lương — Smart Parking{% endblock %}
+{% block breadcrumb %}Nhân viên / Bảng lương{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/css/invoices.css">
+<link rel="stylesheet" href="/css/customers.css">
+<link rel="stylesheet" href="/css/employees.css">
+{% endblock %}
+
+{% block content %}
+<section class="kv-sched-page" aria-label="Bảng tính lương nhân viên">
+  <div class="kv-sched-toolbar">
+    <div class="kv-sched-toolbar-left">
+      <h1 class="kv-sched-title" style="min-width:250px;">Bảng lương</h1>
+      <div class="kv-sched-search" style="width:min(450px, 100%);">
+        {{ icon('search', 15) }}
+        <input type="search" name="q" form="payroll-filters" value="{{ q }}" placeholder="Theo mã, tên bảng lương" aria-label="Tìm bảng lương">
+        <button type="submit" form="payroll-filters" style="border:0; background:transparent; cursor:pointer; color:#525d6d;" aria-label="Tìm">{{ icon('filter', 14) }}</button>
+      </div>
+    </div>
+
+    <div class="kv-sched-toolbar-right">
+      <button type="button" class="kv-ps-btn-primary-outline" data-open-payroll-modal>+ Bảng tính lương</button>
+      <a class="kv-sched-btn-outline" href="{{ url_for('accounts_payroll_export', format='xlsx') }}">Xuất file</a>
+      <details class="invoice-column-picker customer-column-picker">
+        <summary class="kv-sched-btn-outline" aria-label="Cài đặt cột" title="Cài đặt cột" style="padding:0 9px;">{{ icon('columns', 15) }}</summary>
+        <div>
+          <b>Cột hiển thị</b>
+          {% for code, label, checked in [
+            ('code','Mã',true), ('name','Tên',true), ('pay_cycle','Kỳ hạn trả',true),
+            ('work_period','Kỳ làm việc',true), ('pay_branch','Cổng trả lương',true),
+            ('total_salary','Tổng lương',true), ('paid_amount','Đã trả nhân viên',true),
+            ('remaining','Còn cần trả',true), ('status','Trạng thái',true),
+            ('created_by','Người tạo',false), ('created_at','Ngày tạo',false), ('note','Ghi chú',false)
+          ] %}
+            <label><input type="checkbox" data-ps-col="{{ code }}" {% if checked %}checked{% endif %}> {{ label }}</label>
+          {% endfor %}
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div class="kv-ps-workspace">
+    <aside class="kv-ps-sidebar" aria-label="Bộ lọc bảng lương">
+      <form id="payroll-filters" method="get" action="{{ url_for('employee_payroll') }}" class="kv-ps-sidebar">
+        <div class="kv-ps-filter-card">
+          <h3>Cổng trả lương</h3>
+          <select id="payroll-branch-filter" name="pay_branch" onchange="this.form.submit()">
+            <option value="">Tất cả các cổng</option>
+            {% for gc in gate_choices %}
+              <option value="{{ gc }}" {% if pay_branch == gc %}selected{% endif %}>{{ gc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="kv-ps-filter-card">
+          <h3>Kỳ hạn trả lương</h3>
+          <select name="pay_cycle" onchange="this.form.submit()">
+            <option value="">Chọn kỳ hạn trả lương</option>
+            {% for cyc in ['Hàng tháng', 'Theo tuần', 'Theo ca'] %}
+              <option value="{{ cyc }}" {% if pay_cycle_filter == cyc %}selected{% endif %}>{{ cyc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="kv-ps-filter-card">
+          <h3>Trạng thái</h3>
+          <div class="kv-cat-radio-col">
+            {% for code, label in [('draft', 'Đang tạo'), ('provisional', 'Tạm tính'), ('finalized', 'Đã chốt lương'), ('cancelled', 'Đã hủy')] %}
+              <label class="kv-cat-check">
+                <input type="checkbox" name="status" value="{{ code }}" {% if code in statuses %}checked{% endif %} onchange="this.form.submit()">
+                <span>{{ label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+      </form>
+    </aside>
+
+    <div class="kv-sched-grid-card">
+      <div class="invoice-table-scroll">
+        <table class="kv-ps-table" aria-label="Danh sách bảng tính lương">
+          <thead>
+            <tr>
+              <th style="width:44px; text-align:center;"><input type="checkbox" id="ps-select-all" aria-label="Chọn tất cả"></th>
+              <th data-ps-cell="code">Mã</th>
+              <th data-ps-cell="name">Tên</th>
+              <th data-ps-cell="pay_cycle">Kỳ hạn trả</th>
+              <th data-ps-cell="work_period">Kỳ làm việc</th>
+              <th data-ps-cell="pay_branch">Cổng trả lương</th>
+              <th data-ps-cell="total_salary" style="text-align:right;">Tổng lương</th>
+              <th data-ps-cell="paid_amount" style="text-align:right;">Đã trả nhân viên</th>
+              <th data-ps-cell="remaining" style="text-align:right;">Còn cần trả</th>
+              <th data-ps-cell="status">Trạng thái</th>
+              <th data-ps-cell="created_by" hidden>Người tạo</th>
+              <th data-ps-cell="created_at" hidden>Ngày tạo</th>
+              <th data-ps-cell="note" hidden>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="kv-ps-summary-row">
+              <td></td>
+              <td data-ps-cell="code"></td>
+              <td data-ps-cell="name"></td>
+              <td data-ps-cell="pay_cycle"></td>
+              <td data-ps-cell="work_period"></td>
+              <td data-ps-cell="pay_branch"></td>
+              <td data-ps-cell="total_salary" style="text-align:right;">{{ "{:,}".format(totals.total_salary or 0) }}</td>
+              <td data-ps-cell="paid_amount" style="text-align:right;">{{ "{:,}".format(totals.paid_amount or 0) }}</td>
+              <td data-ps-cell="remaining" style="text-align:right;">{{ "{:,}".format(totals.remaining or 0) }}</td>
+              <td data-ps-cell="status"></td>
+              <td data-ps-cell="created_by" hidden></td>
+              <td data-ps-cell="created_at" hidden></td>
+              <td data-ps-cell="note" hidden></td>
+            </tr>
+            {% set st_map = {'draft': 'Đang tạo', 'provisional': 'Tạm tính', 'finalized': 'Đã chốt lương', 'cancelled': 'Đã hủy'} %}
+            {% for p in paysheets %}
+            {% set rem = [0, (p.total_salary or 0) - (p.paid_amount or 0)]|max %}
+            <tr class="kv-ps-row" data-ps-toggle="{{ p.id }}">
+              <td style="text-align:center;" onclick="event.stopPropagation();"><input type="checkbox" class="ps-row-check"></td>
+              <td data-ps-cell="code"><b>{{ p.code }}</b></td>
+              <td data-ps-cell="name">{{ p.name }}</td>
+              <td data-ps-cell="pay_cycle">{{ p.pay_cycle }}</td>
+              <td data-ps-cell="work_period">{{ p.work_period_range }}</td>
+              <td data-ps-cell="pay_branch">{{ p.pay_branch }}</td>
+              <td data-ps-cell="total_salary" style="text-align:right;">{{ "{:,}".format(p.total_salary or 0) }}</td>
+              <td data-ps-cell="paid_amount" style="text-align:right;">{{ "{:,}".format(p.paid_amount or 0) }}</td>
+              <td data-ps-cell="remaining" style="text-align:right;"><b>{{ "{:,}".format(rem) }}</b></td>
+              <td data-ps-cell="status"><span class="kv-paysheet-badge is-{{ p.status }}">{{ st_map.get(p.status, p.status) }}</span></td>
+              <td data-ps-cell="created_by" hidden>{{ p.created_by or 'Admin' }}</td>
+              <td data-ps-cell="created_at" hidden>{{ (p.created_at or '')[:16] }}</td>
+              <td data-ps-cell="note" hidden>{{ p.note or '—' }}</td>
+            </tr>
+            <tr class="kv-ps-detail-row" id="ps-detail-{{ p.id }}" hidden>
+              <td colspan="13">
+                <div class="kv-ps-detail-box">
+                  <div class="kv-ts-tabs" style="margin-top:0;">
+                    <button type="button" class="kv-ts-tab-btn is-active" data-ps-dtab="{{ p.id }}-info">Thông tin</button>
+                    <button type="button" class="kv-ts-tab-btn" data-ps-dtab="{{ p.id }}-slips">Phiếu lương</button>
+                    <button type="button" class="kv-ts-tab-btn" data-ps-dtab="{{ p.id }}-history">Lịch sử thanh toán</button>
+                  </div>
+
+                  <div data-ps-dpanel="{{ p.id }}-info">
+                    <div class="kv-ps-detail-grid">
+                      <div><small>Mã</small><strong>{{ p.code }}</strong></div>
+                      <div><small>Tên</small><strong>{{ p.name }}</strong></div>
+                      <div><small>Kỳ hạn trả</small><strong>{{ p.pay_cycle }}</strong></div>
+                      <div><small>Kỳ làm việc</small><strong>{{ p.work_period_range }}</strong></div>
+                      <div><small>Ngày tạo</small><strong>{{ (p.created_at or '')[:16] or '—' }}</strong></div>
+                      <div><small>Người tạo</small><strong>{{ p.created_by or 'Admin' }}</strong></div>
+                      <div><small>Trạng thái</small><strong>{{ st_map.get(p.status, p.status) }}</strong></div>
+                      <div><small>Cổng trả lương</small><strong>{{ p.pay_branch }}</strong></div>
+                      <div><small>Tổng lương</small><strong>{{ p.total_salary|vnd }}</strong></div>
+                      <div><small>Đã trả nhân viên</small><strong>{{ p.paid_amount|vnd }}</strong></div>
+                      <div><small>Còn cần trả</small><strong>{{ rem|vnd }}</strong></div>
+                      <div><small>Ghi chú</small><strong>{{ p.note or '—' }}</strong></div>
+                    </div>
+                  </div>
+
+                  <div data-ps-dpanel="{{ p.id }}-slips" hidden>
+                    <table class="kv-tpl-inline-table" style="background:#fff;">
+                      <thead>
+                        <tr>
+                          <th>Mã NV</th>
+                          <th>Nhân viên</th>
+                          <th style="text-align:right;">Lương cơ bản</th>
+                          <th style="text-align:right;">Phụ cấp</th>
+                          <th style="text-align:right;">Giảm trừ</th>
+                          <th style="text-align:right;">Thực nhận</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for emp in (staff_list or []) %}
+                        <tr>
+                          <td>{{ emp.code }}</td>
+                          <td>{{ emp.fullname }}</td>
+                          <td style="text-align:right;">{{ (emp.base_earned or 0)|vnd }}</td>
+                          <td style="text-align:right;">{{ (emp.allowance_add or 0)|vnd }}</td>
+                          <td style="text-align:right;">{{ (emp.deduction_sub or 0)|vnd }}</td>
+                          <td style="text-align:right;"><b>{{ (emp.net_salary or 0)|vnd }}</b></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" style="text-align:center; color:#6b7280;">Chưa có phiếu lương nhân viên</td></tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div data-ps-dpanel="{{ p.id }}-history" hidden>
+                    <p style="margin:0; font-size:13px; color:#525d6d;">
+                      {% if p.paid_amount and p.paid_amount > 0 %}
+                        Đã thanh toán {{ p.paid_amount|vnd }} cho bảng lương {{ p.code }}.
+                      {% else %}
+                        Chưa có giao dịch thanh toán nào cho bảng lương này.
+                      {% endif %}
+                    </p>
+                  </div>
+
+                  <div class="kv-ps-detail-bar">
+                    <div>
+                      {% if p.status != 'cancelled' %}
+                      <form method="post" action="{{ url_for('employee_payroll_status', paysheet_id=p.id) }}" style="display:inline;">
+                        <input type="hidden" name="status" value="cancelled">
+                        <button type="submit" class="kv-tpl-btn-delete">Hủy bỏ</button>
+                      </form>
+                      {% endif %}
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                      {% if p.status != 'finalized' and p.status != 'cancelled' %}
+                      <form method="post" action="{{ url_for('employee_payroll_status', paysheet_id=p.id) }}" style="display:inline;">
+                        <input type="hidden" name="status" value="finalized">
+                        <input type="hidden" name="paid_amount" value="{{ p.total_salary }}">
+                        <button type="submit" class="invoice-action invoice-action-primary">Chốt &amp; Trả đủ</button>
+                      </form>
+                      {% endif %}
+                      <a class="kv-sched-btn-outline" href="{{ url_for('accounts_payroll_export', format='xlsx') }}">Xuất file</a>
+                    </div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="13" class="invoice-empty">
+                {{ icon('users', 36) }}
+                <h2>Không tìm thấy bảng tính lương nào</h2>
+                <p>Bấm "+ Bảng tính lương" để tự động tổng hợp lương từ chấm công và mức lương nhân viên.</p>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="kv-wd-pager" style="padding:10px 16px;">
+        <span>Hiển thị</span>
+        <select id="ps-page-size" aria-label="Số bản ghi hiển thị">
+          <option value="15" selected>15 bản ghi</option>
+          <option value="30">30 bản ghi</option>
+          <option value="50">50 bản ghi</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Modal Thêm bảng tính lương (KiotViet style) -->
+<dialog id="payroll-modal" class="customer-dialog kv-sched-popup" aria-labelledby="payroll-modal-title">
+  <form method="post" action="{{ url_for('employee_payroll') }}">
+    <div class="customer-dialog-heading">
+      <h2 id="payroll-modal-title">Thêm bảng tính lương</h2>
+      <button type="button" data-close-payroll-dialog aria-label="Đóng">{{ icon('close', 20) }}</button>
+    </div>
+    <div class="customer-dialog-body">
+      <div class="customer-form-grid">
+        <div class="form-field form-field-full">
+          <label for="pr-name">Tên bảng lương</label>
+          <input id="pr-name" type="text" name="name" placeholder="VD: Bảng lương tháng {{ current_month[5:7] }}/{{ current_month[:4] }}" maxlength="160">
+        </div>
+        <div class="form-field">
+          <label for="pr-cycle">Kỳ hạn trả lương</label>
+          <select id="pr-cycle" name="pay_cycle">
+            <option value="Hàng tháng">Hàng tháng</option>
+            <option value="Theo tuần">Theo tuần</option>
+            <option value="Theo ca">Theo ca</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="pr-period">Kỳ làm việc</label>
+          <input id="pr-period" type="month" name="work_period" value="{{ current_month }}" required>
+        </div>
+        <div class="form-field form-field-full">
+          <label for="pr-branch">Cổng trả lương</label>
+          <select id="pr-branch" name="pay_branch">
+            <option value="Tất cả các cổng">Tất cả các cổng</option>
+            {% for gc in gate_choices %}
+              <option value="{{ gc }}">{{ gc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-field form-field-full">
+          <label>Phạm vi áp dụng</label>
+          <div class="kv-cat-radio-row" style="margin-top:4px;">
+            <label class="kv-cat-radio">
+              <input type="radio" name="scope" value="all" checked>
+              <span>Tất cả nhân viên</span>
+            </label>
+            <label class="kv-cat-radio">
+              <input type="radio" name="scope" value="custom">
+              <span>Tùy chọn</span>
+            </label>
+          </div>
+          <div id="pr-custom-staff" hidden style="margin-top:10px;">
+            <table class="kv-tpl-inline-table">
+              <thead>
+                <tr>
+                  <th style="width:40px;"></th>
+                  <th>Mã nhân viên</th>
+                  <th>Tên nhân viên</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for emp in (staff_list or []) %}
+                <tr>
+                  <td style="text-align:center;"><input type="checkbox" name="selected_user_ids" value="{{ emp.id }}"></td>
+                  <td>{{ emp.code }}</td>
+                  <td>{{ emp.fullname }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="text-align:center; color:#6b7280;">Chưa có nhân viên nào</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="form-field form-field-full">
+          <label for="pr-note">Ghi chú</label>
+          <input id="pr-note" type="text" name="note" placeholder="Ghi chú kỳ lương" maxlength="255">
+        </div>
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-payroll-dialog>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var dlg = document.getElementById('payroll-modal');
+  if (dlg) {
+    document.querySelectorAll('[data-open-payroll-modal]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (typeof dlg.showModal === 'function') dlg.showModal();
+        else dlg.setAttribute('open', '');
+      });
+    });
+    document.querySelectorAll('[data-close-payroll-dialog]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (typeof dlg.close === 'function') dlg.close();
+        else dlg.removeAttribute('open');
+      });
+    });
+  }
+
+  var customWrap = document.getElementById('pr-custom-staff');
+  document.querySelectorAll('input[name="scope"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      if (customWrap) customWrap.hidden = (r.value !== 'custom' || !r.checked);
+    });
+  });
+
+  // Expandable paysheet detail rows + 3 tabs
+  document.querySelectorAll('[data-ps-toggle]').forEach(function (row) {
+    row.addEventListener('click', function () {
+      var pid = row.dataset.psToggle;
+      var detail = document.getElementById('ps-detail-' + pid);
+      if (!detail) return;
+      var isOpen = !detail.hidden;
+      detail.hidden = isOpen;
+      row.classList.toggle('is-expanded', !isOpen);
+    });
+  });
+  document.querySelectorAll('[data-ps-dtab]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var parts = btn.dataset.psDtab.split('-');
+      var pid = parts[0];
+      var box = btn.closest('.kv-ps-detail-box');
+      if (!box) return;
+      box.querySelectorAll('[data-ps-dtab]').forEach(function (b) { b.classList.toggle('is-active', b === btn); });
+      box.querySelectorAll('[data-ps-dpanel]').forEach(function (p) { p.hidden = (p.dataset.psDpanel !== btn.dataset.psDtab); });
+    });
+  });
+
+  // Column visibility toggle
+  document.querySelectorAll('[data-ps-col]').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      var col = cb.dataset.psCol;
+      document.querySelectorAll('[data-ps-cell="' + col + '"]').forEach(function (cell) {
+        cell.hidden = !cb.checked;
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,420 @@
+{% extends "_layout.html" %}
+{% from "_management_icons.html" import icon %}
+
+{% block title %}Lịch làm việc nhân viên — Smart Parking{% endblock %}
+{% block breadcrumb %}Nhân viên / Lịch làm việc{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/css/invoices.css">
+<link rel="stylesheet" href="/css/customers.css">
+<link rel="stylesheet" href="/css/employees.css">
+{% endblock %}
+
+{% block content %}
+<section class="kv-sched-page" aria-label="Lịch làm việc nhân viên">
+  <div class="kv-sched-toolbar">
+    <form class="kv-sched-toolbar-left" method="get" action="{{ url_for('employee_schedule') }}" id="sched-filter-form">
+      <input type="hidden" name="week" value="{{ week }}">
+      <input type="hidden" name="view" id="sched-view-hidden" value="{{ view_mode }}">
+      <h1 class="kv-sched-title">Lịch làm việc</h1>
+      <div class="kv-sched-search">
+        {{ icon('search', 15) }}
+        <input type="search" name="q" value="{{ q }}" placeholder="Tìm kiếm nhân viên" aria-label="Tìm kiếm nhân viên">
+      </div>
+      <select name="gate" class="kv-sched-select" onchange="this.form.submit()" aria-label="Lọc theo cổng làm việc">
+        <option value="">Tất cả các cổng</option>
+        {% for gc in gate_choices %}
+          <option value="{{ gc }}" {% if gate_filter == gc %}selected{% endif %}>{{ gc }}</option>
+        {% endfor %}
+      </select>
+      <div class="kv-sched-week-nav">
+        <a class="kv-sched-arrow" href="{{ url_for('employee_schedule', week=prev_week, gate=gate_filter, q=q, view=view_mode) }}" title="Tuần trước" aria-label="Tuần trước">{{ icon('left', 16) }}</a>
+        <span class="kv-sched-week-label">{{ week_label }}</span>
+        <a class="kv-sched-arrow" href="{{ url_for('employee_schedule', week=next_week, gate=gate_filter, q=q, view=view_mode) }}" title="Tuần sau" aria-label="Tuần sau">{{ icon('right', 16) }}</a>
+        <a class="kv-sched-btn-outline" href="{{ url_for('employee_schedule', gate=gate_filter, q=q, view=view_mode) }}">Tuần này</a>
+      </div>
+    </form>
+
+    <div class="kv-sched-toolbar-right">
+      <select class="kv-sched-select" id="sched-view-mode" aria-label="Chế độ xem lịch làm việc">
+        <option value="employee" {% if view_mode == 'employee' %}selected{% endif %}>Xem theo nhân viên</option>
+        <option value="shift" {% if view_mode == 'shift' %}selected{% endif %}>Xem theo ca</option>
+      </select>
+      <a class="kv-sched-btn-outline" href="{{ url_for('employee_schedule_export', week=week, gate=gate_filter) }}">Xuất file</a>
+    </div>
+  </div>
+
+  <div class="kv-sched-grid-card">
+    <div class="invoice-table-scroll">
+      {% if view_mode == 'shift' %}
+      <table class="kv-sched-table" aria-label="Lịch làm việc theo ca">
+        <thead>
+          <tr>
+            <th>Ca làm việc</th>
+            {% for d in days %}
+              <th class="{% if d.is_today %}is-today{% endif %}">
+                <div class="kv-sched-day-head">
+                  <span>{{ d.label }}</span>
+                  <b>{{ d.day_num }}</b>
+                </div>
+              </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for sh in (employee_shifts or []) %}
+          <tr>
+            <td class="kv-sched-emp-cell">
+              <strong>{{ sh.name }}</strong>
+              <small>{{ sh.time_range }}</small>
+            </td>
+            {% for d in days %}
+              {% set items = by_shift_day.get((sh.name, d.iso), []) %}
+              <td>
+                {% for s in items %}
+                  <button type="button" class="kv-sched-pill"
+                          data-edit-schedule
+                          data-id="{{ s.id }}"
+                          data-user-id="{{ s.user_id }}"
+                          data-user-name="{{ s.fullname }}"
+                          data-work-date="{{ s.work_date }}"
+                          data-day-label="{{ d.label }}, {{ d.iso }}"
+                          data-shift-name="{{ s.shift_name }}"
+                          data-gate-name="{{ s.gate_name }}"
+                          data-note="{{ s.note or '' }}">
+                    <span>{{ s.fullname }}</span>
+                    <small>{{ s.gate_name }}</small>
+                  </button>
+                {% endfor %}
+                <button type="button" class="kv-sched-add-link"
+                        data-quick-schedule
+                        data-shift-name="{{ sh.name }}"
+                        data-work-date="{{ d.iso }}"
+                        data-day-label="{{ d.label }}, {{ d.iso }}">
+                  + Thêm nhân viên
+                </button>
+              </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <table class="kv-sched-table" aria-label="Lịch làm việc theo nhân viên">
+        <thead>
+          <tr>
+            <th>Nhân viên</th>
+            {% for d in days %}
+              <th class="{% if d.is_today %}is-today{% endif %}">
+                <div class="kv-sched-day-head">
+                  <span>{{ d.label }}</span>
+                  <b>{{ d.day_num }}</b>
+                </div>
+              </th>
+            {% endfor %}
+            <th style="text-align:right;">
+              <span class="kv-cat-label-row" style="justify-content:flex-end;">
+                <span>Lương dự kiến</span>
+                <span class="kv-tpl-info-dot" title="Ước tính theo số ca đã xếp lịch trong tuần">i</span>
+              </span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="kv-sched-summary-row">
+            <td></td>
+            {% for d in days %}<td></td>{% endfor %}
+            <td style="text-align:right; padding-right:12px;">{{ "{:,}".format(total_expected_pay or 0) }}</td>
+          </tr>
+          {% for emp in employees %}
+          <tr>
+            <td class="kv-sched-emp-cell">
+              <strong>{{ emp.fullname }}</strong>
+              <small>{{ emp.code }}</small>
+            </td>
+            {% for d in days %}
+              {% set items = by_user_day.get((emp.id, d.iso), []) %}
+              <td>
+                {% for s in items %}
+                  <button type="button" class="kv-sched-pill"
+                          data-edit-schedule
+                          data-id="{{ s.id }}"
+                          data-user-id="{{ emp.id }}"
+                          data-user-name="{{ emp.fullname }}"
+                          data-work-date="{{ s.work_date }}"
+                          data-day-label="{{ d.label }}, {{ d.iso }}"
+                          data-shift-name="{{ s.shift_name }}"
+                          data-gate-name="{{ s.gate_name }}"
+                          data-note="{{ s.note or '' }}">
+                    <span>{{ s.shift_name }}</span>
+                    <small>{{ s.gate_name }}</small>
+                  </button>
+                {% endfor %}
+                <button type="button" class="kv-sched-add-link"
+                        data-quick-schedule
+                        data-user-id="{{ emp.id }}"
+                        data-user-name="{{ emp.fullname }}"
+                        data-work-date="{{ d.iso }}"
+                        data-day-label="{{ d.label }}, {{ d.iso }}"
+                        data-gate="{{ emp.work_branches_list[0] if emp.work_branches_list else 'Cổng chính' }}">
+                  + Thêm lịch
+                </button>
+              </td>
+            {% endfor %}
+            <td class="kv-sched-pay-cell">
+              <strong>{{ "{:,}".format(emp.week_expected_pay or 0) }}</strong>
+              <small>{{ emp.week_shift_count or 0 }} ca</small>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="9" class="invoice-empty">
+              {{ icon('users', 36) }}
+              <h2>Chưa có nhân viên phù hợp</h2>
+              <p>Thay đổi bộ lọc cổng hoặc thêm nhân viên ở mục Danh sách nhân viên.</p>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<!-- Form ẩn xóa lịch -->
+<form method="post" action="" id="sched-delete-form" hidden>
+  <input type="hidden" name="week" value="{{ week }}">
+  <input type="hidden" name="gate" value="{{ gate_filter }}">
+  <input type="hidden" name="q" value="{{ q }}">
+</form>
+
+<!-- Modal Thêm / Cập nhật lịch làm việc -->
+<dialog id="schedule-modal" class="customer-dialog kv-sched-popup" aria-labelledby="schedule-modal-title">
+  <form method="post" action="{{ url_for('employee_schedule') }}">
+    <input type="hidden" name="week" value="{{ week }}">
+    <input type="hidden" name="filter_gate" value="{{ gate_filter }}">
+    <input type="hidden" name="filter_q" value="{{ q }}">
+    <input type="hidden" name="view_mode" value="{{ view_mode }}">
+    <input type="hidden" name="schedule_id" id="sched-id" value="">
+
+    <div class="customer-dialog-heading">
+      <div>
+        <h2 id="schedule-modal-title">Thêm lịch làm việc</h2>
+        <div class="kv-sched-popup-sub" id="sched-popup-sub"></div>
+      </div>
+      <button type="button" data-close-suite-dialog aria-label="Đóng">{{ icon('close', 20) }}</button>
+    </div>
+
+    <div class="customer-dialog-body">
+      <div class="kv-sched-section" style="padding-top:0;">
+        <div class="kv-sched-section-title" style="margin-bottom:10px;">Chọn ca làm việc</div>
+        <div class="customer-form-grid">
+          <div class="form-field">
+            <label for="sched-shift">Ca trực</label>
+            <select id="sched-shift" name="shift_name">
+              {% for s in (employee_shifts or []) %}
+                <option value="{{ s.name }}">{{ s.name }} ({{ s.time_range }})</option>
+              {% else %}
+                <option value="Ca sáng">Ca sáng</option>
+                <option value="Ca chiều">Ca chiều</option>
+                <option value="Ca đêm">Ca đêm</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="sched-gate">Cổng làm việc</label>
+            <select id="sched-gate" name="gate_name">
+              {% for gc in gate_choices %}
+                <option value="{{ gc }}">{{ gc }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="sched-user">Nhân viên</label>
+            <select id="sched-user" name="user_id" required>
+              {% for emp in employees %}
+                <option value="{{ emp.id }}">{{ emp.fullname }} ({{ emp.code }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="sched-date">Ngày làm việc</label>
+            <input id="sched-date" type="date" name="work_date" value="{{ today }}" required>
+          </div>
+        </div>
+      </div>
+
+      <div class="kv-sched-section" id="sched-repeat-section">
+        <div class="kv-sched-section-head">
+          <div>
+            <div class="kv-sched-section-title">Lặp lại hàng tuần</div>
+            <div class="kv-sched-section-desc">Lịch làm việc sẽ được tự động lặp lại vào các ngày trong tuần</div>
+          </div>
+          <label class="kv-switch" aria-label="Lặp lại hàng tuần">
+            <input type="checkbox" id="sched-repeat-en" name="repeat_weekly" value="1">
+            <span class="kv-switch-slider"></span>
+          </label>
+        </div>
+        <div id="sched-repeat-body" hidden>
+          <div class="kv-sched-rep-days">
+            {% for idx, lbl in [(0,'Thứ 2'),(1,'Thứ 3'),(2,'Thứ 4'),(3,'Thứ 5'),(4,'Thứ 6'),(5,'Thứ 7'),(6,'Chủ nhật')] %}
+              <label class="kv-sched-rep-chip">
+                <input type="checkbox" name="repeat_days" value="{{ idx }}">
+                <span>{{ lbl }}</span>
+              </label>
+            {% endfor %}
+            <button type="button" class="kv-tpl-add-link" id="sched-rep-all" style="margin-top:0;">Chọn tất cả</button>
+          </div>
+          <div class="kv-sched-rep-end-row">
+            <label class="kv-ts-inline-field">
+              <span>Kết thúc</span>
+              <input type="date" name="repeat_end" id="sched-repeat-end">
+            </label>
+            <label class="kv-cat-check">
+              <input type="checkbox" name="include_holidays" value="1">
+              <span>Làm việc cả ngày lễ tết</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="kv-sched-section" id="sched-other-section">
+        <div class="kv-sched-section-head">
+          <div>
+            <div class="kv-sched-section-title">Thêm lịch tương tự cho nhân viên khác</div>
+            <div class="kv-sched-section-desc">Lịch làm việc sẽ được áp dụng cho các nhân viên được chọn</div>
+          </div>
+          <label class="kv-switch" aria-label="Áp dụng cho nhân viên khác">
+            <input type="checkbox" id="sched-other-en" name="apply_other_employees" value="1">
+            <span class="kv-switch-slider"></span>
+          </label>
+        </div>
+        <div class="kv-sched-other-emps" id="sched-other-body" hidden>
+          {% for emp in employees %}
+            <label class="kv-cat-check">
+              <input type="checkbox" name="extra_user_ids" value="{{ emp.id }}">
+              <span>{{ emp.fullname }} ({{ emp.code }})</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="kv-tpl-footer">
+      <button type="button" class="kv-tpl-btn-delete" id="sched-modal-del-btn" hidden>Xóa</button>
+      <div class="kv-tpl-footer-right">
+        <button type="button" class="invoice-action" data-close-suite-dialog>Bỏ qua</button>
+        <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var viewSel = document.getElementById('sched-view-mode');
+  var viewHidden = document.getElementById('sched-view-hidden');
+  var filterForm = document.getElementById('sched-filter-form');
+  if (viewSel && viewHidden && filterForm) {
+    viewSel.addEventListener('change', function () {
+      viewHidden.value = viewSel.value;
+      filterForm.submit();
+    });
+  }
+
+  var dlg = document.getElementById('schedule-modal');
+  if (!dlg) return;
+  var titleEl = document.getElementById('schedule-modal-title');
+  var subEl = document.getElementById('sched-popup-sub');
+  var idInp = document.getElementById('sched-id');
+  var uSel = document.getElementById('sched-user');
+  var dInp = document.getElementById('sched-date');
+  var sSel = document.getElementById('sched-shift');
+  var gSel = document.getElementById('sched-gate');
+  var repEn = document.getElementById('sched-repeat-en');
+  var repBody = document.getElementById('sched-repeat-body');
+  var repSec = document.getElementById('sched-repeat-section');
+  var otherEn = document.getElementById('sched-other-en');
+  var otherBody = document.getElementById('sched-other-body');
+  var otherSec = document.getElementById('sched-other-section');
+  var delBtn = document.getElementById('sched-modal-del-btn');
+  var delForm = document.getElementById('sched-delete-form');
+
+  function syncToggles() {
+    if (repBody && repEn) repBody.hidden = !repEn.checked;
+    if (otherBody && otherEn) otherBody.hidden = !otherEn.checked;
+  }
+  if (repEn) repEn.addEventListener('change', syncToggles);
+  if (otherEn) otherEn.addEventListener('change', syncToggles);
+  var repAll = document.getElementById('sched-rep-all');
+  if (repAll) {
+    repAll.addEventListener('click', function () {
+      document.querySelectorAll('input[name="repeat_days"]').forEach(function (c) { c.checked = true; });
+    });
+  }
+
+  function openDlg() {
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+  }
+  function closeDlg() {
+    if (typeof dlg.close === 'function') dlg.close();
+    else dlg.removeAttribute('open');
+  }
+
+  document.querySelectorAll('[data-quick-schedule]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (titleEl) titleEl.textContent = 'Thêm lịch làm việc';
+      if (idInp) idInp.value = '';
+      if (uSel && btn.dataset.userId) uSel.value = btn.dataset.userId;
+      if (dInp && btn.dataset.workDate) dInp.value = btn.dataset.workDate;
+      if (sSel && btn.dataset.shiftName) sSel.value = btn.dataset.shiftName;
+      if (gSel && btn.dataset.gate) gSel.value = btn.dataset.gate;
+      if (subEl) subEl.textContent = [btn.dataset.userName || (uSel ? uSel.options[uSel.selectedIndex].text : ''), btn.dataset.dayLabel || ''].filter(Boolean).join(' | ');
+      if (repSec) repSec.hidden = false;
+      if (otherSec) otherSec.hidden = false;
+      if (repEn) repEn.checked = false;
+      if (otherEn) otherEn.checked = false;
+      if (delBtn) delBtn.hidden = true;
+      syncToggles();
+      openDlg();
+    });
+  });
+
+  document.querySelectorAll('[data-edit-schedule]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (titleEl) titleEl.textContent = 'Cập nhật lịch làm việc';
+      if (idInp) idInp.value = btn.dataset.id || '';
+      if (uSel && btn.dataset.userId) uSel.value = btn.dataset.userId;
+      if (dInp && btn.dataset.workDate) dInp.value = btn.dataset.workDate;
+      if (sSel && btn.dataset.shiftName) sSel.value = btn.dataset.shiftName;
+      if (gSel && btn.dataset.gateName) gSel.value = btn.dataset.gateName;
+      if (subEl) subEl.textContent = [btn.dataset.userName || '', btn.dataset.dayLabel || ''].filter(Boolean).join(' | ');
+      if (repSec) repSec.hidden = true;
+      if (otherSec) otherSec.hidden = true;
+      if (delBtn) {
+        delBtn.hidden = !btn.dataset.id;
+        delBtn.dataset.delId = btn.dataset.id || '';
+      }
+      openDlg();
+    });
+  });
+
+  if (delBtn && delForm) {
+    delBtn.addEventListener('click', function () {
+      var sid = delBtn.dataset.delId;
+      if (!sid) return;
+      delForm.action = '/employees/schedule/' + sid + '/delete';
+      delForm.submit();
+    });
+  }
+
+  document.querySelectorAll('[data-close-suite-dialog]').forEach(function (btn) {
+    btn.addEventListener('click', closeDlg);
+  });
+})();
+</script>
+{% endblock %}

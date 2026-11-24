@@ -6,15 +6,17 @@ Chức năng:
   /login, /logout   - Đăng nhập / đăng xuất
   /                  - Menu chính (trang chủ)
   /parking           - Sơ đồ bãi đỗ theo khu A/B/C (dữ liệu thật từ DB)
-  /gate              - Xe vào / ra (gộp 1 trang): chọn ảnh -> "Nhận diện biển số" -> xem ảnh đánh dấu
-                       -> "Xác nhận". Biển số chưa có trong bãi = xe VÀO (chọn loại xe + vị trí),
-                       biển số đang gửi = xe RA (tính phí theo bảng giá, trả vị trí)
-  /entry, /exit      - Đường dẫn cũ, tự chuyển sang /gate
+  /gate              - Cabin riêng: sơ đồ ô đỗ, chọn phương tiện và điều hướng xe vào / ra
+  /monitoring/parking - Giám sát ô đỗ, chờ tích hợp camera nhận diện tình trạng bãi
+  /entry, /exit      - Nhận diện từ ảnh / camera -> kiểm tra -> xác nhận đúng chiều vào / ra
   /history           - Lịch sử toàn bộ lượt gửi xe (có bộ lọc)
+  /invoices          - Hóa đơn thu phí của các lượt xe đã ra, xuất CSV và in phiếu thu
   /statistics        - Thống kê tổng quan
   /pricing           - Bảng giá xe: khung thời gian, loại xe, giá (ai cũng xem, admin/nhân viên chỉnh sửa)
   /settings          - Cài đặt cá nhân (mỗi người tự chọn, không cần admin/nhân viên)
-  /users             - Quản lý người dùng (chỉ admin)
+  /customers         - Quản lý khách hàng & phương tiện (admin và nhân viên)
+  /accounts          - Quản lý tài khoản nhân viên & quản trị (chỉ admin)
+  /users             - Điều hướng tương thích ngược
 """
 
 import os
@@ -23,7 +25,10 @@ import calendar
 import uuid
 import re
 import functools
+import threading
+import time
 from datetime import datetime, timedelta, date
+from urllib.parse import urlencode
 
 # Thư mục py/ chứa các module (config, database, plate_recognition, ...)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'py'))
@@ -31,8 +36,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'py'
 # --- Kiểm tra thư viện cần thiết đã được cài đủ chưa ---
 try:
     from flask import (
-        Flask, render_template, request, redirect, url_for, flash, session,
-        send_from_directory, jsonify
+        Flask, render_template, request, redirect, url_for, flash, session, g,
+        send_from_directory, jsonify, send_file, abort, Response, stream_with_context
     )
     import cv2          # noqa: F401  (chỉ để kiểm tra đã cài opencv-python chưa)
     import easyocr       # noqa: F401  (chỉ để kiểm tra đã cài easyocr chưa)
@@ -48,24 +53,59 @@ except ImportError as e:
     print("=" * 60)
     sys.exit(1)
 
+from markupsafe import Markup
 from config import TMP_DIR, IN_DIR, OUT_DIR, TEMPLATES_HTML_DIR, TEMPLATES_CSS_DIR
 import database
-from plate_recognition import recognize_plate_annotated, recognize_plate
-from plate_utils import normalize_plate, plate_key
+import export_stats
+from parking_fees import calculate_turn_fee, DEFAULT_HOURLY_FALLBACK
+from plate_recognition import recognize_plate_annotated, recognize_plate, recognize_plate_live
+from plate_utils import normalize_plate, plate_key, is_valid_plate_format
+import parking_invoices
+import parking_customers
+import parking_employees
+import support_chat
+import ip_camera
 
 TMP_FOLDER = TMP_DIR   # ảnh tạm (cache/tmp) giữa bước "Nhận diện" và bước "Xác nhận"
 UPLOAD_DIRS = {'in': IN_DIR, 'out': OUT_DIR}   # static/in: xe vào, static/out: xe ra
 
-FEE_PER_HOUR = 5000  # đơn giá DỰ PHÒNG (5.000 VNĐ/giờ) — chỉ dùng cho xe cũ chưa có loại xe / không còn giá
+VIETNAM_BANKS = [
+    {'bin': '970407', 'short_name': 'Techcombank', 'name': 'Techcombank - Ngân hàng Kỹ Thương'},
+    {'bin': '970436', 'short_name': 'Vietcombank', 'name': 'Vietcombank - Ngân hàng Ngoại Thương'},
+    {'bin': '970422', 'short_name': 'MBBank', 'name': 'MBBank - Ngân hàng Quân Đội'},
+    {'bin': '970415', 'short_name': 'VietinBank', 'name': 'VietinBank - Ngân hàng Công Thương'},
+    {'bin': '970418', 'short_name': 'BIDV', 'name': 'BIDV - Ngân hàng Đầu tư & Phát triển'},
+    {'bin': '970432', 'short_name': 'VPBank', 'name': 'VPBank - Ngân hàng Việt Nam Thịnh Vượng'},
+    {'bin': '970423', 'short_name': 'TPBank', 'name': 'TPBank - Ngân hàng Tiên Phong'},
+    {'bin': '970416', 'short_name': 'ACB', 'name': 'ACB - Ngân hàng Á Châu'},
+    {'bin': '970403', 'short_name': 'Sacombank', 'name': 'Sacombank - Ngân hàng Sài Gòn Thương Tín'},
+    {'bin': '970405', 'short_name': 'Agribank', 'name': 'Agribank - Ngân hàng Nông nghiệp & PTNT'},
+    {'bin': '970441', 'short_name': 'VIB', 'name': 'VIB - Ngân hàng Quốc Tế'},
+    {'bin': '970437', 'short_name': 'HDBank', 'name': 'HDBank - Ngân hàng Phát triển TP.HCM'},
+    {'bin': '970443', 'short_name': 'SHB', 'name': 'SHB - Ngân hàng Sài Gòn - Hà Nội'},
+    {'bin': '970426', 'short_name': 'MSB', 'name': 'MSB - Ngân hàng Hàng Hải'},
+    {'bin': '970448', 'short_name': 'OCB', 'name': 'OCB - Ngân hàng Phương Đông'},
+    {'bin': '970440', 'short_name': 'SeABank', 'name': 'SeABank - Ngân hàng Đông Nam Á'},
+]
+
+FEE_PER_HOUR = DEFAULT_HOURLY_FALLBACK  # dùng chung với ước tính phí của chatbot
+MIN_PASSWORD_LEN = 4
 
 app = Flask(__name__, template_folder=TEMPLATES_HTML_DIR)
-app.secret_key = 'demo-smart-parking-secret-key'
+app.secret_key = os.environ.get('FLASK_SECRET_KEY') or 'demo-smart-parking-secret-key'
 
 
 @app.route('/css/<path:filename>')
+@app.route('/static/css/<path:filename>')
 def css_files(filename):
     """Phục vụ file CSS đặt trong templates/css/."""
     return send_from_directory(TEMPLATES_CSS_DIR, filename)
+
+
+@app.route('/images/<path:filename>')
+def image_files(filename):
+    """Phục vụ ảnh giao diện đặt trong static/images/."""
+    return send_from_directory(os.path.join(app.root_path, 'static', 'images'), filename)
 
 
 @app.route('/tmp-preview/<path:filename>')
@@ -77,6 +117,8 @@ def tmp_preview(filename):
 
 with app.app_context():
     database.init_db()
+
+support_chat.register_support(app)
 
 
 # ============================================================
@@ -111,8 +153,8 @@ def find_similar_registered(plate):
 
 def calc_fee(record, exit_time: datetime):
     """Tính phí khi xe ra.
-    - Xe có loại xe và còn giá LƯỢT phù hợp với khung giờ lúc xe VÀO -> tính theo bảng giá (1 lượt).
-    - Ngược lại (xe cũ chưa có loại xe, hoặc giá đã bị xóa) -> dùng đơn giá dự phòng theo giờ.
+    - Cộng giá LƯỢT của từng khung giờ xe đi qua, mỗi lần xuất hiện của khung tính một lần.
+    - Khoảng chưa có giá (hoặc xe cũ chưa có loại xe) dùng đơn giá dự phòng theo giờ.
     Trả về (phí, thời gian gửi, mô tả cách tính)."""
     entry_time = datetime.fromisoformat(record['entry_time'])
     duration = timedelta(seconds=int((exit_time - entry_time).total_seconds()))
@@ -123,18 +165,17 @@ def calc_fee(record, exit_time: datetime):
         return 0, duration, (f"Vé tháng của tài khoản {reg['username']} "
                              f"(còn hạn đến {reg['expires_on']}) · miễn phí")
 
-    price = database.find_turn_price(record['vehicle_type_id'], entry_time)
-    if price is not None:
-        note = (f"{record['vehicle_type_name'] or 'Loại xe'} · khung {price['period_name']} "
-                f"({price['start']}–{price['end']}) · 1 lượt")
-        return price['amount'], duration, note
-
-    total_seconds = duration.total_seconds()
-    hours = int(total_seconds // 3600)
-    if total_seconds % 3600 > 0:
-        hours += 1
-    hours = max(1, hours)
-    return hours * FEE_PER_HOUR, duration, f"đơn giá dự phòng {FEE_PER_HOUR:,}đ/giờ × {hours} giờ"
+    prices = database.get_turn_prices(record['vehicle_type_id'])
+    policy = next((dict(v) for v in database.get_vehicle_types() if v['id'] == record['vehicle_type_id']), {})
+    fee, note = calculate_turn_fee(prices, entry_time, exit_time, FEE_PER_HOUR,
+                                   policy.get('grace_minutes', 0), policy.get('daily_cap', 0),
+                                   free_minutes=policy.get('free_minutes', 0),
+                                   first_block_hours=policy.get('first_block_hours', 0),
+                                   first_block_amount=policy.get('first_block_amount', 0),
+                                   next_hour_amount=policy.get('next_hour_amount', 0))
+    if prices:
+        note = f"{record['vehicle_type_name'] or 'Loại xe'} · {note}"
+    return fee, duration, note
 
 
 def login_required(view_func):
@@ -168,6 +209,53 @@ def staff_required(view_func):
     return wrapped
 
 
+def _current_user_row():
+    uid = session.get('user_id')
+    if not uid:
+        return None
+    cached = getattr(g, '_cached_user_row', None)
+    if cached is not None:
+        return cached
+    row = database.get_user_by_id(uid)
+    session_role = session.get('role')
+    if (row is None or (session_role and row['role'] != session_role)) and session_role in ('admin', 'manager'):
+        row = {
+            'id': uid,
+            'username': session.get('username') or session_role,
+            'role': session_role,
+            'work_branch': 'Cổng chính',
+            'permissions_json': None,
+        }
+    g._cached_user_row = row
+    return row
+
+
+def has_perm(perm_key, gate_name=None):
+    import parking_permissions
+    role = session.get('role')
+    if role == 'user':
+        return False
+    row = _current_user_row()
+    effective_gate = gate_name if gate_name is not None else _current_gate_name()
+    return parking_permissions.user_has_permission(row, perm_key, gate_name=effective_gate)
+
+
+def permission_required(perm_key):
+    """Kiểm tra quyền chi tiết theo Sửa phân quyền (trừ user thường dùng route riêng)."""
+    def decorator(view_func):
+        @functools.wraps(view_func)
+        def wrapped(*args, **kwargs):
+            if session.get('role') in ('admin', 'manager') and not has_perm(perm_key):
+                flash('Bạn không có quyền thực hiện chức năng này.', 'error')
+                for fallback_perm, ep in (('dashboard.view', 'index'), ('gate.view', 'gate'), ('parking.view', 'parking')):
+                    if has_perm(fallback_perm):
+                        return redirect(url_for(ep))
+                return redirect(url_for('settings'))
+            return view_func(*args, **kwargs)
+        return wrapped
+    return decorator
+
+
 def user_required(view_func):
     """Chỉ dành cho tài khoản người dùng thường (role = 'user') — các chức năng tự phục vụ ở /me/..."""
     @functools.wraps(view_func)
@@ -182,12 +270,296 @@ def user_required(view_func):
 ROLE_LABELS = {'admin': 'Quản trị viên', 'manager': 'Nhân viên', 'user': 'Người dùng'}
 
 
+def _get_main_gate_dict():
+    """Trả về cấu hình Cổng chính mặc định (id = -1)."""
+    zone_type = database.get_setting('central_gate_zone_type', 'gate_inout')
+    if zone_type not in ZONE_TYPE_LABELS:
+        zone_type = 'gate_inout'
+    vt_id = _to_int(database.get_setting('central_gate_vehicle_type_id', ''))
+    vt_ids = database.get_setting('central_gate_vehicle_type_ids', '')
+    return {
+        'id': -1,
+        'name': 'Cổng chính',
+        'zone_type': zone_type,
+        'location': database.get_setting('central_gate_location') or '',
+        'vehicle_type_id': vt_id,
+        'vehicle_type_ids': vt_ids,
+        'operating_hours': database.get_setting('central_gate_hours', '24/7') or '24/7',
+        'area_names': database.get_setting('central_gate_area_names', '') or '',
+        'status': 'active',
+        'note': database.get_setting('central_gate_note') or '',
+    }
+
+
+def _user_allowed_gates():
+    import parking_permissions
+    return parking_permissions.user_allowed_gates(_current_user_row())
+
+
+def _get_user_gate_scope():
+    """Trả về (active_gates, allow_main_gate, allow_all_gates) theo phân quyền cổng của tài khoản."""
+    all_active = [dict(z) for z in database.get_parking_zones(status='active')]
+    allowed = _user_allowed_gates()
+    if allowed is None:
+        return all_active, True, True
+    allowed_set = set(allowed)
+    filtered = [g for g in all_active if g['name'] in allowed_set]
+    allow_main = 'Cổng chính' in allowed_set
+    total_choices = len(filtered) + (1 if allow_main else 0)
+    return filtered, allow_main, total_choices > 1
+
+
+def _current_gate():
+    uid = session.get('user_id')
+    role = session.get('role')
+    if not (uid and role in ('admin', 'manager')):
+        return None
+    try:
+        active_gates, allow_main, allow_all = _get_user_gate_scope()
+    except Exception:
+        return None
+    sel_id = session.get('selected_gate_id')
+    if sel_id == -1 and allow_main:
+        return _get_main_gate_dict()
+    if sel_id:
+        found = next((g for g in active_gates if g['id'] == sel_id), None)
+        if found:
+            return found
+    # Nếu user bị giới hạn cổng (nhân viên) và chưa chọn đúng cổng được phân -> tự động chọn cổng đầu tiên
+    if not allow_all or _user_allowed_gates() is not None:
+        if active_gates:
+            session['selected_gate_id'] = active_gates[0]['id']
+            return active_gates[0]
+        if allow_main:
+            session['selected_gate_id'] = -1
+            return _get_main_gate_dict()
+    return None
+
+
+def _current_gate_name():
+    gate = _current_gate()
+    return gate['name'] if gate else None
+
+
+def build_eod_report_data(report_date_iso=None, gate_name=None, receiver_filter='', creator_filter=''):
+    """Tổng hợp dữ liệu Báo cáo cuối ngày (kiểu KiotViet POS) cho Modal Cabin & trang Báo cáo."""
+    today_dt = date.today()
+    if report_date_iso:
+        try:
+            target_date = date.fromisoformat(report_date_iso[:10])
+        except ValueError:
+            target_date = today_dt
+    else:
+        target_date = today_dt
+    d_iso = target_date.isoformat()
+    d_vdate = target_date.strftime('%d/%m/%Y')
+    now_dt = datetime.now()
+
+    all_records = [dict(r) for r in database.get_all_records()]
+    if gate_name:
+        all_records = [r for r in all_records if r.get('entry_gate') == gate_name or r.get('exit_gate') == gate_name]
+
+    # Các lượt đã ra (thanh toán) trong ngày được chọn
+    out_records = [
+        r for r in all_records
+        if r.get('status') == 'OUT' and (r.get('exit_time') or '').startswith(d_iso)
+    ]
+    # Các lượt đang gửi trong bãi (Xe đang gửi / Đơn đang phục vụ)
+    in_records = [
+        r for r in all_records
+        if r.get('status') == 'IN' and (r.get('entry_time') or '').startswith(d_iso)
+    ]
+    # Các lượt đã hủy / xóa trong ngày
+    deleted_records = [
+        r for r in all_records
+        if r.get('status') == 'DELETED' and ((r.get('exit_time') or r.get('entry_time') or '').startswith(d_iso))
+    ]
+
+    cash_total = 0
+    transfer_total = 0
+    card_total = 0
+    total_revenue = 0
+    invoices = []
+
+    for r in sorted(out_records, key=lambda x: x.get('exit_time') or '', reverse=True):
+        fee = int(r.get('fee') or 0)
+        pm = r.get('payment_method') or 'cash'
+        if pm == 'transfer':
+            transfer_total += fee
+        elif pm == 'card':
+            card_total += fee
+        else:
+            cash_total += fee
+        total_revenue += fee
+        exit_ts = r.get('exit_time') or ''
+        entry_ts = r.get('entry_time') or ''
+        time_hm = exit_ts[11:16] if len(exit_ts) >= 16 else '00:00'
+        entry_hm = entry_ts[11:16] if len(entry_ts) >= 16 else '00:00'
+        invoices.append({
+            'id': r['id'],
+            'code': f"HD{r['id']:06d}",
+            'plate_number': r.get('plate_number') or '—',
+            'slot_name': r.get('slot_name') or '—',
+            'vehicle_type_name': r.get('vehicle_type_name') or 'Xe gửi',
+            'entry_time': entry_ts,
+            'exit_time': exit_ts,
+            'date_only_str': d_vdate,
+            'time_hm': time_hm,
+            'entry_hm': entry_hm,
+            'date_time_str': f"{d_vdate} {time_hm}",
+            'qty': 1,
+            'revenue': fee,
+            'other_fee': 0,
+            'tax': 0,
+            'return_fee': 0,
+            'paid': fee,
+            'payment_method': pm,
+            'payment_label': database.PAYMENT_METHODS.get(pm, 'Tiền mặt'),
+            'gate': r.get('exit_gate') or r.get('entry_gate') or (gate_name or 'Trung tâm'),
+        })
+
+    serving_est_total = 0
+    serving_items = []
+    for r in sorted(in_records, key=lambda x: x.get('entry_time') or '', reverse=True):
+        try:
+            fee_est, _, _ = calc_fee(r, now_dt)
+        except Exception:
+            fee_est = 0
+        fee_est = int(fee_est or 0)
+        serving_est_total += fee_est
+        entry_ts = r.get('entry_time') or ''
+        entry_hm = entry_ts[11:16] if len(entry_ts) >= 16 else '00:00'
+        serving_items.append({
+            'id': r['id'],
+            'code': f"PG{r['id']:06d}",
+            'plate_number': r.get('plate_number') or '—',
+            'slot_name': r.get('slot_name') or '—',
+            'vehicle_type_name': r.get('vehicle_type_name') or 'Xe gửi',
+            'entry_time': entry_ts,
+            'date_only_str': d_vdate,
+            'time_hm': entry_hm,
+            'date_time_str': f"{d_vdate} {entry_hm}",
+            'qty': 1,
+            'revenue': fee_est,
+            'other_fee': 0,
+            'tax': 0,
+            'return_fee': 0,
+            'paid': 0,
+            'gate': r.get('entry_gate') or (gate_name or 'Trung tâm'),
+        })
+
+    # Thu vé tháng trong ngày (nếu ở Trung tâm)
+    month_rev = 0
+    if not gate_name:
+        try:
+            st = database.get_statistics(d_iso, d_iso, gate_name=None)
+            month_rev = int(st.get('period_month_revenue') or 0)
+        except Exception:
+            month_rev = 0
+
+    inv_count = len(invoices)
+    serving_count = len(in_records)
+    cancel_count = len(deleted_records)
+    avg_per_inv = round(total_revenue / inv_count) if inv_count > 0 else 0
+    distinct_types_out = len({r.get('vehicle_type_name') or 'Xe' for r in out_records}) if out_records else 0
+    distinct_types_in = len({r.get('vehicle_type_name') or 'Xe' for r in in_records}) if in_records else 0
+
+    creator_name = session.get('fullname') or session.get('username') or 'Quản trị viên'
+    branch_name = gate_name if gate_name else 'Trung tâm (Tất cả cổng)'
+
+    return {
+        'date_iso': d_iso,
+        'date_vdate': d_vdate,
+        'generated_at': now_dt.strftime('%d/%m/%Y %H:%M'),
+        'creator_name': creator_name,
+        'branch_name': branch_name,
+        'receiver_filter': receiver_filter,
+        'creator_filter': creator_filter,
+        'invoice_count': inv_count,
+        'distinct_types_out': distinct_types_out,
+        'total_revenue': total_revenue,
+        'month_revenue': month_rev,
+        'other_revenue': month_rev,
+        'net_revenue_with_other': total_revenue + month_rev,
+        'net_revenue_no_other': total_revenue,
+        'cash_total': cash_total,
+        'transfer_total': transfer_total,
+        'card_total': card_total,
+        'avg_per_invoice': avg_per_inv,
+        'serving_count': serving_count,
+        'distinct_types_in': distinct_types_in,
+        'serving_est_total': serving_est_total,
+        'serving_items': serving_items,
+        'cancel_count': cancel_count,
+        'cancel_value': 0,
+        'invoices': invoices,
+    }
+
+
+@app.route('/api/cabin/eod-report')
+@login_required
+@staff_required
+def api_cabin_eod_report():
+    """API trả dữ liệu JSON Báo cáo cuối ngày cho Modal trên giao diện Cabin POS."""
+    report_date = (request.args.get('date') or '').strip()
+    receiver = (request.args.get('receiver') or '').strip()
+    creator = (request.args.get('creator') or '').strip()
+    data = build_eod_report_data(
+        report_date_iso=report_date or date.today().isoformat(),
+        gate_name=_current_gate_name(),
+        receiver_filter=receiver,
+        creator_filter=creator,
+    )
+    return jsonify(ok=True, report=data)
+
+
 @app.context_processor
 def inject_user():
+    uid = session.get('user_id')
+    role = session.get('role')
+    open_shift = None
+    active_gates = []
+    selected_gate = None
+    allow_main_gate = True
+    allow_all_gates = True
+    staff_members = []
+    eod_initial = None
+    if uid and role in ('admin', 'manager'):
+        try:
+            open_shift = database.get_open_attendance(uid)
+        except Exception:
+            open_shift = None
+        try:
+            active_gates, allow_main_gate, allow_all_gates = _get_user_gate_scope()
+            selected_gate = _current_gate()
+        except Exception:
+            active_gates = []
+            selected_gate = None
+        try:
+            staff_members = [
+                {'id': u['id'], 'username': u['username'], 'fullname': u['fullname'] or u['username']}
+                for u in database.get_staff_users()
+            ]
+        except Exception:
+            staff_members = []
+        try:
+            eod_initial = build_eod_report_data(gate_name=selected_gate['name'] if selected_gate else None)
+        except Exception:
+            eod_initial = None
     return {
         'current_user_fullname': session.get('fullname'),
-        'current_user_role': session.get('role'),
-        'role_label': ROLE_LABELS.get(session.get('role'), 'Người dùng'),
+        'current_user_role': role,
+        'role_label': ROLE_LABELS.get(role, 'Người dùng'),
+        'open_shift': open_shift,
+        'active_gates': active_gates,
+        'selected_gate': selected_gate,
+        'allow_main_gate': allow_main_gate,
+        'allow_all_gates': allow_all_gates,
+        'staff_members': staff_members,
+        'eod_initial': eod_initial,
+        'has_perm': has_perm,
+        'today_iso': date.today().isoformat(),
+        'today_vdate': date.today().strftime('%d/%m/%Y'),
     }
 
 
@@ -210,11 +582,50 @@ def login():
         session['username'] = user['username']
         session['fullname'] = user['fullname']
         session['role'] = user['role']
+        session.pop('selected_gate_id', None)
 
         flash(f'Xin chào {user["fullname"]}!', 'success')
+        if user['role'] in ('admin', 'manager'):
+            for perm_key, ep in (('dashboard.view', 'index'), ('gate.view', 'gate'), ('parking.view', 'parking')):
+                if has_perm(perm_key):
+                    return redirect(url_for(ep))
         return redirect(url_for('index'))
 
     return render_template('login.html')
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if 'user_id' in session:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        fullname = request.form.get('fullname', '').strip()
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        if not fullname or not username or not password:
+            flash('Vui lòng nhập đầy đủ thông tin.', 'error')
+            return render_template('register.html', fullname=fullname, username=username)
+
+        if len(password) < MIN_PASSWORD_LEN:
+            flash(f'Mật khẩu tối thiểu {MIN_PASSWORD_LEN} ký tự.', 'error')
+            return render_template('register.html', fullname=fullname, username=username)
+
+        if password != confirm_password:
+            flash('Mật khẩu nhập lại không khớp.', 'error')
+            return render_template('register.html', fullname=fullname, username=username)
+
+        if database.username_exists(username):
+            flash('Tên đăng nhập đã tồn tại. Vui lòng chọn tên khác.', 'error')
+            return render_template('register.html', fullname=fullname, username=username)
+
+        database.add_user(username, fullname, password, role='user')
+        flash('Đăng ký tài khoản thành công! Vui lòng đăng nhập.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('register.html')
 
 
 @app.route('/logout')
@@ -228,58 +639,620 @@ def logout():
 # TRANG CHỦ (MENU CHÍNH)
 # ============================================================
 
+def _resolve_dashboard_gates(args, all_gate_names):
+    """Phân giải danh sách cổng được chọn trên Dashboard (None = tất cả cổng)."""
+    raw = args.get('gates')
+    if raw is None:
+        top_gate = _current_gate_name()
+        if top_gate and top_gate in all_gate_names:
+            return [top_gate]
+        return None
+    raw = raw.strip()
+    if not raw or raw == 'all':
+        return None
+    if raw == 'none':
+        return []
+    chosen = [g.strip() for g in raw.split(',') if g.strip() in all_gate_names]
+    if set(chosen) == set(all_gate_names):
+        return None
+    return chosen
+
+
+def _gate_allowed_area_names(gate_row, all_areas):
+    """Xác định tập tên khu đỗ thuộc phạm vi 1 cổng (dựa trên area_names hoặc vehicle_type_ids/vehicle_type_id)."""
+    raw_areas = [x.strip() for x in (gate_row.get('area_names') or '').split(',') if x.strip()]
+    if raw_areas:
+        lower_set = {x.lower() for x in raw_areas}
+        return {a['name'] for a in all_areas if a['name'].strip().lower() in lower_set}
+    vt_ids = {int(x) for x in (gate_row.get('vehicle_type_ids') or '').split(',') if x.strip().isdigit()}
+    if not vt_ids and gate_row.get('vehicle_type_id'):
+        vt_ids = {int(gate_row['vehicle_type_id'])}
+    if vt_ids:
+        specific = {a['name'] for a in all_areas if a.get('vehicle_type_id') in vt_ids}
+        if specific:
+            return specific
+        return {a['name'] for a in all_areas if a.get('vehicle_type_id') is None}
+    return {a['name'] for a in all_areas}
+
+
+def _build_dashboard_data(args):
+    active_gate_rows = [dict(z) for z in database.get_parking_zones(status='active')]
+    main_gate = _get_main_gate_dict()
+    gate_options = ['Cổng chính'] + [g['name'] for g in active_gate_rows]
+    selected_gates = _resolve_dashboard_gates(args, gate_options)
+    start, end, range_key, label = parse_stats_range(args)
+    stats = database.get_statistics_for_gates(start.isoformat(), end.isoformat(), gate_names=selected_gates)
+
+    all_area_stats = database.area_stats()
+    all_areas = [dict(a) for a in database.get_areas()]
+    if selected_gates is None:
+        area_stats = all_area_stats
+    elif not selected_gates:
+        area_stats = {}
+    elif 'Trung tâm' in selected_gates or 'Tất cả các cổng' in selected_gates:
+        area_stats = all_area_stats
+    else:
+        gate_by_name = {g['name']: g for g in active_gate_rows}
+        gate_by_name['Cổng chính'] = main_gate
+        allowed_names = set()
+        for gname in selected_gates:
+            g_row = gate_by_name.get(gname)
+            if g_row:
+                allowed_names |= _gate_allowed_area_names(g_row, all_areas)
+        area_stats = {k: v for k, v in all_area_stats.items() if k in allowed_names}
+
+    counts = {'total': 0, 'available': 0, 'occupied': 0, 'maintenance': 0}
+    for a in area_stats.values():
+        counts['total'] += a.get('total', 0)
+        counts['available'] += a.get('available', 0)
+        counts['occupied'] += a.get('occupied', 0)
+        counts['maintenance'] += a.get('maintenance', 0)
+
+    recent_records = database.get_recent_records_for_gates(gate_names=selected_gates, limit=8)
+    effective_selected = gate_options if selected_gates is None else selected_gates
+    if selected_gates is None or len(effective_selected) == len(gate_options):
+        gate_filter_label = 'Tất cả các cổng'
+    elif len(effective_selected) == 0:
+        gate_filter_label = 'Chưa chọn cổng'
+    elif len(effective_selected) == 1:
+        gate_filter_label = effective_selected[0]
+    else:
+        gate_filter_label = f"{len(effective_selected)} cổng đã chọn"
+    return {
+        'counts': counts,
+        'stats': stats,
+        'area_stats': area_stats,
+        'recent_records': recent_records,
+        'range_key': range_key,
+        'range_label': label,
+        'date_from': start.isoformat(),
+        'date_to': end.isoformat(),
+        'today_iso': date.today().isoformat(),
+        'gate_options': gate_options,
+        'selected_gates': effective_selected,
+        'all_gates_selected': selected_gates is None,
+        'gate_filter_label': gate_filter_label,
+    }
+
+
 @app.route('/')
 @login_required
+@permission_required('dashboard.view')
 def index():
     counts = database.slot_counts()
     if session.get('role') == 'user':      # người dùng: trang chủ riêng, chỉ có 4 chức năng
         return render_template('user_home.html', counts=counts, today=date.today().isoformat(),
-                               vehicles=database.get_user_vehicles(session['user_id']))
-    total_in = database.count_open()
-    return render_template('index.html', counts=counts, total_in=total_in)
+                               vehicles=database.get_user_vehicles(session['user_id']),
+                               area_stats=database.area_stats())
+    data = _build_dashboard_data(request.args)
+    return render_template('index.html', **data)
+
+
+@app.route('/api/dashboard')
+@login_required
+@staff_required
+def api_dashboard():
+    data = _build_dashboard_data(request.args)
+    return jsonify(data)
 
 
 # ============================================================
 # SƠ ĐỒ BÃI ĐỖ XE
 # ============================================================
 
+def _parking_context_for_gate():
+    all_slots = database.get_all_slots()
+    vehicle_types = database.get_vehicle_types()
+    vt_wheel = {vt['id']: (vt['wheel_group'] or '2w') for vt in vehicle_types}
+    vt_wheel_by_name = {vt['name']: ('2 bánh' if (vt['wheel_group'] or '2w') == '2w' else '4 bánh') for vt in vehicle_types}
+    all_areas = []
+    for row in database.get_areas():
+        d = dict(row)
+        d.setdefault('allowed_vehicle_type_id', d.get('vehicle_type_id'))
+        d.setdefault('allowed_type_name', d.get('vehicle_type_name'))
+        wg = d.get('wheel_group') or (vt_wheel.get(d.get('vehicle_type_id')) if d.get('vehicle_type_id') else None)
+        d['allowed_wheel_label'] = '2 bánh' if wg == '2w' else ('4 bánh' if wg == '4w' else 'Tất cả')
+        all_areas.append(d)
+    all_slots_by_area = {a['name']: [] for a in all_areas}
+    for slot in all_slots:
+        all_slots_by_area.setdefault(slot['area'], []).append(slot)
+
+    gate = _current_gate()
+    assigned_names = []
+    if gate:
+        assigned_names = [x.strip() for x in (gate.get('area_names') or '').split(',') if x.strip()]
+
+    if gate and assigned_names:
+        assigned_lower = {x.lower() for x in assigned_names}
+        areas = [a for a in all_areas if a['name'].strip().lower() in assigned_lower]
+    elif gate and (gate.get('vehicle_type_ids') or gate.get('vehicle_type_id')):
+        vt_ids = {
+            int(x) for x in (gate.get('vehicle_type_ids') or '').split(',') if x.strip().isdigit()
+        }
+        if not vt_ids and gate.get('vehicle_type_id'):
+            vt_ids = {int(gate['vehicle_type_id'])}
+        specific = [a for a in all_areas if a.get('vehicle_type_id') in vt_ids]
+        areas = specific if specific else [a for a in all_areas if a.get('vehicle_type_id') is None]
+    else:
+        areas = all_areas
+
+    slots_by_area = {a['name']: all_slots_by_area.get(a['name'], []) for a in areas}
+    counts = {'total': 0, 'available': 0, 'occupied': 0, 'maintenance': 0}
+    for a_slots in slots_by_area.values():
+        for s in a_slots:
+            counts['total'] += 1
+            st = s['status']
+            if st in counts:
+                counts[st] += 1
+    area_id_by_name = {a['name']: str(a['id']) for a in all_areas}
+    main_gate = _get_main_gate_dict()
+    parking_gates = [{
+        'id': -1,
+        'name': 'Cổng chính',
+        'area_ids': sorted(area_id_by_name[n] for n in _gate_allowed_area_names(main_gate, all_areas) if n in area_id_by_name),
+    }]
+    for g_row in database.get_parking_zones(status='active'):
+        gd = dict(g_row)
+        parking_gates.append({
+            'id': gd['id'],
+            'name': gd['name'],
+            'area_ids': sorted(area_id_by_name[n] for n in _gate_allowed_area_names(gd, all_areas) if n in area_id_by_name),
+        })
+
+    return {
+        'slots_by_area': slots_by_area,
+        'counts': counts,
+        'areas': areas,
+        'all_areas': all_areas,
+        'assigned_area_names': assigned_names,
+        'current_gate_obj': gate,
+        'parking_gates': parking_gates,
+        'vehicle_types': vehicle_types,
+        'vt_wheel_by_name': vt_wheel_by_name,
+    }
+
+
 @app.route('/parking')
 @login_required
+@permission_required('parking.view')
 def parking():
-    slots = database.get_all_slots()
-    slots_by_area = {'A': [], 'B': [], 'C': []}
-    for slot in slots:
-        slots_by_area.setdefault(slot['area'], []).append(slot)
-    counts = database.slot_counts()
-    return render_template('parking.html', slots_by_area=slots_by_area, counts=counts)
+    ctx = _parking_context_for_gate()
+    return render_template('parking.html', **ctx)
+
+
+def _build_parking_workbook(rows_data, include_guide=True):
+    """Tạo workbook Excel (.xlsx) theo chuẩn cột sơ đồ bãi đỗ xe."""
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'So do bai do'
+    headers = ['Tên ô đỗ', 'Khu vực', 'Nhóm xe', 'Loại xe', 'Trạng thái', 'Ghi chú']
+    ws.append(headers)
+    header_fill = PatternFill(start_color='EEF4FF', end_color='EEF4FF', fill_type='solid')
+    header_font = Font(bold=True)
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+    for r in rows_data:
+        ws.append(r)
+    ws.auto_filter.ref = f"A1:F{max(ws.max_row, 1)}"
+    ws.freeze_panes = 'A2'
+    for col in ws.columns:
+        max_len = max((len(str(c.value or '')) for c in col), default=10)
+        ws.column_dimensions[col[0].column_letter].width = min(max(max_len + 4, 14), 40)
+
+    if include_guide:
+        guide = wb.create_sheet('Huong dan')
+        guide.append(['Trạng thái', 'Ý nghĩa'])
+        guide.append(['Trống', 'Ô đang hoạt động và còn trống'])
+        guide.append(['Đang đỗ', 'Ô đang có xe gửi (chỉ hiển thị khi xuất)'])
+        guide.append(['Ngừng hoạt động', 'Ô đang bảo trì / tạm ngừng hoạt động'])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+@app.route('/parking/export')
+@login_required
+@permission_required('parking.export')
+def parking_export():
+    import unicodedata
+    ctx = _parking_context_for_gate()
+    status_labels = {'available': 'Trống', 'occupied': 'Đang đỗ', 'maintenance': 'Ngừng hoạt động'}
+
+    gate_filter = (request.args.get('gate') or '').strip()
+    area_filter = (request.args.get('area') or '').strip()
+    status_filter = (request.args.get('status') or '').strip()
+    q_filter = (request.args.get('q') or '').strip().lower()
+
+    allowed_area_ids = None
+    if gate_filter and gate_filter != 'all':
+        matched_gate = next((pg for pg in ctx['parking_gates'] if pg['name'] == gate_filter), None)
+        if matched_gate is not None:
+            allowed_area_ids = set(matched_gate['area_ids'])
+
+    rows_data = []
+    for area in ctx['areas']:
+        area_d = dict(area)
+        if area_filter and area_filter != 'all' and str(area_d['id']) != area_filter:
+            continue
+        if allowed_area_ids is not None and str(area_d['id']) not in allowed_area_ids:
+            continue
+        for s in ctx['slots_by_area'].get(area_d['name'], []):
+            sd = dict(s)
+            st = sd.get('status')
+            if status_filter == 'active' and st == 'maintenance':
+                continue
+            if status_filter == 'inactive' and st != 'maintenance':
+                continue
+            search_blob = f"{sd.get('slot_name', '')} {area_d['name']} {sd.get('plate_number') or ''} {sd.get('maintenance_reason') or ''}".lower()
+            if q_filter and q_filter not in search_blob:
+                continue
+            vtype_name = sd.get('vehicle_type_name') or area_d.get('allowed_type_name') or 'Tất cả loại xe'
+            wgroup = ctx['vt_wheel_by_name'].get(sd.get('vehicle_type_name')) if sd.get('vehicle_type_name') else area_d.get('allowed_wheel_label', 'Tất cả')
+            if wgroup == '2 bánh':
+                wgroup = '2 Bánh'
+            elif wgroup == '4 bánh':
+                wgroup = '4 Bánh'
+            rows_data.append([
+                sd.get('slot_name', ''),
+                f"Khu {area_d['name']}",
+                wgroup,
+                vtype_name,
+                status_labels.get(st, 'Trống'),
+                sd.get('maintenance_reason') or area_d.get('note') or '',
+            ])
+    gate = ctx['current_gate_obj']
+    if gate:
+        raw_slug = unicodedata.normalize('NFKD', gate['name'].replace('đ', 'd').replace('Đ', 'D')).encode('ascii', 'ignore').decode()
+        slug = re.sub(r'[^A-Za-z0-9_-]+', '_', raw_slug).strip('_') or 'cong'
+        fname = f"so_do_bai_do_{slug}.xlsx"
+    else:
+        fname = "so_do_bai_do.xlsx"
+    return Response(
+        _build_parking_workbook(rows_data),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename="{fname}"'},
+    )
+
+
+@app.route('/parking/import/template')
+@login_required
+@staff_required
+@permission_required('parking.import')
+def parking_import_template():
+    sample_rows = [
+        ['A01', 'Khu A', 'Tất cả', 'Tất cả loại xe', 'Trống', ''],
+        ['O-TO01', 'Khu O-TO', '4 Bánh', 'Ô tô', 'Ngừng hoạt động', 'Bảo trì định kỳ'],
+    ]
+    return Response(
+        _build_parking_workbook(sample_rows),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': 'attachment; filename="mau_import_so_do_bai_do.xlsx"'},
+    )
+
+
+@app.route('/parking/import', methods=['POST'])
+@login_required
+@staff_required
+@permission_required('parking.import')
+def parking_import():
+    import io
+    import openpyxl
+    upload = request.files.get('file')
+    if upload is None or not (upload.filename or '').strip():
+        flash('Vui lòng chọn file Excel (.xlsx) để import.', 'error')
+        return redirect(url_for('parking'))
+    if not upload.filename.lower().endswith('.xlsx'):
+        flash('Chỉ nhận file Excel có đuôi .xlsx.', 'error')
+        return redirect(url_for('parking'))
+    try:
+        raw_bytes = upload.read()
+        if not raw_bytes:
+            raise ValueError('empty')
+        wb = openpyxl.load_workbook(io.BytesIO(raw_bytes), data_only=True)
+        ws = wb.active
+        rows_iter = list(ws.iter_rows(values_only=True))
+        wb.close()
+    except Exception:
+        flash('Không đọc được nội dung file Excel. Vui lòng kiểm tra lại định dạng .xlsx.', 'error')
+        return redirect(url_for('parking'))
+
+    vt_by_name = {vt['name'].strip().lower(): vt['id'] for vt in database.get_vehicle_types()}
+    parsed_rows = []
+    for idx, row in enumerate(rows_iter):
+        vals = list(row) + [None] * max(0, 6 - len(row))
+        slot_raw = str(vals[0] or '').strip()
+        area_raw = str(vals[1] or '').strip()
+        if idx == 0 and ('tên ô' in slot_raw.lower() or 'khu vực' in area_raw.lower()):
+            continue
+        if not slot_raw and not area_raw:
+            continue
+        if area_raw.lower().startswith('khu '):
+            area_raw = area_raw[4:].strip()
+
+        wg_raw = str(vals[2] or '').strip().lower()
+        wheel_group = None
+        if '2' in wg_raw:
+            wheel_group = '2w'
+        elif '4' in wg_raw:
+            wheel_group = '4w'
+
+        vt_raw = str(vals[3] or '').strip().lower()
+        vehicle_type_id = vt_by_name.get(vt_raw)
+        if vehicle_type_id is not None:
+            wheel_group = None
+
+        st_raw = str(vals[4] if vals[4] is not None else '').strip().lower()
+        if st_raw in ('3', 'maintenance', 'bảo trì', 'bao tri', 'ngừng hoạt động', 'ngung hoat dong', 'ngùng hoạt động'):
+            status = 'maintenance'
+        else:
+            status = 'available'
+
+        note = str(vals[5] or '').strip()
+        parsed_rows.append({
+            'slot_name': slot_raw,
+            'area_name': area_raw,
+            'wheel_group': wheel_group,
+            'vehicle_type_id': vehicle_type_id,
+            'status': status,
+            'note': note,
+        })
+
+    if not parsed_rows:
+        flash('File Excel không có dòng dữ liệu hợp lệ nào.', 'error')
+        return redirect(url_for('parking'))
+
+    added, updated, skipped = database.import_parking_slots(parsed_rows)
+    flash(f'Import thành công: thêm {added} ô, cập nhật {updated} ô (bỏ qua {skipped} dòng).', 'success')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/gate-areas', methods=['POST'])
+@login_required
+@staff_required
+@permission_required('parking.edit')
+def parking_gate_areas_save():
+    gate = _current_gate()
+    if not gate:
+        flash('Đang ở chế độ Trung tâm (hiển thị tất cả khu đỗ).', 'info')
+        return redirect(url_for('parking'))
+    selected = [a.strip() for a in request.form.getlist('area_names') if a.strip()]
+    area_names = ','.join(selected)[:255]
+    if gate['id'] == -1:
+        database.set_setting('central_gate_area_names', area_names)
+    else:
+        database.save_parking_zone(
+            gate['id'],
+            gate['name'],
+            gate.get('zone_type') or 'gate_inout',
+            gate.get('location') or '',
+            gate.get('vehicle_type_id'),
+            gate.get('capacity') or 0,
+            gate.get('status') or 'active',
+            gate.get('note') or '',
+            operating_hours=gate.get('operating_hours') or '24/7',
+            area_names=area_names,
+            vehicle_type_ids=gate.get('vehicle_type_ids') or '',
+        )
+    flash(f'Đã cập nhật khu đỗ hiển thị cho {gate["name"]}.', 'success')
+    return redirect(url_for('parking'))
 
 
 @app.route('/parking/<slot_name>/maintenance', methods=['POST'])
 @login_required
 @staff_required
+@permission_required('parking.maintenance')
 def slot_maintenance(slot_name):
-    slots = {s['slot_name']: s for s in database.get_all_slots()}
-    slot = slots.get(slot_name)
-    if slot is None:
-        flash('Không tìm thấy vị trí đỗ.', 'error')
-    elif slot['status'] == 'occupied':
-        flash(f'Không thể đưa {slot_name} vào bảo trì vì đang có xe đỗ.', 'error')
-    else:
-        going_to_maintenance = slot['status'] != 'maintenance'
-        database.set_slot_maintenance(slot_name, going_to_maintenance)
-        if going_to_maintenance:
-            flash(f'{slot_name} đã được đưa vào bảo trì.', 'success')
+    action = request.form.get('maintenance_action')
+    try:
+        if action not in ('start', 'update', 'finish'):
+            raise ValueError('Thao tác bảo trì không hợp lệ.')
+        database.set_slot_maintenance(slot_name, action != 'finish', request.form.get('reason', ''),
+                                      expected_status='available' if action == 'start' else 'maintenance')
+        flash(f'Đã cập nhật trạng thái bảo trì ô {slot_name}.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/areas/save', methods=['POST'])
+@login_required
+@staff_required
+def parking_area_save():
+    try:
+        raw_id = request.form.get('area_id', '')
+        area_id = _to_int(raw_id)
+        needed = 'parking.edit' if area_id else 'parking.create'
+        if not has_perm(needed):
+            flash('Bạn không có quyền thực hiện chức năng này.', 'error')
+            return redirect(url_for('parking'))
+        raw_wg = (request.form.get('wheel_group') or '').strip()
+        raw_type = (request.form.get('vehicle_type_id') or '').strip()
+        wheel_group = None
+        type_id = None
+        if raw_wg in ('2w', '4w'):
+            if raw_type and raw_type != 'all':
+                type_id = _to_int(raw_type)
+                if not type_id:
+                    raise ValueError('Khu hoặc loại xe không hợp lệ.')
+            else:
+                wheel_group = raw_wg
+        elif raw_wg == 'all':
+            wheel_group = None
+            type_id = None
         else:
-            flash(f'{slot_name} đã kết thúc bảo trì.', 'success')
+            if raw_type in ('wg:2w', 'wg:4w', '2w', '4w'):
+                wheel_group = raw_type.replace('wg:', '')
+            elif raw_type and raw_type != 'all':
+                type_id = _to_int(raw_type)
+                if not type_id:
+                    raise ValueError('Khu hoặc loại xe không hợp lệ.')
+            if area_id and not raw_type:
+                raise ValueError('Hãy chọn loại xe được phép đỗ hoặc Tất cả loại xe.')
+        if raw_id and not area_id:
+            raise ValueError('Khu hoặc loại xe không hợp lệ.')
+        slot_count = _to_int(request.form.get('slot_count')) if area_id is None else 0
+        if area_id is None and (slot_count is None or not 1 <= slot_count <= 1000):
+            raise ValueError('Vui lòng nhập số lượng ô đỗ từ 1 đến 1000.')
+        new_name = (request.form.get('name') or '').strip()
+        database.save_area(area_id, new_name, type_id, slot_count=slot_count,
+                           note=request.form.get('note', ''), wheel_group=wheel_group)
+        if area_id is None:
+            gate = _current_gate()
+            if gate:
+                existing_areas = [x.strip() for x in (gate.get('area_names') or '').split(',') if x.strip()]
+                if new_name and new_name.lower() not in {x.lower() for x in existing_areas}:
+                    existing_areas.append(new_name)
+                    if gate['id'] == -1:
+                        database.set_setting('central_gate_area_names', ','.join(existing_areas)[:255])
+                    else:
+                        database.save_parking_zone(
+                            gate['id'],
+                            gate['name'],
+                            gate.get('zone_type') or 'gate_inout',
+                            gate.get('location') or '',
+                            gate.get('vehicle_type_id'),
+                            gate.get('capacity') or 0,
+                            gate.get('status') or 'active',
+                            gate.get('note') or '',
+                            operating_hours=gate.get('operating_hours') or '24/7',
+                            area_names=','.join(existing_areas)[:255],
+                            vehicle_type_ids=gate.get('vehicle_type_ids') or '',
+                        )
+        flash('Đã lưu khu đỗ xe.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/areas/<int:area_id>/delete', methods=['POST'])
+@login_required
+@staff_required
+@permission_required('parking.delete')
+def parking_area_delete(area_id):
+    try:
+        database.delete_area(area_id)
+        flash('Đã xóa khu và các ô đỗ trong khu.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/<slot_name>/save', methods=['POST'])
+@login_required
+@staff_required
+@permission_required('parking.edit')
+def parking_slot_save(slot_name):
+    try:
+        database.rename_slot(slot_name, request.form.get('slot_name'), request.form.get('expected_status'),
+                              _to_int(request.form.get('record_id')), session.get('username') or str(session['user_id']))
+        flash('Đã sửa tên ô đỗ.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/slots/add', methods=['POST'])
+@login_required
+@staff_required
+@permission_required('parking.create')
+def parking_slot_add():
+    try:
+        database.add_slot(_to_int(request.form.get('area_id')), request.form.get('slot_name'))
+        flash('Đã thêm ô đỗ.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/<slot_name>/delete', methods=['POST'])
+@login_required
+@staff_required
+@permission_required('parking.delete')
+def parking_slot_delete(slot_name):
+    try:
+        database.delete_slot(slot_name)
+        flash(f'Đã xóa ô đỗ {slot_name}.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/<slot_name>/move', methods=['POST'])
+@login_required
+@staff_required
+@permission_required('gate.entry')
+def parking_vehicle_move(slot_name):
+    try:
+        record_id = _to_int(request.form.get('record_id'))
+        if not record_id:
+            raise ValueError('Thiếu thông tin xe. Hãy tải lại trang.')
+        database.move_parked_vehicle(slot_name, request.form.get('target_slot'), record_id,
+                                     session.get('username') or str(session['user_id']))
+        flash('Đã di chuyển xe và lưu ghi chú vào lịch sử.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
+    return redirect(url_for('parking'))
+
+
+@app.route('/parking/<slot_name>/remove', methods=['POST'])
+@login_required
+@staff_required
+@permission_required('gate.exit')
+def parking_vehicle_remove(slot_name):
+    try:
+        record_id = _to_int(request.form.get('record_id'))
+        if not record_id:
+            raise ValueError('Thiếu thông tin xe. Hãy tải lại trang.')
+        database.remove_parked_vehicle(slot_name, record_id, request.form.get('reason', ''),
+                                       session.get('username') or str(session['user_id']))
+        flash('Đã xóa xe khỏi ô; lượt gửi được giữ trong lịch sử với lý do xóa.', 'success')
+    except ValueError as error:
+        flash(str(error), 'error')
     return redirect(url_for('parking'))
 
 
 # ============================================================
-# XE VÀO / XE RA — GỘP 1 TRANG (OCR BIỂN SỐ, 2 BƯỚC: NHẬN DIỆN -> XÁC NHẬN)
+# XE VÀO / XE RA (ẢNH HOẶC CAMERA, 2 BƯỚC: NHẬN DIỆN -> XÁC NHẬN)
 # ============================================================
 
 TOKEN_RE = re.compile(r'^[0-9a-f]{12}$')
 ALLOWED_EXT = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
+# Mô hình OCR dùng chung (không an toàn khi chạy song song) -> các làn xếp lượt dùng.
+CAMERA_OCR_LOCK = threading.Lock()
+# Mỗi làn chỉ giữ tối đa 1 yêu cầu nhận diện đang chờ / đang chạy, để làn vào và
+# làn ra không chặn nhau và không dồn hàng đợi khung hình.
+LANE_OCR_LOCKS = {'entry': threading.Lock(), 'exit': threading.Lock()}
+LIVE_OCR_WAIT_SECONDS = 1.0       # quét liên tục: bận thì bỏ khung, client tự thử lại
+CAPTURE_OCR_WAIT_SECONDS = 30.0   # bấm "Chụp & quét"/tải ảnh: chờ tới lượt thay vì báo lỗi
+MAX_CAMERA_FRAME_BYTES = 4 * 1024 * 1024
+_last_camera_cleanup = float('-inf')
 
 
 def clean_plate_input(text):
@@ -331,19 +1304,23 @@ def promote_tmp(token, prefix):
     return filename
 
 
-def render_gate(token='', plate='', note='', form=None):
-    """Dựng trang /gate. Có biển số hợp lệ -> xác định xe VÀO hay xe RA và chuẩn bị thông tin tương ứng."""
+def gate_context(direction, token='', plate='', note='', form=None):
+    """Thông tin xác nhận dùng chung cho trang đầy đủ và kết quả camera cập nhật trực tiếp."""
     token = token if find_tmp(token) else ''
     now = datetime.now()
     ctx = {'token': token, 'plate': plate, 'note': note, 'form': form or {}, 'now': now,
            'mode': None, 'record': None, 'fee_preview': None, 'preview_url': None,
            'type_options': [], 'slots_by_area': {}, 'entry_mode': None, 'no_slots': False,
            'registered': None, 'reg_month_ok': False, 'reg_expired': False, 'suggest': None,
-           'reg_type': None}
+           'reg_type': None, 'direction': direction, 'gate_error': None,
+           'payment_methods': database.PAYMENT_METHODS,
+           'source': 'upload' if request.form.get('source', request.args.get('source')) == 'upload' else 'camera'}
 
     if token and os.path.exists(os.path.join(TMP_FOLDER, f'{token}_ann.jpg')):
         ctx['preview_url'] = url_for('tmp_preview', filename=f'{token}_ann.jpg',
                                      v=int(os.path.getmtime(os.path.join(TMP_FOLDER, f'{token}_ann.jpg'))))
+
+    ctx.update(vietqr_context())
 
     if token and len(plate_key(plate)) >= 4:
         registered = database.get_registered_vehicle(plate_key(plate))
@@ -353,34 +1330,383 @@ def render_gate(token='', plate='', note='', form=None):
                                   and not ctx['reg_month_ok'])
         ctx['suggest'] = None if registered else find_similar_registered(plate)
         record = database.find_open_record(plate)
-        if record is not None:
+        if direction == 'entry' and record is not None:
+            ctx['gate_error'] = f'Xe {plate} đang gửi trong bãi. Hãy chọn Xe ra để làm thủ tục lấy xe.'
+        elif direction == 'exit' and record is None:
+            ctx['gate_error'] = f'Không tìm thấy xe {plate} đang gửi trong bãi. Hãy kiểm tra lại biển số hoặc chọn Xe vào.'
+        elif direction == 'exit':
             fee, duration, fee_note = calc_fee(record, now)
             ctx.update(mode='exit', record=record,
                        fee_preview={'fee': fee, 'duration': duration, 'note': fee_note})
         else:
             slots_by_area = database.get_available_slots_by_area()
+            allowed_areas = _allowed_area_names_for_current_user()
+            if allowed_areas is not None:
+                slots_by_area = {k: v for k, v in slots_by_area.items() if k in allowed_areas}
+            allowed_vts = _allowed_vt_ids_for_current_gate()
+            all_types = database.get_vehicle_types()
+            if allowed_vts is not None:
+                filtered_types = [t for t in all_types if t['id'] in allowed_vts]
+                if filtered_types:
+                    all_types = filtered_types
             ctx.update(
                 mode='entry',
-                entry_mode=database.get_user_setting(session['user_id'], 'entry_mode', 'manual'),
+                entry_mode=database.get_user_setting(session['user_id'], 'entry_mode', 'auto'),
                 slots_by_area=slots_by_area,
-                no_slots=not any(slots_by_area.get(a) for a in ('A', 'B', 'C')),
+                no_slots=not any(slots_by_area.values()),
                 type_options=[{'id': t['id'], 'name': t['name'],
                                'price': database.find_turn_price(t['id'], now)}
-                              for t in database.get_vehicle_types()],
+                              for t in all_types],
             )
             # Xe đã đăng ký (có loại xe): dùng luôn loại xe đã đăng ký, không cần chọn lại
             if registered and registered['vehicle_type_id']:
                 ctx['reg_type'] = next((t for t in ctx['type_options']
                                         if t['id'] == registered['vehicle_type_id']), None)
+    return ctx
+
+
+def _scoped_area_stats_and_counts():
+    all_area_stats = database.area_stats()
+    allowed_areas = _allowed_area_names_for_current_user()
+    if allowed_areas is not None:
+        area_stats = {k: v for k, v in all_area_stats.items() if k in allowed_areas}
+    else:
+        area_stats = all_area_stats
+    counts = {'total': 0, 'available': 0, 'occupied': 0, 'maintenance': 0}
+    for a in area_stats.values():
+        counts['total'] += a.get('total', 0)
+        counts['available'] += a.get('available', 0)
+        counts['occupied'] += a.get('occupied', 0)
+        counts['maintenance'] += a.get('maintenance', 0)
+    return area_stats, counts
+
+
+def render_gate(direction, token='', plate='', note='', form=None):
+    ctx = gate_context(direction, token, plate, note, form)
+    area_stats, counts = _scoped_area_stats_and_counts()
+    ctx['counts'] = counts
+    ctx['area_stats'] = area_stats
+    ctx['device_settings'] = get_device_settings()
     return render_template('gate.html', **ctx)
 
 
-@app.route('/gate', methods=['GET', 'POST'])
+@app.route('/monitoring/parking')
 @login_required
 @staff_required
+def parking_monitor():
+    areas = database.get_areas()
+    slots_by_area = {area['name']: [] for area in areas}
+    for slot in database.get_all_slots():
+        slots_by_area.setdefault(slot['area'], []).append(slot)
+    return render_template('parking_monitor.html', areas=areas,
+                           slots_by_area=slots_by_area, counts=database.slot_counts())
+
+
+def _allowed_area_names_for_current_user(all_areas=None):
+    """Trả về tập tên khu đỗ thuộc phạm vi cổng đang chọn / cổng được phân quyền (None = toàn bộ)."""
+    if all_areas is None:
+        all_areas = [dict(a) for a in database.get_areas()]
+    gate_row = _current_gate()
+    if gate_row:
+        return _gate_allowed_area_names(gate_row, all_areas)
+    allowed = _user_allowed_gates()
+    if allowed is None:
+        return None
+    active_gates, allow_main, _ = _get_user_gate_scope()
+    allowed_areas = set()
+    for g in active_gates:
+        allowed_areas |= _gate_allowed_area_names(g, all_areas)
+    if allow_main:
+        allowed_areas |= _gate_allowed_area_names(_get_main_gate_dict(), all_areas)
+    return allowed_areas
+
+
+def _allowed_vt_ids_for_current_gate():
+    """Trả về tập vehicle_type_id được phép tại cổng đang chọn (None = không giới hạn)."""
+    gate_row = _current_gate()
+    if not gate_row:
+        return None
+    vt_ids = {int(x) for x in (gate_row.get('vehicle_type_ids') or '').split(',') if x.strip().isdigit()}
+    if not vt_ids and gate_row.get('vehicle_type_id'):
+        vt_ids = {int(gate_row['vehicle_type_id'])}
+    return vt_ids or None
+
+
+@app.route('/gate/select', methods=['POST'])
+@login_required
+@staff_required
+def select_active_gate():
+    gate_id = _to_int(request.form.get('gate_id'))
+    active_gates, allow_main, allow_all = _get_user_gate_scope()
+    if not gate_id:
+        if allow_all:
+            session.pop('selected_gate_id', None)
+            flash('Đã chuyển sang toàn bộ cổng được phân quyền.', 'success')
+        else:
+            flash('Tài khoản chỉ được phân quyền tại cổng hiện tại.', 'error')
+    elif gate_id == -1:
+        if allow_main:
+            session['selected_gate_id'] = -1
+            flash('Đã chuyển sang Cổng chính. Dữ liệu bãi xe đã được cập nhật.', 'success')
+        else:
+            flash('Bạn không có quyền truy cập Cổng chính.', 'error')
+    else:
+        gate_obj = next((g for g in active_gates if g['id'] == gate_id), None)
+        if gate_obj:
+            session['selected_gate_id'] = gate_obj['id']
+            flash(f'Đã chuyển sang {gate_obj["name"]}. Dữ liệu bãi xe đã được cập nhật.', 'success')
+        else:
+            flash('Bạn không có quyền truy cập cổng này.', 'error')
+    target = request.form.get('next') or request.referrer or url_for('index')
+    if 'gates=' in target:
+        from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+        parts = urlsplit(target)
+        q_pairs = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != 'gates']
+        target = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q_pairs), parts.fragment))
+    return redirect(target)
+
+
+@app.route('/gate')
+@login_required
+@staff_required
+@permission_required('gate.view')
 def gate():
+    all_areas = [dict(a) for a in database.get_areas()]
+    allowed_areas = _allowed_area_names_for_current_user(all_areas)
+    areas = [a for a in all_areas if allowed_areas is None or a['name'] in allowed_areas]
+    open_records = {record['id']: dict(record) for record in database.get_open_records()}
+    cabin_slots = []
+    now = datetime.now()
+    counts = {'total': 0, 'available': 0, 'occupied': 0, 'maintenance': 0}
+    for item in database.get_all_slots():
+        slot = dict(item)
+        if allowed_areas is not None and slot.get('area') not in allowed_areas:
+            continue
+        counts['total'] += 1
+        st = slot.get('status')
+        if st in counts:
+            counts[st] += 1
+        slot['record'] = open_records.get(slot['record_id'])
+        slot['preview_fee'], slot['preview_duration'] = 0, ''
+        if slot['record']:
+            slot['preview_fee'], slot['preview_duration'], _ = calc_fee(slot['record'], now)
+        cabin_slots.append(slot)
+    occupied_slots = sorted(
+        (s for s in cabin_slots if s['status'] == 'occupied'),
+        key=lambda s: (s['record'] or {}).get('entry_time') or '',
+        reverse=True,
+    )
+    return render_template('cabin_parking.html',
+                           areas=areas, cabin_slots=cabin_slots,
+                           occupied_slots=occupied_slots,
+                           counts=counts)
+
+
+@app.route('/gate/lanes')
+@login_required
+@staff_required
+@permission_required('gate.view')
+def gate_lanes():
+    today = date.today().isoformat()
+    gate_name = _current_gate_name()
+    allowed_areas = _allowed_area_names_for_current_user()
+    _, scoped_counts = _scoped_area_stats_and_counts()
+    records = [dict(record) for record in database.get_all_records()
+               if record['status'] in ('IN', 'OUT')]
+    if gate_name:
+        records = [
+            r for r in records
+            if r.get('entry_gate') == gate_name or r.get('exit_gate') == gate_name
+            or (allowed_areas is not None and r.get('area') in allowed_areas)
+        ]
+    elif allowed_areas is not None:
+        records = [r for r in records if r.get('area') in allowed_areas]
+    open_list = [r for r in records if r['status'] == 'IN']
+    exit_list = sorted((r for r in records if r['status'] == 'OUT'),
+                       key=lambda r: r['exit_time'] or '', reverse=True)
+    recent_list = sorted(
+        records,
+        key=lambda r: (r['exit_time'] if r['status'] == 'OUT' else r['entry_time']) or r['entry_time'] or '',
+        reverse=True,
+    )[:20]
+    entry_record = open_list[0] if open_list else (records[0] if records else None)
+    exit_record = exit_list[0] if exit_list else None
+    now = datetime.now()
+    for record in (*open_list[:20], *recent_list, entry_record, exit_record):
+        if record is None:
+            continue
+        if record.get('status') == 'IN':
+            if 'preview_fee' not in record:
+                record['preview_fee'], record['preview_duration'], _ = calc_fee(record, now)
+        else:
+            record['preview_fee'] = record.get('fee') or 0
+            record['preview_duration'] = ''
+        if 'entry_image_url' not in record:
+            for direction, folder in (('entry', IN_DIR), ('exit', OUT_DIR)):
+                filename = record.get(f'{direction}_image')
+                record[f'{direction}_image_url'] = (
+                    url_for('static', filename=f"{'in' if direction == 'entry' else 'out'}/{filename}")
+                    if filename and os.path.basename(filename) == filename
+                    and os.path.isfile(os.path.join(folder, filename)) else None)
+    return render_template('gate_menu.html',
+                           counts=scoped_counts,
+                           stats=database.get_statistics(today, today, gate_name=gate_name),
+                           entry_record=entry_record, exit_record=exit_record,
+                           open_records=open_list[:20], recent_exits=exit_list[:20],
+                           recent_records=recent_list,
+                           device_settings=get_device_settings())
+
+
+@app.route('/gate/<direction>/camera', methods=['POST'])
+@login_required
+@staff_required
+def gate_camera(direction):
+    """Nhận diện một khung hình, chỉ lưu ảnh tạm; ghi nhận vào / ra vẫn qua nút Xác nhận."""
+    if direction not in ('entry', 'exit'):
+        abort(404)
+    if request.form.get('action') == 'discard':
+        drop_tmp(request.form.get('token', ''))
+        return '', 204
+    profile = request.form.get('profile', 'live')
+    if profile not in ('live', 'capture'):
+        return jsonify(error='Chế độ nhận diện camera không hợp lệ.'), 400
+    file = request.files.get('image')
+    if not file or not file.filename:
+        return jsonify(error='Chưa có hình ảnh từ camera.'), 400
+    frame = file.read(MAX_CAMERA_FRAME_BYTES + 1)
+    if not frame or len(frame) > MAX_CAMERA_FRAME_BYTES:
+        return jsonify(error='Ảnh camera phải nhỏ hơn 4 MB.'), 400
+    # Mỗi làn tối đa 1 yêu cầu; hai làn vào/ra xếp lượt dùng chung mô hình OCR
+    # (chờ có giới hạn) thay vì làn này trả lỗi "bận" khi làn kia đang quét.
+    lane_lock = LANE_OCR_LOCKS[direction]
+    if not lane_lock.acquire(blocking=False):
+        return jsonify(error='Làn này đang nhận diện khung hình trước, sẽ tự thử lại.'), 429
+    wait = CAPTURE_OCR_WAIT_SECONDS if profile == 'capture' else LIVE_OCR_WAIT_SECONDS
+    if not CAMERA_OCR_LOCK.acquire(timeout=wait):
+        lane_lock.release()
+        return jsonify(error='Nhận diện đang bận, sẽ tự thử lại.'), 429
+    ocr_held = True
+    token = uuid.uuid4().hex[:12]
+    path = os.path.join(TMP_FOLDER, token + '.jpg')
+    try:
+        global _last_camera_cleanup
+        if time.monotonic() - _last_camera_cleanup > 60:
+            cleanup_tmp()
+            _last_camera_cleanup = time.monotonic()
+        with open(path, 'wb') as out:
+            out.write(frame)
+        plate, annotated, rect, width, height, metrics = recognize_plate_live(path, details=True, accurate=profile == 'capture')
+        # Giải phóng mô hình OCR ngay để làn còn lại được quét, phần còn lại chỉ là đọc DB/render.
+        CAMERA_OCR_LOCK.release()
+        ocr_held = False
+        plate = clean_plate_input(plate)
+        if not cv2.imwrite(os.path.join(TMP_FOLDER, token + '_ann.jpg'), annotated):
+            raise OSError('Không lưu được ảnh xem trước.')
+        ctx = gate_context(direction, token, plate)
+        ctx['source'] = 'camera'
+        confident = is_valid_plate_format(plate) and metrics['confidence'] >= 0.65
+        return jsonify(
+            token=token, plate=plate, plate_key=plate_key(plate),
+            valid=confident,
+            confidence=metrics['confidence'], elapsed_ms=metrics['elapsed_ms'], engine=metrics['engine'],
+            rect=list(rect) if rect is not None else None,
+            width=int(width), height=int(height), preview_url=ctx['preview_url'],
+            checked_plate=plate if ctx['mode'] and confident else '',
+            can_confirm=bool(confident and ctx['mode'] and not (ctx['mode'] == 'entry' and ctx['no_slots'])),
+            html=render_template('_gate_result.html', **ctx),
+        )
+    except (ValueError, OSError) as error:
+        drop_tmp(token)
+        return jsonify(error=f'Không đọc được ảnh camera: {error}'), 400
+    except Exception:
+        drop_tmp(token)
+        app.logger.exception('Không nhận diện được khung hình camera')
+        return jsonify(error='Lỗi nhận diện camera. Hãy bấm Bắt đầu để thử lại hoặc chọn Tải ảnh.'), 500
+    finally:
+        if ocr_held:
+            CAMERA_OCR_LOCK.release()
+        lane_lock.release()
+
+
+def _resolve_ip_camera_url(slot):
+    setting_key = ip_camera.CAMERA_SLOT_SETTING_KEYS.get(slot)
+    if not setting_key:
+        abort(404)
+    raw = (request.args.get('url') or '').strip()
+    if not raw:
+        raw = database.get_setting(setting_key, '').strip()
+    return ip_camera.normalize_ip_camera_url(raw)
+
+
+@app.route('/api/camera/test', methods=['POST'])
+@login_required
+@staff_required
+def test_ip_camera():
+    """Kiểm tra kết nối tới camera IP (IP Webcam / RTSP / HTTP MJPEG)."""
+    payload = request.get_json(silent=True) or {}
+    raw_url = (payload.get('url') or request.form.get('url') or '').strip()
+    result = ip_camera.probe_ip_camera(raw_url)
+    return jsonify(result), (200 if result['ok'] else 400)
+
+
+@app.route('/api/camera/select-lane', methods=['POST'])
+@login_required
+@staff_required
+def select_lane_camera():
+    """Đồng bộ lựa chọn camera của Làn vào / Làn ra giữa trang đơn làn, 2 làn và Thiết lập."""
+    payload = request.get_json(silent=True) or {}
+    direction = (payload.get('direction') or '').strip()
+    device = (payload.get('device') or '').strip()[:120]
+    if direction not in ('entry', 'exit'):
+        return jsonify(ok=False, error='Hướng làn không hợp lệ.'), 400
+    if ip_camera.is_ip_camera_url(device):
+        device = ip_camera.normalize_ip_camera_url(device) or device
+    key = f'{direction}_plate_camera'
+    database.set_setting(key, device)
+    return jsonify(ok=True, key=key, device=device)
+
+
+@app.route('/gate/camera-stream/<slot>')
+@login_required
+@staff_required
+def gate_camera_stream(slot):
+    """Proxy luồng MJPEG từ camera IP (IP Webcam Android / RTSP) về cùng origin."""
+    url = _resolve_ip_camera_url(slot)
+    if not url:
+        return jsonify(error='Chưa cấu hình URL camera IP hợp lệ.'), 400
+    try:
+        cap, first_frame, _ = ip_camera.open_ip_capture(url)
+    except Exception as error:
+        return jsonify(error=str(error)), 502
+    return Response(
+        stream_with_context(ip_camera.stream_mjpeg_frames(cap, first_frame)),
+        mimetype='multipart/x-mixed-replace; boundary=frame',
+        headers={'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'},
+    )
+
+
+@app.route('/gate/camera-snapshot/<slot>')
+@login_required
+@staff_required
+def gate_camera_snapshot(slot):
+    """Chụp 1 khung hình JPEG từ camera IP."""
+    url = _resolve_ip_camera_url(slot)
+    if not url:
+        return jsonify(error='Chưa cấu hình URL camera IP hợp lệ.'), 400
+    try:
+        jpeg_bytes = ip_camera.capture_ip_camera_jpeg(url)
+    except Exception as error:
+        return jsonify(error=str(error)), 502
+    return Response(
+        jpeg_bytes,
+        mimetype='image/jpeg',
+        headers={'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'},
+    )
+
+
+def handle_gate(direction):
     if request.method == 'GET':
-        return render_gate()
+        return render_gate(direction, plate=normalize_plate(request.args.get('plate', '')[:32]))
 
     action = request.form.get('action', 'recognize')
     note = request.form.get('note', '').strip()
@@ -388,13 +1714,31 @@ def gate():
     token = token if find_tmp(token) else ''
     plate = clean_plate_input(request.form.get('plate'))
 
-    if action == 'confirm':
-        return gate_confirm(token, plate, note)
-    return gate_recognize(token, plate, note)
+    if action in ('confirm', 'pay'):
+        return gate_confirm(direction, token, plate, note)
+    return gate_recognize(direction, token, plate, note)
 
 
-def gate_recognize(token, plate, note):
+def _gate_inline_json(direction, ok, message='', token='', plate='', note='', form=None, extra=None):
+    ctx = gate_context(direction, token, plate, note, form)
+    payload = {
+        'ok': ok,
+        'message': message,
+        'token': ctx['token'],
+        'plate': ctx['plate'],
+        'checked_plate': ctx['plate'] if ctx['mode'] else '',
+        'preview_url': ctx['preview_url'] or '',
+        'can_confirm': bool(ctx['mode'] and not (ctx['mode'] == 'entry' and ctx['no_slots'])),
+        'html': render_template('_gate_result.html', **ctx),
+    }
+    if extra:
+        payload.update(extra)
+    return jsonify(payload)
+
+
+def gate_recognize(direction, token, plate, note):
     """Bước 1: nhận diện biển số từ ảnh mới; hoặc (không chọn ảnh mới) làm mới thông tin theo biển số vừa sửa."""
+    inline = request.form.get('inline') == '1'
     file = request.files.get('image')
     has_file = bool(file and file.filename)
 
@@ -407,61 +1751,130 @@ def gate_recognize(token, plate, note):
         path = os.path.join(TMP_FOLDER, token + ext)
         file.save(path)
         try:
-            plate, annotated = recognize_plate_annotated(path)
+            # Dùng chung mô hình OCR với camera của làn còn lại -> chờ tới lượt.
+            if not CAMERA_OCR_LOCK.acquire(timeout=CAPTURE_OCR_WAIT_SECONDS):
+                raise RuntimeError('hệ thống nhận diện đang bận, vui lòng thử lại')
+            try:
+                plate, annotated = recognize_plate_annotated(path)
+            finally:
+                CAMERA_OCR_LOCK.release()
             cv2.imwrite(os.path.join(TMP_FOLDER, f'{token}_ann.jpg'), annotated)
         except Exception as e:
             drop_tmp(token)
-            flash(f'Lỗi khi nhận diện biển số: {e}', 'error')
-            return render_gate(note=note)
+            msg = f'Lỗi khi nhận diện biển số: {e}'
+            if inline:
+                return _gate_inline_json(direction, False, msg, note=note)
+            flash(msg, 'error')
+            return render_gate(direction, note=note)
         if len(plate_key(plate)) < 4:
-            flash('Không nhận diện được biển số rõ ràng. Bạn có thể nhập biển số vào ô bên dưới '
-                  'rồi bấm "Nhận diện biển số" để tiếp tục, hoặc chọn ảnh khác (đủ sáng, ít góc nghiêng).', 'error')
-        return render_gate(token, plate, note)
+            msg = ('Không nhận diện được biển số rõ ràng. Bạn có thể nhập biển số vào ô bên dưới '
+                   'rồi bấm "Cập nhật biển số" để tiếp tục, hoặc chọn / chụp ảnh khác (đủ sáng, ít góc nghiêng).')
+            if inline:
+                return _gate_inline_json(direction, False, msg, token, plate, note)
+            flash(msg, 'error')
+        if inline:
+            return _gate_inline_json(direction, True, '', token, plate, note)
+        return render_gate(direction, token, plate, note)
 
     if token:
         if len(plate_key(plate)) < 4:
-            flash('Biển số quá ngắn, vui lòng nhập lại (tối thiểu 4 ký tự).', 'error')
-        return render_gate(token, plate, note)
+            msg = 'Biển số quá ngắn, vui lòng nhập lại (tối thiểu 4 ký tự).'
+            if inline:
+                return _gate_inline_json(direction, False, msg, token, plate, note)
+            flash(msg, 'error')
+        if inline:
+            return _gate_inline_json(direction, True, '', token, plate, note)
+        return render_gate(direction, token, plate, note)
 
-    flash('Vui lòng chọn hình ảnh biển số.', 'error')
-    return render_gate(note=note)
+    msg = 'Vui lòng chọn ảnh hoặc bật camera rồi chụp ảnh biển số.'
+    if inline:
+        return _gate_inline_json(direction, False, msg, note=note)
+    flash(msg, 'error')
+    return render_gate(direction, note=note)
 
 
-def gate_confirm(token, plate, note):
-    """Bước 2: xác nhận. Biển số đang gửi trong bãi -> xe RA, ngược lại -> xe VÀO."""
+def gate_confirm(direction, token, plate, note):
+    """Bước 2: kiểm tra trạng thái xe và xác nhận đúng chiều vào / ra đã chọn."""
+    inline = request.form.get('inline') == '1'
+
+    def fail(msg, tok=token, pl=plate, frm=None):
+        if inline:
+            return _gate_inline_json(direction, False, msg, tok, pl, note, frm)
+        flash(msg, 'error')
+        return render_gate(direction, tok, pl, note, frm)
+
     if not token:
-        flash('Chưa có ảnh đã nhận diện (hoặc ảnh đã hết hạn). Vui lòng chọn ảnh và bấm "Nhận diện biển số".', 'error')
-        return render_gate(note=note)
+        return fail('Chưa có ảnh đã nhận diện (hoặc ảnh đã hết hạn). Vui lòng nhận diện từ ảnh tải lên hoặc chụp từ camera.', tok='', pl='')
 
     if len(plate_key(plate)) < 4:
-        flash('Biển số quá ngắn, vui lòng nhập lại (tối thiểu 4 ký tự).', 'error')
-        return render_gate(token, plate, note)
+        return fail('Biển số quá ngắn, vui lòng nhập lại (tối thiểu 4 ký tự).')
 
     # Người dùng vừa sửa biển số sau khi nhận diện -> phải xem lại thông tin theo biển số mới
     checked = clean_plate_input(request.form.get('checked_plate'))
     if plate_key(plate) != plate_key(checked):
-        flash('Biển số đã thay đổi — vui lòng xem lại thông tin bên dưới rồi bấm "Xác nhận" lần nữa.', 'error')
-        return render_gate(token, plate, note)
+        return fail('Biển số đã thay đổi — vui lòng xem lại thông tin bên dưới rồi bấm "Xác nhận" lần nữa.')
 
     record = database.find_open_record(plate)
+    if direction == 'entry' and record is not None:
+        return fail(f'Xe {plate} đang gửi trong bãi, không thể ghi nhận xe vào lần nữa.')
+    if direction == 'exit' and record is None:
+        return fail(f'Không tìm thấy xe {plate} đang gửi trong bãi, không thể xác nhận xe ra.')
 
     # ---------- XE RA ----------
-    if record is not None:
+    if direction == 'exit':
         now = datetime.now()
         fee, duration, fee_note = calc_fee(record, now)
+        disc_val = _to_int(request.form.get('discount_value'), 0) or 0
+        disc_unit = request.form.get('discount_unit', 'vnd')
+        if disc_val > 0 and fee > 0:
+            if disc_unit == 'percent':
+                pct = min(100, max(0, disc_val))
+                fee = max(0, round(fee * (100 - pct) / 100))
+                fee_note = f'{fee_note} · giảm {pct}%'
+            else:
+                fee = max(0, fee - disc_val)
+                fee_note = f'{fee_note} · giảm {disc_val:,} ₫'
+        payment_method = request.form.get('payment_method')
+        if payment_method is not None and payment_method not in database.PAYMENT_METHODS:
+            return fail('Phương thức thanh toán không hợp lệ.', frm=request.form)
         filename = promote_tmp(token, 'out')
-        database.close_record(record['id'], filename, fee, note)
-        database.free_slot(record['slot_name'])
+        try:
+            exit_slot = database.close_record(
+                record['id'], filename, fee, note,
+                payment_method=payment_method,
+                exit_gate=_current_gate_name(),
+            )
+        except ValueError as error:
+            os.remove(os.path.join(OUT_DIR, filename))
+            if inline:
+                return _gate_inline_json(direction, False, str(error), note=note)
+            flash(str(error), 'error')
+            return redirect(url_for('exit_gate', source=request.form.get('source', 'upload')))
+        invoice_print_url = url_for('invoice_print', record_id=record['id'])
+        success_text = f'✅ Xe {plate} đã ra bãi (vị trí {exit_slot or "?"}). Thời gian gửi: {duration}. Phí: {fee:,} VNĐ ({fee_note}).'
+        if inline:
+            return _gate_inline_json(direction, True, success_text, extra={
+                'record_id': record['id'],
+                'print_invoice': record['id'] if request.form.get('action') == 'pay' else None,
+                'invoice_print_url': invoice_print_url,
+            })
         flash(
-            f'✅ Xe {plate} đã ra bãi (vị trí {record["slot_name"] or "?"}). '
-            f'Thời gian gửi: {duration}. Phí: {fee:,} VNĐ ({fee_note})',
+            Markup(
+                f'✅ Xe <b>{plate}</b> đã ra bãi (vị trí {exit_slot or "?"}). '
+                f'Thời gian gửi: {duration}. Phí: {fee:,} VNĐ ({fee_note}). '
+                f'<a href="{invoice_print_url}" target="_blank" style="margin-left:8px;font-weight:600;text-decoration:underline;">🖨️ In hóa đơn</a>'
+            ),
             'success'
         )
-        return redirect(url_for('gate'))
+        if request.form.get('action') == 'pay':
+            return redirect(url_for('exit_gate',
+                                    source=request.form.get('source', 'upload'),
+                                    print_invoice=record['id']))
+        return redirect(url_for('exit_gate', source=request.form.get('source', 'upload')))
 
     # ---------- XE VÀO ----------
     form = request.form
-    entry_mode = database.get_user_setting(session['user_id'], 'entry_mode', 'manual')
+    entry_mode = database.get_user_setting(session['user_id'], 'entry_mode', 'auto')
 
     all_types = database.get_vehicle_types()
     registered = database.get_registered_vehicle(plate_key(plate))
@@ -472,77 +1885,123 @@ def gate_confirm(token, plate, note):
         type_id = registered['vehicle_type_id']
     vehicle_type = next((t for t in all_types if t['id'] == type_id), None)
     if vehicle_type is None:
-        flash('Vui lòng chọn loại xe.', 'error')
-        return render_gate(token, plate, note, form)
+        return fail('Vui lòng chọn loại xe.', frm=form)
     entry_price = database.find_turn_price(type_id, datetime.now())
     month_ok = month_ticket_valid(registered, date.today())
     if entry_price is None and not month_ok:
-        flash(f'Chưa có giá cho "{vehicle_type["name"]}" lúc {datetime.now():%H:%M}. '
-              'Vui lòng nhờ nhân viên/admin bổ sung ở trang Giá xe.', 'error')
-        return render_gate(token, plate, note, form)
+        return fail(f'Chưa có giá cho "{vehicle_type["name"]}" lúc {datetime.now():%H:%M}. '
+                    'Vui lòng nhờ nhân viên/admin bổ sung ở trang Giá xe.', frm=form)
 
     if entry_mode == 'auto':
-        chosen_slot = database.find_free_slot()
+        chosen_slot = database.find_free_slot(vehicle_type_id=type_id)
         if not chosen_slot:
-            flash('Bãi đỗ đã hết chỗ trống! Không thể nhận thêm xe.', 'error')
-            return render_gate(token, plate, note, form)
+            return fail('Không còn ô trống phù hợp với loại xe đã chọn.', frm=form)
     else:
         chosen_slot = form.get('slot_name', '').strip()
         if not chosen_slot:
-            flash('Vui lòng chọn một vị trí đỗ.', 'error')
-            return render_gate(token, plate, note, form)
-        if not database.is_slot_available(chosen_slot):
-            flash(f'Vị trí {chosen_slot} vừa có xe khác đỗ vào, vui lòng chọn vị trí khác.', 'error')
-            return render_gate(token, plate, note, form)
+            return fail('Vui lòng chọn một vị trí đỗ.', frm=form)
+        if not database.is_slot_available(chosen_slot, vehicle_type_id=type_id):
+            return fail(f'Ô {chosen_slot} không còn trống hoặc không phù hợp với loại xe. Hãy chọn ô khác.', frm=form)
 
     filename = promote_tmp(token, 'in')
-    database.add_entry_record(plate, filename, chosen_slot, type_id, vehicle_type['name'], note)
-    database.occupy_slot(chosen_slot, plate)
+    try:
+        _, chosen_slot = database.create_parking_entry(
+            plate, filename, None if entry_mode == 'auto' else chosen_slot,
+            type_id, vehicle_type['name'], note,
+            entry_gate=_current_gate_name(),
+        )
+    except ValueError as error:
+        os.remove(os.path.join(IN_DIR, filename))
+        if inline:
+            return _gate_inline_json(direction, False, str(error), note=note)
+        flash(str(error), 'error')
+        return redirect(url_for('entry', source=request.form.get('source', 'upload')))
     if month_ok:
         price_text = f'Vé tháng còn hạn đến {registered["expires_on"]} (tài khoản {registered["username"]})'
     else:
-        price_text = f'Giá: {entry_price["amount"]:,} VNĐ/lượt (khung {entry_price["period_name"]})'
-    flash(f'✅ Xe vào bãi thành công! Biển số: {plate} — {vehicle_type["name"]} — Vị trí: {chosen_slot} '
-          f'— {price_text}', 'success')
-    return redirect(url_for('gate'))
+        price_text = (f'Giá khung vào: {entry_price["amount"]:,} VNĐ (khung {entry_price["period_name"]}); '
+                      'sang khung giờ khác sẽ cộng thêm phí khung đó')
+    success_text = f'✅ Xe vào bãi thành công! Biển số: {plate} — {vehicle_type["name"]} — Vị trí: {chosen_slot} — {price_text}'
+    if inline:
+        return _gate_inline_json(direction, True, success_text)
+    flash(success_text, 'success')
+    return redirect(url_for('entry', source=request.form.get('source', 'upload')))
 
 
-@app.route('/entry')
+@app.route('/entry', methods=['GET', 'POST'])
 @login_required
 @staff_required
+@permission_required('gate.entry')
 def entry():
-    return redirect(url_for('gate'))
+    return handle_gate('entry')
 
 
-@app.route('/exit')
+@app.route('/exit', methods=['GET', 'POST'])
 @login_required
 @staff_required
+@permission_required('gate.exit')
 def exit_gate():
-    return redirect(url_for('gate'))
+    return handle_gate('exit')
 
 
 # ============================================================
 # LỊCH SỬ
 # ============================================================
 
-@app.route('/history')
-@login_required
-def history():
-    keyword = request.args.get('plate', '').strip().upper()
+def _history_context(args):
+    keyword = args.get('plate', '').strip().upper()
     keyword_key = plate_key(keyword)     # tìm không phân biệt dấu '-' (61T32222 vẫn ra 61T3-2222)
-    status_filter = request.args.get('status', 'all')
-    date_filter = request.args.get('date', '')
+    status_filter = args.get('status', 'all')
+    if status_filter not in ('all', 'IN', 'OUT', 'DELETED'):
+        status_filter = 'all'
+    gate_filter = args.get('gate', '').strip()
+    area_filter = args.get('area', '').strip()
+    vt_filter = args.get('vehicle_type', '').strip()
+    date_filter = args.get('date', '')
+    time_from = args.get('time_from', '').strip()
+    time_to = args.get('time_to', '').strip()
+    time_field = 'exit' if args.get('time_field') == 'exit' else 'entry'
+    if any(value and not TIME_RE.fullmatch(value) for value in (time_from, time_to)):
+        flash('Khung giờ không hợp lệ. Vui lòng chọn giờ theo HH:MM.', 'error')
+        time_from = time_to = ''
+    if date_filter:
+        try:
+            date.fromisoformat(date_filter)
+        except ValueError:
+            flash('Ngày lọc không hợp lệ.', 'error')
+            date_filter = ''
 
-    records = database.get_all_records()
+    raw_records = database.get_all_records()
     is_user = session.get('role') == 'user'
     if is_user:    # người dùng chỉ xem lịch sử của các xe mình đã đăng ký
         my_keys = {v['plate_key'] for v in database.get_user_vehicles(session['user_id'])}
-        records = [r for r in records if plate_key(r['plate_number']) in my_keys]
+        raw_records = [r for r in raw_records if plate_key(r['plate_number']) in my_keys]
+
+    slot_area_map = {s['slot_name']: s['area'] for s in database.get_all_slots()}
+    records = []
+    for row in raw_records:
+        d = dict(row)
+        d['area_name'] = slot_area_map.get(d.get('slot_name') or '', '')
+        eg = d.get('entry_gate') or ''
+        xg = d.get('exit_gate') or ''
+        d['gate_label'] = xg or eg or 'Cổng chính'
+        records.append(d)
 
     in_count = sum(1 for r in records if r['status'] == 'IN')
     out_count = sum(1 for r in records if r['status'] == 'OUT')
+    deleted_count = sum(1 for r in records if r['status'] == 'DELETED')
     today_str = datetime.now().strftime('%Y-%m-%d')
     today_count = sum(1 for r in records if (r['entry_time'] or '').startswith(today_str))
+
+    def gate_matches(r):
+        if not gate_filter or gate_filter == 'all':
+            return True
+        eg = (r.get('entry_gate') or '').strip()
+        xg = (r.get('exit_gate') or '').strip()
+        if gate_filter == 'Cổng chính':
+            central_vals = {'', 'Cổng chính', 'Trung tâm', 'Tất cả các cổng'}
+            return eg in central_vals or xg in central_vals
+        return eg == gate_filter or xg == gate_filter
 
     def matches(r):
         if keyword and keyword not in (r['plate_number'] or '').upper() \
@@ -550,24 +2009,165 @@ def history():
             return False
         if status_filter != 'all' and r['status'] != status_filter:
             return False
-        if date_filter and not (r['entry_time'] or '').startswith(date_filter):
+        if not gate_matches(r):
             return False
+        if area_filter and r['area_name'] != area_filter:
+            return False
+        if vt_filter and str(r.get('vehicle_type_id') or '') != vt_filter:
+            return False
+        if date_filter or time_from or time_to:
+            timestamp = r['entry_time'] if time_field == 'entry' else r['exit_time']
+            if not timestamp:
+                return False
+            minute = timestamp[11:16]
+            if time_from and time_to and time_from > time_to:
+                if date_filter:
+                    next_date = (date.fromisoformat(date_filter) + timedelta(days=1)).isoformat()
+                    return ((timestamp.startswith(date_filter) and minute >= time_from) or
+                            (timestamp.startswith(next_date) and minute <= time_to))
+                if not (minute >= time_from or minute <= time_to):
+                    return False
+            else:
+                if date_filter and not timestamp.startswith(date_filter):
+                    return False
+                if (time_from and minute < time_from) or (time_to and minute > time_to):
+                    return False
         return True
 
     filtered = [r for r in records if matches(r)]
+    time_periods = [p for p in database.get_periods() if p['kind'] == 'time']
+    selected_period = next((str(p['id']) for p in time_periods
+                            if time_from == p['start_value'] and time_to == p['end_value']),
+                           'custom' if time_from or time_to else '')
+    gate_options = ['Cổng chính'] + [g['name'] for g in database.get_parking_zones(status='active')]
+    area_options = [a['name'] for a in database.get_areas()]
+    vehicle_types = database.get_vehicle_types()
 
-    return render_template(
-        'history.html',
-        records=filtered,
-        keyword=keyword,
-        status_filter=status_filter,
-        date_filter=date_filter,
-        total_count=len(records),
-        in_count=in_count,
-        out_count=out_count,
-        today_count=today_count,
-        user_mode=is_user,
+    return {
+        'records': filtered,
+        'keyword': keyword,
+        'status_filter': status_filter,
+        'gate_filter': gate_filter,
+        'area_filter': area_filter,
+        'vt_filter': vt_filter,
+        'date_filter': date_filter,
+        'total_count': len(records),
+        'in_count': in_count,
+        'out_count': out_count,
+        'deleted_count': deleted_count,
+        'time_from': time_from,
+        'time_to': time_to,
+        'time_field': time_field,
+        'time_periods': time_periods,
+        'selected_period': selected_period,
+        'today_count': today_count,
+        'user_mode': is_user,
+        'gate_options': gate_options,
+        'area_options': area_options,
+        'vehicle_types': vehicle_types,
+    }
+
+
+@app.route('/history')
+@login_required
+@permission_required('history.view')
+def history():
+    return render_template('history.html', **_history_context(request.args))
+
+
+@app.route('/history/export')
+@login_required
+@permission_required('history.export')
+def history_export():
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+
+    ctx = _history_context(request.args)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Lich su vao ra'
+    headers = ['Mã', 'Biển số', 'Cổng', 'Khu vực', 'Vị trí ô', 'Loại xe', 'Thời gian vào', 'Thời gian ra', 'Phí thu', 'Trạng thái', 'Ghi chú']
+    ws.append(headers)
+    header_fill = PatternFill(start_color='EEF4FF', end_color='EEF4FF', fill_type='solid')
+    header_font = Font(bold=True)
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+
+    status_map = {'IN': 'Đang gửi', 'OUT': 'Đã ra', 'DELETED': 'Đã xóa'}
+    for r in ctx['records']:
+        ws.append([
+            f"#{r['id']}",
+            r['plate_number'] or '',
+            r.get('gate_label') or 'Cổng chính',
+            f"Khu {r['area_name']}" if r.get('area_name') else '',
+            r.get('slot_name') or '',
+            r.get('vehicle_type_name') or '',
+            r.get('entry_time') or '',
+            r.get('exit_time') or '',
+            r['fee'] if r.get('fee') is not None else '',
+            status_map.get(r.get('status'), r.get('status') or ''),
+            r.get('note') or '',
+        ])
+    ws.auto_filter.ref = f"A1:K{max(ws.max_row, 1)}"
+    ws.freeze_panes = 'A2'
+    for col in ws.columns:
+        max_len = max((len(str(c.value or '')) for c in col), default=10)
+        ws.column_dimensions[col[0].column_letter].width = min(max(max_len + 4, 12), 42)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return Response(
+        buf.getvalue(),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename="lich_su_vao_ra_{date.today().isoformat()}.xlsx"'},
     )
+
+
+# ============================================================
+# HÓA ĐƠN THU PHÍ GỬI XE
+# ============================================================
+
+@app.route('/invoices')
+@login_required
+@permission_required('invoices.view')
+def invoices():
+    context = parking_invoices.invoice_context(request.args, session.get('role'), session['user_id'])
+    return render_template('invoices.html', **context)
+
+
+@app.route('/invoices/export')
+@login_required
+@permission_required('invoices.export')
+def invoices_export():
+    from io import BytesIO
+    context = parking_invoices.invoice_context(request.args, session.get('role'), session['user_id'])
+    if context['errors']:
+        abort(400, description=context['errors'][0])
+    records = context['filtered']
+    if request.args.get('ids'):
+        try:
+            selected = {int(value) for value in request.args['ids'].split(',')}
+        except ValueError:
+            abort(400)
+        records = [record for record in records if record['id'] in selected]
+    return send_file(BytesIO(parking_invoices.export_excel(records)),
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True,
+                     download_name=f'hoa-don-gui-xe_{date.today().isoformat()}.xlsx')
+
+
+@app.route('/invoices/<int:record_id>/print')
+@login_required
+@permission_required('invoices.print')
+def invoice_print(record_id):
+    invoice = next((item for item in parking_invoices.get_invoices(session.get('role'), session['user_id'])
+                    if item['id'] == record_id), None)
+    if invoice is None:
+        abort(404)
+    return render_template('invoice_print.html', invoice=invoice)
 
 
 # ============================================================
@@ -577,14 +2177,82 @@ def history():
 @app.route('/statistics')
 @login_required
 @staff_required
+@permission_required('reports.view')
 def statistics():
     start, end, range_key, label = parse_stats_range(request.args)
-    stats = database.get_statistics(start.isoformat(), end.isoformat())
+    gate_param = request.args.get('gate')
+    gate_name = gate_param.strip() if gate_param is not None else _current_gate_name()
+    stats = database.get_statistics_for_gates(
+        start.isoformat(),
+        end.isoformat(),
+        [gate_name] if gate_name else None,
+    )
     area_stats = database.area_stats()
+    if gate_name:
+        gate_row = next((dict(z) for z in database.get_parking_zones(status='active') if (z['name'] or '').strip() == gate_name), None)
+        if gate_row and (gate_row.get('area_names') or '').strip():
+            allowed_areas = {a.strip() for a in gate_row['area_names'].split(',') if a.strip()}
+            if allowed_areas:
+                area_stats = {k: v for k, v in area_stats.items() if k in allowed_areas}
+    records = database.get_records_between(start.isoformat(), end.isoformat(), gate_name=gate_name)
+    view_mode = request.args.get('view', 'chart')
+    if request.args.get('type') == 'eod' and 'view' not in request.args:
+        view_mode = 'report'
+    if view_mode not in ('chart', 'report'):
+        view_mode = 'chart'
+    concern = request.args.get('concern', 'revenue')
+    if concern not in ('revenue', 'areas', 'records'):
+        concern = 'revenue'
+    eod_template = request.args.get('template', 'a4')
+    if eod_template not in ('a4', 'k80', 'thermal'):
+        eod_template = 'a4'
+    eod_data = build_eod_report_data(report_date_iso=end.isoformat(), gate_name=gate_name)
+    qs_dict = {'range': range_key, 'from': start.isoformat(), 'to': end.isoformat()}
+    if gate_param is not None:
+        qs_dict['gate'] = gate_name
+    export_qs = urlencode(qs_dict)
     return render_template('statistics.html', stats=stats, area_stats=area_stats,
+                           records=records, view_mode=view_mode, concern=concern,
+                           eod_template=eod_template, eod_data=eod_data,
+                           generated_at=datetime.now().strftime('%d/%m/%Y %H:%M'),
                            range_key=range_key, range_label=label,
                            date_from=start.isoformat(), date_to=end.isoformat(),
-                           today_iso=date.today().isoformat())
+                           today_iso=date.today().isoformat(),
+                           gate_choices=_employee_gate_choices(),
+                           selected_gate_filter=gate_name,
+                           export_qs=export_qs)
+
+
+@app.route('/statistics/export/<fmt>')
+@login_required
+@staff_required
+def statistics_export(fmt):
+    """Xuất báo cáo trang Thống kê ra file Excel (.xlsx) hoặc PDF (.pdf) theo kỳ đang chọn."""
+    if fmt not in ('xlsx', 'pdf'):
+        abort(404)
+    start, end, _range_key, label = parse_stats_range(request.args)
+    gate_param = request.args.get('gate')
+    gate_name = gate_param.strip() if gate_param is not None else _current_gate_name()
+    payload = export_stats.make_payload(
+        stats=database.get_statistics(start.isoformat(), end.isoformat(), gate_name=gate_name),
+        area_stats=database.area_stats(),
+        records=database.get_records_between(start.isoformat(), end.isoformat(), gate_name=gate_name),
+        range_label=label,
+        date_from=start.isoformat(),
+        date_to=end.isoformat(),
+        generated_by=session.get('fullname') or session.get('username') or '—',
+    )
+    try:
+        buf, mimetype, ext = export_stats.build(fmt, payload)
+    except export_stats.ExportError as e:
+        flash(str(e), 'error')
+        return redirect(url_for('statistics', **request.args))
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=f'thong-ke_{start}_{end}.{ext}',
+        mimetype=mimetype,
+    )
 
 
 def parse_stats_range(args):
@@ -598,8 +2266,6 @@ def parse_stats_range(args):
         return today - timedelta(days=6), today, key, '7 ngày qua'
     if key == '30days':
         return today - timedelta(days=29), today, key, '30 ngày qua'
-    if key == 'month':
-        return today.replace(day=1), today, key, 'tháng này'
     if key == 'custom':
         try:
             start = date.fromisoformat(args.get('from', ''))
@@ -618,22 +2284,505 @@ def parse_stats_range(args):
 # CÀI ĐẶT CÁ NHÂN (MỌI NGƯỜI DÙNG TỰ CHỌN)
 # ============================================================
 
+DEVICE_SETTING_DEFAULTS = {
+    'entry_plate_camera': '',
+    'entry_overview_camera': '',
+    'exit_plate_camera': '',
+    'exit_overview_camera': '',
+    'entry_barrier_port': 'COM3',
+    'exit_barrier_port': 'COM4',
+    'barrier_baudrate': '9600',
+    'auto_open_barrier': '0',
+    'printer_port': 'Mặc định trình duyệt',
+}
+
+
+def get_device_settings():
+    return {
+        key: database.get_setting(key, default)
+        for key, default in DEVICE_SETTING_DEFAULTS.items()
+    }
+
+
+STORE_SETTING_DEFAULTS = {
+    'store_name': 'Smart Parking Trung Tâm',
+    'store_phone': '0901 234 567',
+    'store_email': 'hotro@smartparking.vn',
+    'store_type': 'Bãi xe thông minh 24/7',
+    'store_address': '',
+    'store_province': '',
+    'store_district': '',
+    'store_ward': '',
+    'store_note': '',
+}
+
+ZONE_TYPE_LABELS = {
+    'gate_inout': '2 làn (Vào & Ra)',
+    'gate_in': 'Làn vào',
+    'gate_out': 'Làn ra',
+    'area': 'Khu vực đỗ xe',
+}
+
+
+def get_store_settings():
+    return {key: database.get_setting(key, default) for key, default in STORE_SETTING_DEFAULTS.items()}
+
+
+EMPLOYEE_SETTING_DEFAULTS = {
+    'shift_morning': '06:00 - 14:00',
+    'shift_afternoon': '14:00 - 22:00',
+    'shift_night': '22:00 - 06:00',
+    'emp_shifts_json': '',
+    'emp_attendance_mode': 'shift',
+    'emp_flex_start': '07:30',
+    'emp_flex_end': '15:30',
+    'emp_checkin_window_start': '04:30',
+    'emp_checkin_window_end': '18:30',
+    'emp_break_enabled': '0',
+    'emp_break_start': '11:00',
+    'emp_break_end': '12:00',
+    'emp_standard_hours': '8',
+    'emp_convert_hours_enabled': '0',
+    'emp_auto_checkin': '0',
+    'emp_unscheduled_checkin': '1',
+    'emp_unscheduled_auto_approve': '1',
+    'emp_multi_shift_single_punch': '0',
+    'emp_checkin_software': '1',
+    'emp_checkin_photo': '0',
+    'emp_late_enabled': '1',
+    'emp_late_grace_minutes': '10',
+    'emp_early_leave_enabled': '1',
+    'emp_early_leave_grace_minutes': '0',
+    'emp_ot_before_enabled': '1',
+    'emp_overtime_before_minutes': '0',
+    'emp_ot_after_enabled': '1',
+    'emp_overtime_after_minutes': '0',
+    'emp_ot_actual_all': '0',
+    'emp_overtime_enabled': '0',
+    'emp_payroll_cutoff_day': '25',
+    'emp_default_salary_type': 'shift',
+    'emp_hourly_calc_mode': 'actual',
+    'emp_auto_create_paysheet': '1',
+    'emp_auto_update_paysheet': '1',
+    'emp_salary_templates_json': '',
+    'emp_allowances_json': '',
+    'emp_deductions_json': '',
+    'emp_work_days_json': '{}',
+    'emp_holidays_json': '[]',
+}
+
+
+def get_employee_settings():
+    return {key: database.get_setting(key, default) for key, default in EMPLOYEE_SETTING_DEFAULTS.items()}
+
+
+DEFAULT_EMPLOYEE_SHIFTS = [
+    {'id': 1, 'name': 'Ca sáng', 'start': '06:00', 'end': '14:00', 'checkin_start': '05:00', 'checkin_end': '15:00', 'gates': ['Cổng chính'], 'active': True},
+    {'id': 2, 'name': 'Ca chiều', 'start': '14:00', 'end': '22:00', 'checkin_start': '13:00', 'checkin_end': '23:00', 'gates': ['Cổng chính'], 'active': True},
+    {'id': 3, 'name': 'Ca đêm', 'start': '22:00', 'end': '06:00', 'checkin_start': '21:00', 'checkin_end': '07:00', 'gates': ['Cổng chính'], 'active': True},
+]
+
+
+def _shift_duration_label(start_str: str, end_str: str) -> str:
+    try:
+        sh, sm = [int(x) for x in start_str.split(':')[:2]]
+        eh, em = [int(x) for x in end_str.split(':')[:2]]
+        mins = (eh * 60 + em) - (sh * 60 + sm)
+        if mins <= 0:
+            mins += 24 * 60
+        return f"{mins // 60} giờ {mins % 60} phút"
+    except Exception:
+        return "8 giờ 0 phút"
+
+
+def get_employee_shifts():
+    import json
+    raw = database.get_setting('emp_shifts_json', '')
+    if raw:
+        try:
+            items = json.loads(raw)
+            if isinstance(items, list) and items:
+                out = []
+                for s in items:
+                    st = s.get('start', '06:00')
+                    en = s.get('end', '14:00')
+                    gates = s.get('gates') or ['Cổng chính']
+                    out.append({
+                        'id': int(s.get('id') or 0),
+                        'name': s.get('name', 'Ca làm việc'),
+                        'start': st,
+                        'end': en,
+                        'checkin_start': s.get('checkin_start', st),
+                        'checkin_end': s.get('checkin_end', en),
+                        'gates': gates,
+                        'gates_csv': ','.join(gates),
+                        'gates_label': ', '.join(gates),
+                        'active': bool(s.get('active', True)),
+                        'time_range': f"{st} - {en}",
+                        'duration_label': _shift_duration_label(st, en),
+                    })
+                return out
+        except Exception:
+            pass
+    out = []
+    for s in DEFAULT_EMPLOYEE_SHIFTS:
+        item = dict(s)
+        item['gates_csv'] = ','.join(item['gates'])
+        item['gates_label'] = ', '.join(item['gates'])
+        item['time_range'] = f"{item['start']} - {item['end']}"
+        item['duration_label'] = _shift_duration_label(item['start'], item['end'])
+        out.append(item)
+    return out
+
+
+DEFAULT_SALARY_TEMPLATES = [
+    {
+        'id': 1,
+        'name': 'Ca trực tiêu chuẩn',
+        'note': 'Áp dụng cho nhân viên trực cổng',
+        'salary_type': 'shift',
+        'salary_amount': 300000,
+        'bonus_enabled': False,
+        'bonus_type': 'Theo doanh thu',
+        'bonus_amount': 0,
+        'commission_enabled': False,
+        'commission_type': 'Theo dịch vụ',
+        'commission_rate': 0,
+        'allowance_enabled': True,
+        'allowance_amount': 500000,
+        'allowances': [
+            {'name': 'Phụ cấp ăn ca', 'type': 'Phụ cấp cố định hàng tháng', 'amount': 500000},
+        ],
+        'deduction_enabled': False,
+        'deduction_amount': 0,
+        'deduction_note': '',
+        'deductions': [],
+    },
+]
+DEFAULT_ALLOWANCES = [
+    {'id': 1, 'name': 'Phụ cấp ăn ca', 'type': 'Phụ cấp hàng tháng cố định', 'amount': 500000, 'min_hours_enabled': False, 'min_hours': 0},
+]
+DEFAULT_DEDUCTIONS = [
+    {'id': 1, 'name': 'Đi muộn / Về sớm', 'type': 'Đi muộn', 'condition': 'count', 'amount': 50000},
+]
+
+
+def _get_json_catalog(setting_key: str, default_items: list):
+    import json
+    raw = database.get_setting(setting_key, '')
+    if raw:
+        try:
+            items = json.loads(raw)
+            if isinstance(items, list):
+                return items
+        except Exception:
+            pass
+    return [dict(x) for x in default_items]
+
+
+def get_employee_salary_templates():
+    return _get_json_catalog('emp_salary_templates_json', DEFAULT_SALARY_TEMPLATES)
+
+
+def get_employee_allowances():
+    return _get_json_catalog('emp_allowances_json', DEFAULT_ALLOWANCES)
+
+
+def get_employee_deductions():
+    return _get_json_catalog('emp_deductions_json', DEFAULT_DEDUCTIONS)
+
+
 @app.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings():
+    section_param = request.args.get('section', 'devices')
+    if section_param == 'vehicles':
+        return redirect(url_for('pricing') + '#types')
+    if section_param == 'employee' and request.method == 'GET':
+        return redirect(url_for('employee_settings'))
+    settings_section = (
+        section_param if section_param in ('payment', 'devices', 'store', 'gates') else 'devices'
+    )
     if session.get('role') == 'user':      # người dùng: trang cài đặt tài khoản riêng
         return render_user_settings()
+
     if request.method == 'POST':
-        mode = request.form.get('entry_mode')
-        if mode not in ('auto', 'manual'):
-            flash('Lựa chọn không hợp lệ.', 'error')
-            return redirect(url_for('settings'))
-        database.set_user_setting(session['user_id'], 'entry_mode', mode)
-        flash('Đã lưu cài đặt của bạn.', 'success')
+        setting_type = request.form.get('setting_type')
+        if setting_type == 'devices':
+            if session.get('role') not in ('admin', 'manager'):
+                abort(403)
+            for key in DEVICE_SETTING_DEFAULTS:
+                if key == 'auto_open_barrier':
+                    val = '1' if request.form.get(key) == '1' else '0'
+                else:
+                    val = request.form.get(key, '').strip()[:120]
+                    if key.endswith('_camera') and ip_camera.is_ip_camera_url(val):
+                        val = ip_camera.normalize_ip_camera_url(val) or val
+                database.set_setting(key, val)
+            flash('Đã lưu cấu hình thiết bị.', 'success')
+            return redirect(url_for('settings', section='devices'))
+
+        if setting_type == 'payment':
+            if session.get('role') not in ('admin', 'manager'):
+                abort(403)
+            bank_bin = request.form.get('vietqr_bank_bin', '').strip()
+            bank_name = request.form.get('vietqr_bank_name', '').strip()
+            acc_num = request.form.get('vietqr_account_number', '').strip()
+            acc_name = request.form.get('vietqr_account_name', '').strip().upper()
+            template = request.form.get('vietqr_template', 'compact2').strip()
+
+            if not acc_num or not bank_bin:
+                flash('Vui lòng chọn ngân hàng và nhập số tài khoản hợp lệ.', 'error')
+                return redirect(url_for('settings', section='payment'))
+
+            database.set_setting('vietqr_bank_bin', bank_bin)
+            database.set_setting('vietqr_bank_name', bank_name or 'Ngân hàng')
+            database.set_setting('vietqr_account_number', acc_num)
+            database.set_setting('vietqr_account_name', acc_name or 'SMART PARKING')
+            database.set_setting('vietqr_template', template or 'compact2')
+            flash('Đã lưu cấu hình tài khoản nhận tiền VietQR thành công.', 'success')
+            return redirect(url_for('settings', section='payment'))
+
+        if setting_type == 'store':
+            if session.get('role') not in ('admin', 'manager'):
+                abort(403)
+            store_name = request.form.get('store_name', '').strip()[:160]
+            if not store_name:
+                flash('Vui lòng nhập tên bãi xe.', 'error')
+                return redirect(url_for('settings', section='store'))
+            for key in STORE_SETTING_DEFAULTS:
+                val = request.form.get(key, '').strip()[:255]
+                database.set_setting(key, val)
+            flash('Đã cập nhật thông tin bãi xe.', 'success')
+            return redirect(url_for('settings', section='store'))
+
+        if setting_type == 'employee':
+            if session.get('role') != 'admin':
+                abort(403)
+            for key, default in EMPLOYEE_SETTING_DEFAULTS.items():
+                if key == 'emp_auto_checkin':
+                    val = '1' if request.form.get(key) == '1' else '0'
+                elif key == 'emp_late_grace_minutes':
+                    val = str(max(0, min(120, _to_int(request.form.get(key), 10) or 0)))
+                else:
+                    val = request.form.get(key, default).strip()[:60] or default
+                database.set_setting(key, val)
+            flash('Đã lưu thiết lập nhân viên.', 'success')
+            return redirect(url_for('settings', section='employee'))
+
         return redirect(url_for('settings'))
 
-    entry_mode = database.get_user_setting(session['user_id'], 'entry_mode', 'manual')
-    return render_template('settings.html', entry_mode=entry_mode)
+    vietqr_bank_bin = database.get_setting('vietqr_bank_bin', '970407')
+    vietqr_bank_name = database.get_setting('vietqr_bank_name', 'Techcombank')
+    vietqr_account_number = database.get_setting('vietqr_account_number', '19036888888')
+    vietqr_account_name = database.get_setting('vietqr_account_name', 'SMART PARKING')
+    vietqr_template = database.get_setting('vietqr_template', 'compact2')
+    store_settings = get_store_settings()
+    zone_status = request.args.get('zone_status', '').strip()
+    zone_q = request.args.get('zone_q', '').strip()
+    lane_type = request.args.get('lane_type', '').strip()
+    all_gates = [dict(z) for z in database.get_parking_zones()]
+    gate_names_lower = {g['name'].strip().lower() for g in all_gates if g.get('name')}
+
+    staff_users = [dict(u) for u in database.get_staff_users()]
+    open_shifts_by_uid = {}
+    try:
+        for att in database.get_employee_attendance(limit=200):
+            if att['status'] == 'working' and not att['check_out'] and att['user_id'] not in open_shifts_by_uid:
+                open_shifts_by_uid[att['user_id']] = att['zone_name'] or ''
+    except Exception:
+        open_shifts_by_uid = {}
+
+    def _staff_entry(u, active_zone=''):
+        role_label = 'Quản trị viên' if u.get('role') == 'admin' else (u.get('position') or 'Nhân viên vận hành')
+        return {
+            'id': u['id'],
+            'fullname': u.get('fullname') or u['username'],
+            'username': u['username'],
+            'role_label': role_label,
+            'status': u.get('status') or 'active',
+            'active_zone': active_zone,
+        }
+
+    gates = [dict(z) for z in database.get_parking_zones(status=zone_status, q=zone_q)]
+    if lane_type in ('gate_in', 'gate_out', 'gate_inout'):
+        gates = [g for g in gates if g.get('zone_type') == lane_type]
+
+    vt_rows = database.get_vehicle_types()
+    vt_map = {vt['id']: vt['name'] for vt in vt_rows}
+
+    def _resolve_vt_display(raw_ids, fallback_id=None):
+        ids = [int(x) for x in (raw_ids or '').split(',') if x.strip().isdigit()]
+        if not ids and fallback_id:
+            ids = [int(fallback_id)]
+        names = [vt_map[i] for i in ids if i in vt_map]
+        csv = ','.join(str(i) for i in ids if i in vt_map)
+        label = ', '.join(names) if names else 'Tất cả loại xe'
+        return csv, label
+
+    def _wb_tokens(raw_wb):
+        return [p.strip().lower() for p in (raw_wb or '').split(',') if p.strip()]
+
+    for g in gates:
+        g_lower = (g.get('name') or '').strip().lower()
+        matched_staff = []
+        for u in staff_users:
+            wb_tokens = _wb_tokens(u.get('work_branch'))
+            az = (open_shifts_by_uid.get(u['id']) or '').strip().lower()
+            if g_lower in wb_tokens or (az and az == g_lower):
+                matched_staff.append(_staff_entry(u, active_zone=open_shifts_by_uid.get(u['id'], '')))
+        g['staff'] = matched_staff
+        g['staff_count'] = len(matched_staff)
+        g['operating_hours'] = g.get('operating_hours') or '24/7'
+        g['is_central'] = False
+        vt_csv, vt_label = _resolve_vt_display(g.get('vehicle_type_ids'), g.get('vehicle_type_id'))
+        g['vehicle_type_ids'] = vt_csv
+        g['vehicle_type_name'] = vt_label
+
+    central_staff = []
+    central_aliases = {'cổng chính', 'cong chinh', 'trung tâm', 'trung tam', 'bãi xe trung tâm'}
+    for u in staff_users:
+        wb_tokens = _wb_tokens(u.get('work_branch'))
+        if not wb_tokens or any(t in central_aliases or t not in gate_names_lower for t in wb_tokens):
+            central_staff.append(_staff_entry(u, active_zone=open_shifts_by_uid.get(u['id'], '')))
+
+    raw_central_location = database.get_setting('central_gate_location')
+    central_location = (store_settings.get('store_address') or 'Toàn bộ bãi xe') if raw_central_location is None else (raw_central_location or 'Toàn bộ bãi xe')
+    central_zone_type = database.get_setting('central_gate_zone_type', 'gate_inout')
+    if central_zone_type not in ZONE_TYPE_LABELS:
+        central_zone_type = 'gate_inout'
+    central_hours = database.get_setting('central_gate_hours', '24/7') or '24/7'
+    central_vt_id = _to_int(database.get_setting('central_gate_vehicle_type_id', ''))
+    central_vt_ids_raw = database.get_setting('central_gate_vehicle_type_ids', '')
+    central_vt_csv, central_vt_name = _resolve_vt_display(central_vt_ids_raw, central_vt_id)
+    raw_central_note = database.get_setting('central_gate_note')
+    if raw_central_note is None:
+        central_note = store_settings.get('store_note') or 'Cổng mặc định của bãi xe.'
+    else:
+        central_note = raw_central_note
+
+    central_match_q = (
+        not zone_q
+        or zone_q.lower() in 'cổng chính'
+        or zone_q.lower() in 'trung tâm'
+        or zone_q.lower() in (store_settings.get('store_name') or '').lower()
+        or zone_q.lower() in central_location.lower()
+    )
+    central_gate = None
+    if zone_status in ('', 'active') and lane_type in ('', central_zone_type) and central_match_q:
+        central_gate = {
+            'id': 0,
+            'is_central': True,
+            'name': 'Cổng chính',
+            'subtitle': store_settings.get('store_name') or 'Cổng mặc định của bãi xe',
+            'zone_type': central_zone_type,
+            'location': central_location,
+            'vehicle_type_id': central_vt_id or '',
+            'vehicle_type_ids': central_vt_csv,
+            'vehicle_type_name': central_vt_name,
+            'operating_hours': central_hours,
+            'status': 'active',
+            'note': central_note,
+            'staff': central_staff,
+            'staff_count': len(central_staff),
+        }
+
+    return render_template(
+        'settings.html',
+        settings_section=settings_section,
+        banks=VIETNAM_BANKS,
+        vietqr_bank_bin=vietqr_bank_bin,
+        vietqr_bank_name=vietqr_bank_name,
+        vietqr_account_number=vietqr_account_number,
+        vietqr_account_name=vietqr_account_name,
+        vietqr_template=vietqr_template,
+        device_settings=get_device_settings(),
+        store_settings=store_settings,
+        employee_settings=get_employee_settings(),
+        emp_total_count=len(staff_users),
+        emp_salary_configured_count=sum(1 for u in staff_users if u.get('salary_type') or u.get('salary_amount')),
+        salary_types=parking_employees.SALARY_TYPES,
+        central_gate=central_gate,
+        gates=gates,
+        zone_status=zone_status,
+        zone_q=zone_q,
+        lane_type=lane_type,
+        zone_type_labels=ZONE_TYPE_LABELS,
+        vehicle_types=database.get_vehicle_types(),
+        wheel_group=request.args.get('wheel_group', '').strip(),
+        vehicle_q=request.args.get('vehicle_q', '').strip(),
+    )
+
+
+@app.route('/settings/zones/save', methods=['POST'])
+@login_required
+@staff_required
+def save_zone():
+    zone_id = _to_int(request.form.get('zone_id'))
+    is_central = request.form.get('is_central') == '1' or zone_id == 0
+    name = request.form.get('name', '').strip()[:80]
+    zone_type = request.form.get('zone_type', 'gate_inout')
+    if zone_type not in ZONE_TYPE_LABELS:
+        zone_type = 'gate_inout'
+    location = request.form.get('location', '').strip()[:160]
+    selected_areas = [a.strip() for a in request.form.getlist('area_names') if a.strip()]
+    area_names = ','.join(selected_areas)[:255]
+    selected_vt_ids = [str(_to_int(x)) for x in request.form.getlist('vehicle_type_ids') if _to_int(x)]
+    vehicle_type_id = _to_int(request.form.get('vehicle_type_id')) or None
+    if not selected_vt_ids and vehicle_type_id:
+        selected_vt_ids = [str(vehicle_type_id)]
+    vehicle_type_ids_csv = ','.join(dict.fromkeys(selected_vt_ids))
+    single_vt_id = int(selected_vt_ids[0]) if len(selected_vt_ids) == 1 else None
+    operating_hours = request.form.get('operating_hours', '').strip()[:60] or '24/7'
+    try:
+        capacity = max(0, int(request.form.get('capacity') or 0))
+    except ValueError:
+        capacity = 0
+    status = 'inactive' if request.form.get('status') == 'inactive' else 'active'
+    note = request.form.get('note', '').strip()[:255]
+
+    if is_central:
+        database.set_setting('central_gate_location', location)
+        database.set_setting('central_gate_zone_type', zone_type)
+        database.set_setting('central_gate_hours', operating_hours)
+        database.set_setting('central_gate_vehicle_type_id', str(single_vt_id or ''))
+        database.set_setting('central_gate_vehicle_type_ids', vehicle_type_ids_csv)
+        database.set_setting('central_gate_note', note)
+        flash('Đã cập nhật cấu hình Cổng chính.', 'success')
+        return redirect(url_for('settings', section='gates'))
+
+    if not name:
+        flash('Vui lòng nhập tên cổng.', 'error')
+        return redirect(url_for('settings', section='gates'))
+    if name.lower() in ('cổng chính', 'cong chinh', 'trung tâm', 'trung tam'):
+        flash('Tên "Cổng chính" và "Trung tâm" đã được hệ thống sử dụng, vui lòng chọn tên cổng khác.', 'error')
+        return redirect(url_for('settings', section='gates'))
+    try:
+        database.save_parking_zone(zone_id, name, zone_type, location, single_vt_id, capacity, status, note,
+                                   operating_hours=operating_hours, area_names=area_names,
+                                   vehicle_type_ids=vehicle_type_ids_csv)
+        flash('Đã lưu cài đặt cổng.', 'success')
+    except Exception:
+        flash(f'Tên cổng "{name}" đã tồn tại.', 'error')
+    return redirect(url_for('settings', section='gates'))
+
+
+@app.route('/settings/zones/<int:zone_id>/toggle', methods=['POST'])
+@login_required
+@staff_required
+def toggle_zone(zone_id):
+    database.toggle_parking_zone(zone_id)
+    flash('Đã cập nhật trạng thái cổng.', 'success')
+    return redirect(url_for('settings', section='gates'))
+
+
+@app.route('/settings/zones/<int:zone_id>/delete', methods=['POST'])
+@login_required
+@staff_required
+def delete_zone(zone_id):
+    database.delete_parking_zone(zone_id)
+    flash('Đã xóa cổng.', 'success')
+    return redirect(url_for('settings', section='gates'))
 
 
 # ============================================================
@@ -652,6 +2801,7 @@ def _to_int(value, default=None):
 
 @app.route('/pricing')
 @login_required
+@permission_required('pricing.view')
 def pricing():
     return render_template(
         'pricing.html',
@@ -659,13 +2809,74 @@ def pricing():
         vehicle_types=database.get_vehicle_types(),
         prices=database.get_prices(),
         ticket_labels=database.TICKET_LABELS,
-        can_edit=session.get('role') in ('admin', 'manager'),
+        can_edit=(has_perm('pricing.edit') or has_perm('pricing.create')),
+        can_delete=has_perm('pricing.delete'),
+    )
+
+
+@app.route('/pricing/export')
+@login_required
+@permission_required('pricing.export')
+def pricing_export():
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    vts = database.get_vehicle_types()
+    periods = database.get_periods()
+    prices = database.get_prices()
+    pm = {(p['vehicle_type_id'], p['period_id']): p['amount'] for p in prices}
+    wg_labels = {'2w': 'Xe 2 bánh', '4w': 'Xe 4 bánh', 'other': 'Khác'}
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Bang gia gui xe'
+    header = ['Loại phương tiện', 'Nhóm xe', 'Miễn phí đầu (phút)', 'Block đầu', 'Giờ tiếp theo', 'Giá trần 24h', 'Vé tháng cố định']
+    header.extend(f"{p['name']} ({p['start_value']}-{p['end_value']})" for p in periods)
+    ws.append(header)
+    header_fill = PatternFill(start_color='EEF4FF', end_color='EEF4FF', fill_type='solid')
+    header_font = Font(bold=True)
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for vt in vts:
+        row = [
+            vt['name'],
+            wg_labels.get(vt['wheel_group'] if 'wheel_group' in vt.keys() else '2w', 'Xe 2 bánh'),
+            vt['free_minutes'],
+            f"{vt['first_block_amount']} / {vt['first_block_hours']}h" if vt['first_block_hours'] else 'Theo khung giờ',
+            vt['next_hour_amount'] if vt['first_block_hours'] else 0,
+            vt['daily_cap'] or 'Không giới hạn',
+            vt['monthly_price'] if vt['monthly_price'] is not None else 'Theo khung ngày',
+        ]
+        for p in periods:
+            amt = pm.get((vt['id'], p['id']))
+            row.append(amt if amt is not None else '')
+        ws.append(row)
+
+    last_col = get_column_letter(max(len(header), 1))
+    ws.auto_filter.ref = f"A1:{last_col}{max(ws.max_row, 1)}"
+    ws.freeze_panes = 'A2'
+    for col in ws.columns:
+        max_len = max((len(str(c.value or '')) for c in col), default=10)
+        ws.column_dimensions[col[0].column_letter].width = min(max(max_len + 4, 14), 40)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return Response(
+        buf.getvalue(),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': 'attachment; filename="bang_gia_gui_xe.xlsx"'},
     )
 
 
 @app.route('/pricing/period/save', methods=['POST'])
 @login_required
 @staff_required
+@permission_required('pricing.edit')
 def pricing_period_save():
     period_id = _to_int(request.form.get('id'))
     name = request.form.get('name', '').strip()
@@ -697,6 +2908,7 @@ def pricing_period_save():
 @app.route('/pricing/period/<int:period_id>/delete', methods=['POST'])
 @login_required
 @staff_required
+@permission_required('pricing.delete')
 def pricing_period_delete(period_id):
     database.delete_period(period_id)
     flash('Đã xóa khung thời gian (và các giá liên quan).', 'success')
@@ -706,31 +2918,55 @@ def pricing_period_delete(period_id):
 @app.route('/pricing/type/save', methods=['POST'])
 @login_required
 @staff_required
+@permission_required('pricing.edit')
 def pricing_type_save():
     type_id = _to_int(request.form.get('id'))
     name = request.form.get('name', '').strip()
-    if not name:
+    grace = _to_int(request.form.get('grace_minutes', '0'))
+    cap = _to_int(request.form.get('daily_cap', '0'))
+    fields = ('free_minutes', 'first_block_hours', 'first_block_amount', 'next_hour_amount')
+    policy = {key: _to_int(request.form.get(key, '0')) for key in fields}
+    raw_monthly = request.form.get('monthly_price', '').strip()
+    monthly = _to_int(raw_monthly) if raw_monthly else None
+    wheel_group = request.form.get('wheel_group', '').strip()
+    if wheel_group not in ('2w', '4w', 'other'):
+        nl = name.lower()
+        wheel_group = '4w' if ('ô tô' in nl or 'o to' in nl or 'xe tải' in nl or '4 bánh' in nl) else '2w'
+    invalid = any(value is None or not 0 <= value <= 2147483647 for value in policy.values())
+    invalid = invalid or (raw_monthly != '' and (monthly is None or not 0 <= monthly <= 2147483647))
+    invalid = invalid or (policy['free_minutes'] is not None and policy['free_minutes'] > 1440)
+    invalid = invalid or (policy['first_block_hours'] is not None and policy['first_block_hours'] > 24)
+    invalid = invalid or (policy['first_block_hours'] == 0 and (policy['first_block_amount'] or policy['next_hour_amount']))
+    if invalid or grace is None or cap is None or not 0 <= grace <= 1440 or not 0 <= cap <= 2147483647:
+        flash('Cấu hình không hợp lệ: số phút từ 0–1440, block từ 0–24 giờ, tiền là số nguyên không âm tối đa 2.147.483.647 đồng. Khi tắt block, phí block và giờ tiếp theo phải bằng 0.', 'error')
+    elif not name:
         flash('Vui lòng nhập tên loại xe.', 'error')
     elif database.vehicle_type_name_taken(name, type_id):
         flash(f'Loại xe "{name}" đã tồn tại.', 'error')
     else:
-        database.save_vehicle_type(type_id, name)
+        database.save_vehicle_type(type_id, name, grace, cap, **policy, monthly_price=monthly, wheel_group=wheel_group)
         flash(f'Đã lưu loại xe "{name}".', 'success')
+    if request.form.get('next') == 'settings_vehicles':
+        return redirect(url_for('settings', section='vehicles'))
     return redirect(url_for('pricing'))
 
 
 @app.route('/pricing/type/<int:type_id>/delete', methods=['POST'])
 @login_required
 @staff_required
+@permission_required('pricing.delete')
 def pricing_type_delete(type_id):
     database.delete_vehicle_type(type_id)
     flash('Đã xóa loại xe (và các giá liên quan).', 'success')
+    if request.form.get('next') == 'settings_vehicles':
+        return redirect(url_for('settings', section='vehicles'))
     return redirect(url_for('pricing'))
 
 
 @app.route('/pricing/price/save', methods=['POST'])
 @login_required
 @staff_required
+@permission_required('pricing.edit')
 def pricing_price_save():
     price_id = _to_int(request.form.get('id'))
     type_id = _to_int(request.form.get('vehicle_type_id'))
@@ -762,6 +2998,7 @@ def pricing_price_save():
 @app.route('/pricing/price/<int:price_id>/delete', methods=['POST'])
 @login_required
 @staff_required
+@permission_required('pricing.delete')
 def pricing_price_delete(price_id):
     database.delete_price(price_id)
     flash('Đã xóa giá xe.', 'success')
@@ -800,8 +3037,13 @@ def build_price_info():
     for t in database.get_vehicle_types():
         mp = database.find_month_price(t['id'], today)
         info[t['id']] = {'month': mp['amount'] if mp else None, 'turn': []}
+        if t['first_block_hours'] > 0:
+            info[t['id']]['turn'].append({
+                'name': f"Block đầu {t['first_block_hours']} giờ; sau đó {t['next_hour_amount']:,} ₫/giờ",
+                'amount': t['first_block_amount'], 'start': '00:00', 'end': '23:59'})
+    block_types = {t['id'] for t in database.get_vehicle_types() if t['first_block_hours'] > 0}
     for r in database.get_prices():
-        if r['ticket_type'] == 'turn' and r['vehicle_type_id'] in info:
+        if r['ticket_type'] == 'turn' and r['vehicle_type_id'] in info and r['vehicle_type_id'] not in block_types:
             info[r['vehicle_type_id']]['turn'].append(
                 {'name': r['period_name'], 'amount': r['amount'],
                  'start': r['start_value'], 'end': r['end_value']})
@@ -841,13 +3083,13 @@ def can_manage_user(target):
 
 
 def parse_vehicle_forms(form):
-    """Đọc danh sách xe từ form (các ô cùng tên: plate, vehicle_type_id, ticket_type, months).
+    """Đọc danh sách xe từ form (các ô cùng tên: plate, vehicle_type_id, months).
     Dòng không nhập biển số sẽ bị bỏ qua.
-    Vé tháng: giá lấy từ Bảng giá (giá tháng x số tháng), bắt đầu tính từ HÔM NAY (lúc tạo).
+    Xe đăng ký theo tài khoản khách hàng bắt buộc là Vé tháng: giá lấy từ Bảng giá
+    (giá tháng x số tháng), bắt đầu tính từ HÔM NAY (lúc tạo).
     Trả về (danh sách xe hợp lệ, danh sách lỗi, dữ liệu để điền lại form)."""
     plates = form.getlist('plate')
     types = form.getlist('vehicle_type_id')
-    tickets = form.getlist('ticket_type')
     months_list = form.getlist('months')
     type_names = {t['id']: t['name'] for t in database.get_vehicle_types()}
     today = date.today()
@@ -858,7 +3100,7 @@ def parse_vehicle_forms(form):
         if not raw:
             continue
         get = lambda lst: lst[i] if i < len(lst) else ''
-        prefill.append({'plate': raw, 'type': get(types), 'ticket': get(tickets) or 'turn',
+        prefill.append({'plate': raw, 'type': get(types), 'ticket': 'month',
                         'months': get(months_list) or '1'})
 
         plate = clean_plate_input(raw)
@@ -879,46 +3121,109 @@ def parse_vehicle_forms(form):
         if type_id not in type_names:
             errors.append(f'{label}: vui lòng chọn loại xe.')
             continue
-        ticket = get(tickets)
-        if ticket not in TICKET_LABELS:
-            ticket = 'turn'
 
-        v = {'plate_number': plate, 'key': key, 'vehicle_type_id': type_id, 'ticket_type': ticket,
-             'expires_on': None, 'start_on': None, 'months': None, 'paid_amount': None}
-        if ticket == 'month':
-            months = _to_int(get(months_list))
-            if not months or not 1 <= months <= MAX_MONTHS:
-                errors.append(f'{label}: số tháng thuê phải từ 1 đến {MAX_MONTHS}.')
-                continue
-            price = database.find_month_price(type_id, today)
-            if price is None:
-                errors.append(f'{label}: Bảng giá chưa có giá vé tháng cho loại xe "{type_names[type_id]}". '
-                              f'Hãy thêm giá tháng ở trang Giá xe hoặc chọn vé lượt.')
-                continue
-            v.update(start_on=today.isoformat(), months=months,
-                     expires_on=month_ticket_period(today, months).isoformat(),
-                     paid_amount=price['amount'] * months)
-        vehicles.append(v)
+        months = _to_int(get(months_list))
+        if not months or not 1 <= months <= MAX_MONTHS:
+            errors.append(f'{label}: số tháng thuê phải từ 1 đến {MAX_MONTHS}.')
+            continue
+        price = database.find_month_price(type_id, today)
+        if price is None:
+            errors.append(f'{label}: Bảng giá chưa có giá vé tháng cho loại xe "{type_names[type_id]}". '
+                          f'Hãy thêm giá tháng ở trang Giá xe.')
+            continue
+
+        vehicles.append({
+            'plate_number': plate,
+            'key': key,
+            'vehicle_type_id': type_id,
+            'ticket_type': 'month',
+            'start_on': today.isoformat(),
+            'months': months,
+            'expires_on': month_ticket_period(today, months).isoformat(),
+            'paid_amount': price['amount'] * months,
+        })
     return vehicles, errors, prefill
 
 
-def save_vehicles(user_id, vehicles):
+def vietqr_context():
+    """Cấu hình VietQR dùng chung cho cổng ra, khách hàng và cài đặt."""
+    return {
+        'vietqr_bank_bin': database.get_setting('vietqr_bank_bin', '970407'),
+        'vietqr_bank_name': database.get_setting('vietqr_bank_name', 'Techcombank'),
+        'vietqr_account_number': database.get_setting('vietqr_account_number', '19036888888'),
+        'vietqr_account_name': database.get_setting('vietqr_account_name', 'SMART PARKING'),
+        'vietqr_template': database.get_setting('vietqr_template', 'compact2'),
+    }
+
+
+def parse_payment_method(form):
+    pm = (form.get('payment_method') or 'cash').strip()
+    return pm if pm in database.PAYMENT_METHODS else 'cash'
+
+
+def save_vehicles(user_id, vehicles, payment_method='cash'):
+    pm = payment_method if payment_method in database.PAYMENT_METHODS else 'cash'
     for v in vehicles:
         database.add_user_vehicle(user_id, v['plate_number'], v['key'], v['vehicle_type_id'],
                                   v['ticket_type'], v['expires_on'], v['start_on'], v['months'],
-                                  v['paid_amount'])
+                                  v['paid_amount'], payment_method=pm)
+
+
+def render_customers(**extra):
+    context = parking_customers.customer_context(request.args)
+    conn = database.get_connection()
+    try:
+        seq_row = conn.execute("SELECT seq FROM sqlite_sequence WHERE name='users'").fetchone()
+        max_row = conn.execute("SELECT COALESCE(MAX(id), 0) AS m FROM users").fetchone()
+        next_uid = max((seq_row['seq'] if seq_row else 0), max_row['m']) + 1
+    finally:
+        conn.close()
+    context.update(vehicle_types=database.get_vehicle_types(), ticket_labels=TICKET_LABELS,
+                   today=date.today().isoformat(), price_info=build_price_info(), max_months=MAX_MONTHS,
+                   min_password_len=MIN_PASSWORD_LEN, payment_methods=database.PAYMENT_METHODS,
+                   next_customer_code=f'KH{next_uid:06d}',
+                   form=None, form_vehicles=None, form_errors=[], edit_form=None, edit_errors=[],
+                   open_modal=False, open_edit_modal=False, **vietqr_context())
+    context.update(extra)
+    return render_template('customers.html', **context)
+
+
+def render_accounts(**extra):
+    staff_users = database.get_staff_users()
+    customers = database.get_customer_users()
+    active_gates = [dict(z) for z in database.get_parking_zones(status='active')]
+    context = parking_employees.employee_context(staff_users, request.args, active_gates=active_gates)
+    parking_employees.attach_attendance(
+        context['filtered_employees'],
+        database.get_employee_attendance(limit=1000),
+        month=context['filters']['month'],
+    )
+    context.update({
+        'staff_users': staff_users,
+        'customer_count': len(customers),
+        'payroll_totals': parking_employees.payroll_totals(context['filtered_employees']),
+        'zones': active_gates,
+        'employee_shifts': [s for s in get_employee_shifts() if s['active']],
+        'salary_templates_data': get_employee_salary_templates(),
+        'salary_templates': [t['name'] for t in get_employee_salary_templates() if t.get('name')],
+        'allowances_catalog': get_employee_allowances(),
+        'deductions_catalog': get_employee_deductions(),
+        'today': date.today().isoformat(),
+        'active_tab': 'accounts',
+        'form': None,
+        'form_errors': [],
+        'edit_form': None,
+        'edit_errors': [],
+        'open_modal': False,
+        'open_edit_modal': False,
+        'min_password_len': MIN_PASSWORD_LEN,
+    })
+    context.update(extra)
+    return render_template('accounts.html', **context)
 
 
 def render_users(**extra):
-    all_users = database.get_all_users()
-    if session.get('role') != 'admin':
-        all_users = [u for u in all_users if u['role'] == 'user']
-    return render_template('users.html', users=all_users,
-                           vehicles_by_user=database.get_vehicles_grouped(),
-                           vehicle_types=database.get_vehicle_types(),
-                           ticket_labels=TICKET_LABELS, today=date.today().isoformat(),
-                           price_info=build_price_info(), max_months=MAX_MONTHS,
-                           **extra)
+    return render_customers(**extra)
 
 
 def render_edit_user(target, **extra):
@@ -930,13 +3235,1286 @@ def render_edit_user(target, **extra):
                            **extra)
 
 
+@app.route('/customers')
+@login_required
+@staff_required
+@permission_required('customers.view')
+def customers():
+    return render_customers()
+
+
+@app.route('/customers/export')
+@login_required
+@staff_required
+@permission_required('customers.export')
+def customers_export():
+    from io import BytesIO
+    context = parking_customers.customer_context(request.args)
+    if context['filter_errors']:
+        abort(400, description=context['filter_errors'][0])
+    rows = context['filtered_customers']
+    if request.args.get('ids'):
+        try:
+            selected = {int(value) for value in request.args['ids'].split(',')}
+        except ValueError:
+            abort(400)
+        rows = [customer for customer in rows if customer['id'] in selected]
+    return send_file(BytesIO(parking_customers.export_customers_excel(rows)), as_attachment=True,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     download_name=f'khach-hang_{date.today().isoformat()}.xlsx')
+
+
+@app.route('/customers/<int:user_id>/profile', methods=['POST'])
+@login_required
+@staff_required
+@permission_required('customers.edit')
+def customer_profile_save(user_id):
+    target = database.get_user_by_id(user_id)
+    if target is None or target['role'] != 'user' or not can_manage_user(target):
+        abort(403)
+    profile, errors = parking_customers.parse_profile(request.form)
+    vehicles, v_errors, _ = parse_vehicle_forms(request.form)
+    errors.extend(v_errors)
+    new_pw = request.form.get('new_password', '')
+    confirm_pw = request.form.get('confirm_password', '')
+    if new_pw:
+        if session.get('role') != 'admin':
+            errors.append('Chỉ quản trị viên mới được đặt lại mật khẩu.')
+        elif len(new_pw) < MIN_PASSWORD_LEN:
+            errors.append(f'Mật khẩu mới tối thiểu {MIN_PASSWORD_LEN} ký tự.')
+        elif new_pw != confirm_pw:
+            errors.append('Mật khẩu xác nhận không khớp.')
+    if errors:
+        return render_customers(open_edit_modal=True,
+                                edit_form=dict(profile, id=user_id, username=target['username'], code=f'KH{user_id:06d}'),
+                                edit_errors=errors)
+    avatar_data = request.form.get('avatar_data', '').strip()
+    if avatar_data.startswith('data:image/') and len(avatar_data) <= 2_800_000:
+        profile['avatar'] = avatar_data
+    database.update_customer_profile(user_id, **profile)
+    if new_pw and session.get('role') == 'admin':
+        database.set_user_password(user_id, new_pw)
+    payment_method = parse_payment_method(request.form)
+    if vehicles:
+        save_vehicles(user_id, vehicles, payment_method=payment_method)
+        total = sum(v['paid_amount'] or 0 for v in vehicles)
+        pm_label = database.PAYMENT_METHODS.get(payment_method, 'Tiền mặt')
+        flash(f'Đã cập nhật hồ sơ khách hàng và thu {vnd_filter(total)} ({pm_label}) cho {len(vehicles)} xe mới.', 'success')
+    else:
+        flash('Đã cập nhật hồ sơ khách hàng.', 'success')
+    return redirect(url_for('customers', open=user_id))
+
+
+@app.route('/accounts')
+@login_required
+@permission_required('staff.view')
+def accounts():
+    return render_accounts()
+
+
+@app.route('/accounts/export')
+@login_required
+@permission_required('staff.export')
+def accounts_export():
+    from io import BytesIO
+    fmt = request.args.get('format', 'csv').lower()
+    if fmt not in ('csv', 'xlsx', 'pdf'):
+        abort(400)
+    staff_users = database.get_staff_users()
+    context = parking_employees.employee_context(staff_users, request.args)
+    rows = context['filtered_employees']
+    if request.args.get('ids'):
+        try:
+            selected = {int(value) for value in request.args['ids'].split(',')}
+        except ValueError:
+            abort(400)
+        rows = [emp for emp in rows if emp['id'] in selected]
+    parking_employees.attach_attendance(
+        rows,
+        database.get_employee_attendance(limit=1000),
+        month=context['filters']['month'],
+    )
+    generated_by = session.get('fullname') or session.get('username') or 'Admin'
+    data, mimetype, ext = parking_employees.export_employees_file(rows, fmt=fmt, generated_by=generated_by)
+    return send_file(
+        BytesIO(data),
+        as_attachment=True,
+        mimetype=mimetype,
+        download_name=f'nhan-vien_{date.today().isoformat()}.{ext}',
+    )
+
+
+@app.route('/accounts/payroll/export')
+@login_required
+@permission_required('payroll.export')
+def accounts_payroll_export():
+    from io import BytesIO
+    fmt = request.args.get('format', 'xlsx').lower()
+    if fmt not in ('xlsx', 'pdf', 'csv'):
+        abort(400)
+    staff_users = database.get_staff_users()
+    context = parking_employees.employee_context(staff_users, request.args)
+    rows = context['filtered_employees']
+    if request.args.get('ids'):
+        try:
+            selected = {int(value) for value in request.args['ids'].split(',')}
+        except ValueError:
+            abort(400)
+        rows = [emp for emp in rows if emp['id'] in selected]
+    month = context['filters']['month']
+    parking_employees.attach_attendance(
+        rows,
+        database.get_employee_attendance(limit=1000),
+        month=month,
+    )
+    generated_by = session.get('fullname') or session.get('username') or 'Admin'
+    data, mimetype, ext = parking_employees.export_payroll(rows, fmt=fmt, month=month, generated_by=generated_by)
+    period_tag = month or date.today().isoformat()
+    return send_file(
+        BytesIO(data),
+        as_attachment=True,
+        mimetype=mimetype,
+        download_name=f'bang-luong_{period_tag}.{ext}',
+    )
+
+
+@app.route('/accounts/<int:user_id>/profile', methods=['POST'])
+@login_required
+@permission_required('staff.edit')
+def employee_profile_save(user_id):
+    target = database.get_user_by_id(user_id)
+    if target is None or target['role'] not in ('admin', 'manager'):
+        abort(403)
+    emp_data = parking_employees.parse_employee_form(request.form)
+    if 'role' not in request.form or target['username'] == 'admin':
+        emp_data['role'] = target['role']
+    errors = []
+    if not emp_data['fullname']:
+        errors.append('Vui lòng nhập tên nhân viên.')
+    new_pw = request.form.get('new_password', '')
+    confirm_pw = request.form.get('confirm_password', '')
+    if new_pw or confirm_pw:
+        if len(new_pw) < MIN_PASSWORD_LEN:
+            errors.append(f'Mật khẩu mới tối thiểu {MIN_PASSWORD_LEN} ký tự.')
+        elif new_pw != confirm_pw:
+            errors.append('Mật khẩu xác nhận không khớp.')
+    if errors:
+        for e in errors:
+            flash(e, 'error')
+        return render_accounts(
+            open_edit_modal=True,
+            edit_form=dict(emp_data, id=user_id, username=target['username']),
+            edit_errors=errors,
+        )
+    avatar_data = request.form.get('avatar_data', '').strip()
+    if avatar_data.startswith('data:image/') and len(avatar_data) <= 2_800_000:
+        emp_data['avatar'] = avatar_data
+    database.update_employee_profile(user_id, **emp_data)
+    if new_pw:
+        database.set_user_password(user_id, new_pw)
+    flash('Đã cập nhật hồ sơ, tài khoản & thiết lập lương nhân viên.', 'success')
+    return redirect(url_for('accounts', open=user_id))
+
+
+@app.route('/accounts/<int:user_id>/account', methods=['POST'])
+@login_required
+@admin_required
+def employee_account_save(user_id):
+    target = database.get_user_by_id(user_id)
+    if target is None or target['role'] not in ('admin', 'manager'):
+        abort(403)
+    new_username = (request.form.get('username') or '').strip()
+    new_role = (request.form.get('role') or target['role']).strip()
+    new_pw = request.form.get('new_password', '')
+    confirm_pw = request.form.get('confirm_password', '')
+
+    if target['username'] == 'admin':
+        new_username = 'admin'
+        new_role = 'admin'
+    if new_role not in ('manager', 'admin'):
+        new_role = target['role']
+
+    if not new_username:
+        flash('Tên đăng nhập không được để trống.', 'error')
+        return redirect(url_for('accounts', open=user_id))
+    if new_username != target['username'] and database.username_exists(new_username):
+        flash(f'Tên đăng nhập "{new_username}" đã tồn tại.', 'error')
+        return redirect(url_for('accounts', open=user_id))
+    if new_pw or confirm_pw:
+        if len(new_pw) < MIN_PASSWORD_LEN:
+            flash(f'Mật khẩu mới tối thiểu {MIN_PASSWORD_LEN} ký tự.', 'error')
+            return redirect(url_for('accounts', open=user_id))
+        if new_pw != confirm_pw:
+            flash('Mật khẩu xác nhận không khớp.', 'error')
+            return redirect(url_for('accounts', open=user_id))
+
+    database.update_user_account(user_id, new_username, new_role)
+    if new_pw:
+        database.set_user_password(user_id, new_pw)
+    if user_id == session.get('user_id'):
+        session['username'] = new_username
+        session['role'] = new_role
+    flash('Đã cập nhật thông tin tài khoản & phân quyền.', 'success')
+    return redirect(url_for('accounts', open=user_id))
+
+
+@app.route('/accounts/<int:user_id>/permissions', methods=['POST'])
+@login_required
+@admin_required
+def employee_permissions_save(user_id):
+    import json
+    import parking_permissions
+    target = database.get_user_by_id(user_id)
+    if target is None or target['role'] not in ('admin', 'manager'):
+        abort(403)
+    clean_obj, assigned_gates = parking_permissions.sanitize_permissions(request.form.get('permissions_json', ''))
+    if clean_obj is None:
+        flash('Dữ liệu phân quyền không hợp lệ.', 'error')
+        return redirect(url_for('accounts', open=user_id))
+    work_branch_str = ', '.join(assigned_gates)[:240] if assigned_gates else (target['work_branch'] or 'Cổng chính')
+    database.save_user_permissions(user_id, json.dumps(clean_obj, ensure_ascii=False), work_branch=work_branch_str)
+    flash(f'Đã lưu phân quyền cho "{target["username"]}" ({len(assigned_gates)} cổng).', 'success')
+    return redirect(url_for('accounts', open=user_id))
+
+
+@app.route('/attendance/check-in', methods=['POST'])
+@login_required
+@staff_required
+def attendance_check_in():
+    shift_name = request.form.get('shift_name', 'Ca ngày').strip()[:60] or 'Ca ngày'
+    zone_name = request.form.get('zone_name', '').strip()[:80]
+    note = request.form.get('note', '').strip()[:255]
+    database.clock_in_employee(session['user_id'], shift_name=shift_name, zone_name=zone_name, note=note)
+    flash(f'Đã chấm công vào {shift_name}.', 'success')
+    return redirect(request.referrer or url_for('index'))
+
+
+@app.route('/attendance/check-out', methods=['POST'])
+@login_required
+@staff_required
+def attendance_check_out():
+    note = request.form.get('note', '').strip()[:255]
+    if database.clock_out_employee(session['user_id'], note=note):
+        flash('Đã chấm công tan ca.', 'success')
+    else:
+        flash('Bạn chưa chấm công vào ca.', 'error')
+    return redirect(request.referrer or url_for('index'))
+
+
+@app.route('/accounts/<int:user_id>/attendance', methods=['POST'])
+@login_required
+@admin_required
+def employee_add_attendance(user_id):
+    target = database.get_user_by_id(user_id)
+    if target is None or target['role'] not in ('admin', 'manager'):
+        abort(403)
+    work_date = request.form.get('work_date', '').strip() or date.today().isoformat()
+    shift_name = request.form.get('shift_name', 'Ca ngày').strip()[:60] or 'Ca ngày'
+    zone_name = request.form.get('zone_name', '').strip()[:80]
+    status = request.form.get('status', 'completed')
+    if status not in ('completed', 'late', 'leave', 'working'):
+        status = 'completed'
+    note = request.form.get('note', '').strip()[:255]
+    check_in_time = request.form.get('check_in_time', '').strip()
+    check_out_time = request.form.get('check_out_time', '').strip()
+    ci = f"{work_date}T{check_in_time}:00" if check_in_time else ''
+    co = f"{work_date}T{check_out_time}:00" if check_out_time else ''
+    database.add_manual_attendance(user_id, work_date, shift_name, status, ci, co, zone_name, note)
+    flash(f'Đã ghi nhận chấm công cho {target["fullname"]}.', 'success')
+    return redirect(url_for('accounts', open=user_id))
+
+
+def _week_window(week_str: str):
+    """Trả về (monday_date, days_list, prev_week_str, next_week_str, week_label)."""
+    from datetime import timedelta
+    base = date.today()
+    if week_str:
+        try:
+            base = date.fromisoformat(week_str)
+        except ValueError:
+            pass
+    monday = base - timedelta(days=base.weekday())
+    day_names = ['Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy', 'Chủ nhật']
+    days = []
+    today_iso = date.today().isoformat()
+    for i in range(7):
+        d = monday + timedelta(days=i)
+        days.append({
+            'iso': d.isoformat(),
+            'label': day_names[i],
+            'day_num': d.day,
+            'is_today': d.isoformat() == today_iso,
+        })
+    week_num = monday.isocalendar()[1]
+    week_label = f"Tuần {week_num} - Th. {monday.month:02d} {monday.year}"
+    return (
+        monday,
+        days,
+        (monday - timedelta(days=7)).isoformat(),
+        (monday + timedelta(days=7)).isoformat(),
+        week_label,
+    )
+
+
+def _employee_gate_choices():
+    active_gates = [dict(z) for z in database.get_parking_zones(status='active')]
+    choices = ['Cổng chính']
+    for g in active_gates:
+        gname = (g.get('name') or '').strip()
+        if gname and gname.lower() not in ('cổng chính', 'cong chinh') and gname not in choices:
+            choices.append(gname)
+    return choices
+
+
+def _schedule_expected_pay(emp: dict, shift_count: int) -> int:
+    if not shift_count:
+        return 0
+    stype = emp.get('salary_type') or ''
+    samount = int(emp.get('salary_amount') or 0)
+    if not samount:
+        return 0
+    if stype == 'shift':
+        return shift_count * samount
+    if stype == 'hour':
+        return shift_count * 8 * samount
+    if stype == 'standard_day':
+        return round(samount / 26 * shift_count)
+    if stype == 'month':
+        return samount
+    return shift_count * samount
+
+
+@app.route('/employees/schedule', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def employee_schedule():
+    from datetime import timedelta
+    if request.method == 'POST':
+        schedule_id = _to_int(request.form.get('schedule_id'))
+        uid = _to_int(request.form.get('user_id'))
+        work_date = request.form.get('work_date', '').strip() or date.today().isoformat()
+        shift_name = request.form.get('shift_name', 'Ca sáng').strip()[:60] or 'Ca sáng'
+        gate_name = request.form.get('gate_name', 'Cổng chính').strip()[:120] or 'Cổng chính'
+        note = request.form.get('note', '').strip()[:255]
+        view_mode = request.form.get('view_mode', 'employee').strip()
+        if view_mode not in ('employee', 'shift'):
+            view_mode = 'employee'
+
+        target = database.get_user_by_id(uid) if uid else None
+        if target is None or target['role'] not in ('admin', 'manager'):
+            flash('Vui lòng chọn nhân viên hợp lệ.', 'error')
+        elif schedule_id:
+            database.update_employee_schedule(schedule_id, uid, work_date, shift_name, gate_name, note)
+            flash(f'Đã cập nhật lịch {shift_name} ({gate_name}) cho {target["fullname"]}.', 'success')
+        else:
+            target_uids = [uid]
+            if request.form.get('apply_other_employees') == '1':
+                for extra_raw in request.form.getlist('extra_user_ids'):
+                    euid = _to_int(extra_raw)
+                    if euid and euid not in target_uids:
+                        eu = database.get_user_by_id(euid)
+                        if eu and eu['role'] in ('admin', 'manager'):
+                            target_uids.append(euid)
+
+            dates_to_add = [work_date]
+            if request.form.get('repeat_weekly') == '1':
+                rep_days = {_to_int(d) for d in request.form.getlist('repeat_days') if _to_int(d) is not None}
+                if rep_days:
+                    try:
+                        base_d = date.fromisoformat(work_date)
+                    except ValueError:
+                        base_d = date.today()
+                    end_raw = request.form.get('repeat_end', '').strip()
+                    try:
+                        end_d = date.fromisoformat(end_raw) if end_raw else (base_d + timedelta(days=6))
+                    except ValueError:
+                        end_d = base_d + timedelta(days=6)
+                    end_d = min(end_d, base_d + timedelta(days=56))
+                    dates_to_add = []
+                    cur_d = base_d
+                    while cur_d <= end_d:
+                        if cur_d.weekday() in rep_days:
+                            dates_to_add.append(cur_d.isoformat())
+                        cur_d += timedelta(days=1)
+                    if not dates_to_add:
+                        dates_to_add = [work_date]
+
+            for t_uid in target_uids:
+                for d_iso in dates_to_add:
+                    database.add_employee_schedule(t_uid, d_iso, shift_name, gate_name, note)
+            flash(f'Đã xếp {shift_name} ({gate_name}) cho {len(target_uids)} nhân viên.', 'success')
+        return redirect(url_for(
+            'employee_schedule',
+            week=request.form.get('week', ''),
+            gate=request.form.get('filter_gate', ''),
+            q=request.form.get('filter_q', ''),
+            view=view_mode,
+        ))
+
+    week_str = request.args.get('week', '').strip()
+    gate_filter = request.args.get('gate', '').strip()
+    q = request.args.get('q', '').strip().lower()
+    view_mode = request.args.get('view', 'employee').strip()
+    if view_mode not in ('employee', 'shift'):
+        view_mode = 'employee'
+
+    monday, days, prev_week, next_week, week_label = _week_window(week_str)
+    gate_choices = _employee_gate_choices()
+
+    staff_rows = [parking_employees.enrich_employee(u) for u in database.get_staff_users() if u['status'] == 'active']
+    if gate_filter:
+        gf_l = gate_filter.lower()
+        staff_rows = [e for e in staff_rows if any(b.lower() == gf_l for b in e.get('work_branches_list', []))]
+    if q:
+        staff_rows = [e for e in staff_rows if q in (e['fullname'] + ' ' + e['code'] + ' ' + e['username']).lower()]
+
+    sched_rows = database.get_employee_schedules(days[0]['iso'], days[-1]['iso'], gate_name=gate_filter)
+    by_user_day = {}
+    by_shift_day = {}
+    user_shift_counts = {}
+    for s in sched_rows:
+        by_user_day.setdefault((s['user_id'], s['work_date']), []).append(s)
+        by_shift_day.setdefault((s['shift_name'], s['work_date']), []).append(s)
+        user_shift_counts[s['user_id']] = user_shift_counts.get(s['user_id'], 0) + 1
+
+    total_expected_pay = 0
+    for emp in staff_rows:
+        cnt = user_shift_counts.get(emp['id'], 0)
+        exp_pay = _schedule_expected_pay(emp, cnt)
+        emp['week_shift_count'] = cnt
+        emp['week_expected_pay'] = exp_pay
+        total_expected_pay += exp_pay
+
+    active_shifts = [s for s in get_employee_shifts() if s['active']]
+    return render_template(
+        'employee_schedule.html',
+        active_page='employee_schedule',
+        employees=staff_rows,
+        days=days,
+        week=monday.isoformat(),
+        prev_week=prev_week,
+        next_week=next_week,
+        week_label=week_label,
+        gate_choices=gate_choices,
+        employee_shifts=active_shifts,
+        gate_filter=gate_filter,
+        q=request.args.get('q', '').strip(),
+        view_mode=view_mode,
+        by_user_day=by_user_day,
+        by_shift_day=by_shift_day,
+        total_expected_pay=total_expected_pay,
+        today=date.today().isoformat(),
+    )
+
+
+@app.route('/employees/schedule/export')
+@login_required
+@admin_required
+def employee_schedule_export():
+    import csv, io
+    from flask import Response
+    week_str = request.args.get('week', '').strip()
+    gate_filter = request.args.get('gate', '').strip()
+    monday, days, _, _, week_label = _week_window(week_str)
+    sched_rows = database.get_employee_schedules(days[0]['iso'], days[-1]['iso'], gate_name=gate_filter)
+    buf = io.StringIO()
+    buf.write('\ufeff')
+    w = csv.writer(buf)
+    w.writerow([f'LỊCH LÀM VIỆC - {week_label}'])
+    w.writerow(['Ngày', 'Mã NV', 'Nhân viên', 'Ca làm việc', 'Cổng làm việc', 'Ghi chú'])
+    for s in sched_rows:
+        w.writerow([s['work_date'], s.get('employee_code') or '', s.get('fullname') or '', s['shift_name'], s['gate_name'], s.get('note') or ''])
+    return Response(
+        buf.getvalue().encode('utf-8'),
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename="lich_lam_viec_{monday.isoformat()}.csv"'},
+    )
+
+
+@app.route('/employees/schedule/<int:schedule_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def employee_schedule_delete(schedule_id):
+    database.delete_employee_schedule(schedule_id)
+    flash('Đã xóa lịch ca làm việc.', 'success')
+    return redirect(url_for('employee_schedule', week=request.form.get('week', ''), gate=request.form.get('gate', ''), q=request.form.get('q', '')))
+
+
+@app.route('/employees/timesheet', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def employee_timesheet():
+    if request.method == 'POST':
+        att_id = _to_int(request.form.get('att_id'))
+        uid = _to_int(request.form.get('user_id'))
+        view_mode = request.form.get('view_mode', 'shift').strip()
+        if view_mode not in ('shift', 'employee'):
+            view_mode = 'shift'
+        target = database.get_user_by_id(uid) if uid else None
+        if target is None or target['role'] not in ('admin', 'manager'):
+            flash('Vui lòng chọn nhân viên hợp lệ.', 'error')
+        else:
+            work_date = request.form.get('work_date', '').strip() or date.today().isoformat()
+            shift_name = request.form.get('shift_name', 'Ca sáng').strip()[:60] or 'Ca sáng'
+            zone_name = request.form.get('zone_name', 'Cổng chính').strip()[:80] or 'Cổng chính'
+            work_mode = request.form.get('work_mode', '').strip()
+            status = request.form.get('status', 'completed')
+            if work_mode in ('leave_paid', 'leave_unpaid'):
+                status = 'leave'
+            elif status not in ('completed', 'late', 'leave', 'working', 'missing'):
+                status = 'completed'
+            note = request.form.get('note', '').strip()[:255]
+            in_enabled = request.form.get('check_in_enabled')
+            out_enabled = request.form.get('check_out_enabled')
+            ci_t = request.form.get('check_in_time', '').strip() if (in_enabled is None or in_enabled == '1') else ''
+            co_t = request.form.get('check_out_time', '').strip() if (out_enabled is None or out_enabled == '1') else ''
+            if status != 'leave' and ((ci_t and not co_t) or (co_t and not ci_t)):
+                status = 'missing'
+            emp_set = get_employee_settings()
+            if status == 'completed' and emp_set.get('emp_late_enabled') == '1' and ci_t:
+                matched_sh = next((s for s in get_employee_shifts() if s['name'] == shift_name), None)
+                if matched_sh and matched_sh['start'] < matched_sh['end']:
+                    try:
+                        sh_h, sh_m = [int(x) for x in matched_sh['start'].split(':')[:2]]
+                        ci_h, ci_m = [int(x) for x in ci_t.split(':')[:2]]
+                        grace = _to_int(emp_set.get('emp_late_grace_minutes'), 0) or 0
+                        if (ci_h * 60 + ci_m) > (sh_h * 60 + sh_m + grace):
+                            status = 'late'
+                    except Exception:
+                        pass
+            ci = f"{work_date}T{ci_t}:00" if ci_t else ''
+            co = f"{work_date}T{co_t}:00" if co_t else ''
+            if att_id:
+                database.update_employee_attendance(att_id, shift_name, zone_name, ci, co, status, note)
+                flash(f'Đã cập nhật chấm công cho {target["fullname"]}.', 'success')
+            else:
+                database.add_manual_attendance(uid, work_date, shift_name, status, ci, co, zone_name, note)
+                flash(f'Đã chấm công cho {target["fullname"]}.', 'success')
+        return redirect(url_for(
+            'employee_timesheet',
+            week=request.form.get('week', ''),
+            gate=request.form.get('filter_gate', ''),
+            q=request.form.get('filter_q', ''),
+            view=view_mode,
+        ))
+
+    week_str = request.args.get('week', '').strip()
+    gate_filter = request.args.get('gate', '').strip()
+    q = request.args.get('q', '').strip().lower()
+    view_mode = request.args.get('view', 'shift').strip()
+    if view_mode not in ('shift', 'employee'):
+        view_mode = 'shift'
+    monday, days, prev_week, next_week, week_label = _week_window(week_str)
+    gate_choices = _employee_gate_choices()
+
+    staff_rows = [parking_employees.enrich_employee(u) for u in database.get_staff_users() if u['status'] == 'active']
+    if gate_filter:
+        gf_l = gate_filter.lower()
+        staff_rows = [e for e in staff_rows if any(b.lower() == gf_l for b in e.get('work_branches_list', []))]
+    if q:
+        staff_rows = [e for e in staff_rows if q in (e['fullname'] + ' ' + e['code'] + ' ' + e['username']).lower()]
+    allowed_uids = {e['id'] for e in staff_rows}
+
+    att_rows = [parking_employees._format_attendance_row(r) for r in database.get_employee_attendance(limit=1000)]
+    start_iso, end_iso = days[0]['iso'], days[-1]['iso']
+    today_iso = date.today().isoformat()
+    by_user_day = {}
+    by_shift_day = {}
+    recorded_keys = set()
+    for a in att_rows:
+        wd = a.get('work_date') or ''
+        if start_iso <= wd <= end_iso:
+            if gate_filter and (a.get('zone_name') or '').strip().lower() != gate_filter.lower():
+                continue
+            if a['user_id'] not in allowed_uids:
+                continue
+            st = a.get('status') or 'completed'
+            if st == 'missing':
+                a['status_label'] = 'Chấm công thiếu'
+            a['is_scheduled_only'] = False
+            by_user_day.setdefault((a['user_id'], wd), []).append(a)
+            by_shift_day.setdefault((a.get('shift_name') or 'Ca sáng', wd), []).append(a)
+            recorded_keys.add((a['user_id'], wd, a.get('shift_name') or ''))
+
+    # Merge scheduled shifts that do not yet have an attendance record
+    sched_rows = database.get_employee_schedules(start_iso, end_iso, gate_name=gate_filter)
+    for s in sched_rows:
+        if s['user_id'] not in allowed_uids:
+            continue
+        key = (s['user_id'], s['work_date'], s['shift_name'])
+        if key in recorded_keys:
+            continue
+        is_future = s['work_date'] > today_iso
+        st = 'future' if is_future else 'unpunched'
+        item = {
+            'id': '',
+            'schedule_id': s['id'],
+            'user_id': s['user_id'],
+            'fullname': s.get('fullname') or '',
+            'employee_code': s.get('employee_code') or f"NV{s['user_id']:04d}",
+            'work_date': s['work_date'],
+            'shift_name': s['shift_name'],
+            'zone_name': s.get('gate_name') or 'Cổng chính',
+            'check_in_label': '--',
+            'check_out_label': '--',
+            'check_in_time': '',
+            'check_out_time': '',
+            'status': st,
+            'status_label': 'Chưa đến giờ' if is_future else 'Chưa chấm công',
+            'note': s.get('note') or '',
+            'is_scheduled_only': True,
+        }
+        by_user_day.setdefault((s['user_id'], s['work_date']), []).append(item)
+        by_shift_day.setdefault((s['shift_name'], s['work_date']), []).append(item)
+
+    active_shifts = [s for s in get_employee_shifts() if s['active']]
+    shift_has_items = {
+        sh['name']: any(by_shift_day.get((sh['name'], d['iso'])) for d in days)
+        for sh in active_shifts
+    }
+
+    return render_template(
+        'employee_timesheet.html',
+        active_page='employee_timesheet',
+        employees=staff_rows,
+        days=days,
+        week=monday.isoformat(),
+        prev_week=prev_week,
+        next_week=next_week,
+        week_label=week_label,
+        gate_choices=gate_choices,
+        employee_shifts=active_shifts,
+        gate_filter=gate_filter,
+        q=request.args.get('q', '').strip(),
+        view_mode=view_mode,
+        by_user_day=by_user_day,
+        by_shift_day=by_shift_day,
+        shift_has_items=shift_has_items,
+        today=today_iso,
+    )
+
+
+@app.route('/employees/timesheet/<int:att_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def employee_timesheet_delete(att_id):
+    database.delete_employee_attendance(att_id)
+    flash('Đã xóa bản ghi chấm công.', 'success')
+    return redirect(url_for(
+        'employee_timesheet',
+        week=request.form.get('week', ''),
+        gate=request.form.get('gate', ''),
+        q=request.form.get('q', ''),
+        view=request.form.get('view_mode', 'shift'),
+    ))
+
+
+def _format_work_period_range(work_period: str) -> str:
+    import calendar
+    wp = (work_period or '').strip()
+    if len(wp) == 7 and wp[4] == '-':
+        try:
+            y, m = int(wp[:4]), int(wp[5:7])
+            last_day = calendar.monthrange(y, m)[1]
+            return f"01/{m:02d}/{y} - {last_day:02d}/{m:02d}/{y}"
+        except Exception:
+            pass
+    return wp
+
+
+@app.route('/employees/payroll', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def employee_payroll():
+    if request.method == 'POST':
+        pay_cycle = request.form.get('pay_cycle', 'Hàng tháng').strip()[:60] or 'Hàng tháng'
+        work_period = request.form.get('work_period', '').strip() or date.today().strftime('%Y-%m')
+        pay_branch = request.form.get('pay_branch', 'Cổng chính').strip()[:120] or 'Cổng chính'
+        name = request.form.get('name', '').strip()[:160] or f"Bảng lương tháng {work_period[5:7]}/{work_period[:4]}"
+        note = request.form.get('note', '').strip()[:255]
+        scope = request.form.get('scope', 'all').strip()
+        selected_uids = {_to_int(x) for x in request.form.getlist('selected_user_ids') if _to_int(x)}
+
+        staff_users = [u for u in database.get_staff_users() if u['status'] == 'active']
+        emps = [parking_employees.enrich_employee(u) for u in staff_users]
+        if scope == 'custom' and selected_uids:
+            emps = [e for e in emps if e['id'] in selected_uids]
+        elif pay_branch and pay_branch.lower() not in ('tất cả các cổng', 'tat ca cac cong'):
+            pb_l = pay_branch.lower()
+            emps = [e for e in emps if any(b.lower() == pb_l for b in e.get('work_branches_list', []))]
+        parking_employees.attach_attendance(emps, database.get_employee_attendance(limit=1000), month=work_period)
+        totals = parking_employees.payroll_totals(emps)
+
+        _, code = database.create_employee_paysheet(
+            name=name,
+            pay_cycle=pay_cycle,
+            work_period=work_period,
+            pay_branch=pay_branch,
+            total_salary=totals['net_salary'],
+            status='provisional',
+            note=note,
+            created_by=session.get('fullname') or session.get('username') or 'Admin',
+        )
+        flash(f'Đã tạo bảng tính lương {code} ({name}).', 'success')
+        return redirect(url_for('employee_payroll'))
+
+    q = request.args.get('q', '').strip()
+    pay_branch = request.args.get('pay_branch', '').strip()
+    pay_cycle_filter = request.args.get('pay_cycle', '').strip()
+    statuses = request.args.getlist('status') or ['draft', 'provisional', 'finalized']
+    paysheets = database.get_employee_paysheets(status_list=statuses, pay_branch=pay_branch, q=q)
+    if pay_cycle_filter:
+        paysheets = [p for p in paysheets if (p.get('pay_cycle') or '') == pay_cycle_filter]
+
+    for p in paysheets:
+        p['work_period_range'] = _format_work_period_range(p.get('work_period') or '')
+
+    gate_choices = _employee_gate_choices()
+    active_staff = [parking_employees.enrich_employee(u) for u in database.get_staff_users() if u['status'] == 'active']
+    parking_employees.attach_attendance(active_staff, database.get_employee_attendance(limit=1000), month=date.today().strftime('%Y-%m'))
+
+    totals = {
+        'total_salary': sum(int(p.get('total_salary') or 0) for p in paysheets if p.get('status') != 'cancelled'),
+        'paid_amount': sum(int(p.get('paid_amount') or 0) for p in paysheets if p.get('status') != 'cancelled'),
+    }
+    totals['remaining'] = max(0, totals['total_salary'] - totals['paid_amount'])
+
+    return render_template(
+        'employee_payroll.html',
+        active_page='employee_payroll',
+        paysheets=paysheets,
+        totals=totals,
+        gate_choices=gate_choices,
+        pay_branch=pay_branch,
+        pay_cycle_filter=pay_cycle_filter,
+        statuses=statuses,
+        q=q,
+        staff_list=active_staff,
+        current_month=date.today().strftime('%Y-%m'),
+    )
+
+
+@app.route('/employees/settings', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def employee_settings():
+    import json
+    if request.method == 'POST':
+        action = request.form.get('emp_action', 'save_settings')
+        if action == 'quick_add_employees':
+            import re
+            import unicodedata
+            fullnames = request.form.getlist('emp_fullname')
+            phones = request.form.getlist('emp_phone')
+            pay_branches = request.form.getlist('emp_pay_branch')
+            work_branches = request.form.getlist('emp_work_branch')
+            created = 0
+            for idx, raw_name in enumerate(fullnames):
+                fullname = (raw_name or '').strip()[:160]
+                if not fullname:
+                    continue
+                phone = (phones[idx] if idx < len(phones) else '').strip()[:32]
+                pay_branch = (pay_branches[idx] if idx < len(pay_branches) else '').strip()[:120] or 'Cổng chính'
+                raw_wb = (work_branches[idx] if idx < len(work_branches) else '').strip()[:240]
+                work_branch = raw_wb or 'Cổng chính'
+
+                norm = unicodedata.normalize('NFKD', fullname.replace('Đ', 'D').replace('đ', 'd'))
+                slug = re.sub(r'[^a-z0-9]+', '', norm.encode('ascii', 'ignore').decode('ascii').lower())[:16] or 'nv'
+                cand = slug
+                suffix = 1
+                while database.username_exists(cand):
+                    suffix += 1
+                    cand = f"{slug}{suffix}"
+                new_id = database.add_user(cand, fullname, '123456', 'manager')
+                database.update_employee_profile(
+                    new_id,
+                    fullname=fullname,
+                    role='manager',
+                    phone=phone,
+                    pay_branch=pay_branch,
+                    work_branch=work_branch,
+                )
+                created += 1
+            if created:
+                flash(f'Đã thêm nhanh {created} nhân viên (mật khẩu mặc định: 123456).', 'success')
+            else:
+                flash('Vui lòng nhập ít nhất một tên nhân viên.', 'error')
+            return redirect(url_for('employee_settings', tab='init'))
+
+        if action == 'save_shift':
+            shifts = get_employee_shifts()
+            sid = _to_int(request.form.get('shift_id'))
+            name = request.form.get('shift_name', '').strip()[:80]
+            start_t = request.form.get('shift_start', '06:00').strip()[:10] or '06:00'
+            end_t = request.form.get('shift_end', '14:00').strip()[:10] or '14:00'
+            ci_start = request.form.get('checkin_start', start_t).strip()[:10] or start_t
+            ci_end = request.form.get('checkin_end', end_t).strip()[:10] or end_t
+            gates = [g.strip() for g in request.form.getlist('shift_gates') if g.strip()] or ['Cổng chính']
+            if not name:
+                flash('Vui lòng nhập tên ca làm việc.', 'error')
+                return redirect(url_for('employee_settings', tab='attendance', view='shifts'))
+            if sid:
+                for s in shifts:
+                    if s['id'] == sid:
+                        s.update({'name': name, 'start': start_t, 'end': end_t, 'checkin_start': ci_start, 'checkin_end': ci_end, 'gates': gates})
+                flash(f'Đã cập nhật ca "{name}".', 'success')
+            else:
+                next_id = max([s['id'] for s in shifts] or [0]) + 1
+                shifts.append({'id': next_id, 'name': name, 'start': start_t, 'end': end_t, 'checkin_start': ci_start, 'checkin_end': ci_end, 'gates': gates, 'active': True})
+                flash(f'Đã thêm ca "{name}".', 'success')
+            clean_shifts = [{k: s[k] for k in ('id', 'name', 'start', 'end', 'checkin_start', 'checkin_end', 'gates', 'active')} for s in shifts]
+            database.set_setting('emp_shifts_json', json.dumps(clean_shifts, ensure_ascii=False))
+            return redirect(url_for('employee_settings', tab='attendance', view='shifts'))
+
+        if action == 'toggle_shift':
+            sid = _to_int(request.form.get('shift_id'))
+            shifts = get_employee_shifts()
+            for s in shifts:
+                if s['id'] == sid:
+                    s['active'] = not s['active']
+            clean_shifts = [{k: s[k] for k in ('id', 'name', 'start', 'end', 'checkin_start', 'checkin_end', 'gates', 'active')} for s in shifts]
+            database.set_setting('emp_shifts_json', json.dumps(clean_shifts, ensure_ascii=False))
+            return redirect(url_for('employee_settings', tab='attendance', view='shifts'))
+
+        if action == 'delete_shift':
+            sid = _to_int(request.form.get('shift_id'))
+            shifts = [s for s in get_employee_shifts() if s['id'] != sid]
+            clean_shifts = [{k: s[k] for k in ('id', 'name', 'start', 'end', 'checkin_start', 'checkin_end', 'gates', 'active')} for s in shifts]
+            database.set_setting('emp_shifts_json', json.dumps(clean_shifts, ensure_ascii=False))
+            flash('Đã xóa ca làm việc.', 'success')
+            return redirect(url_for('employee_settings', tab='attendance', view='shifts'))
+
+        if action == 'save_salary_template':
+            items = get_employee_salary_templates()
+            tid = _to_int(request.form.get('tpl_id'))
+            name = request.form.get('tpl_name', '').strip()[:120]
+            note = request.form.get('tpl_note', '').strip()[:255]
+            stype = request.form.get('tpl_salary_type', 'shift')
+            if stype not in dict(parking_employees.SALARY_TYPES):
+                stype = 'shift'
+            samount = max(0, _to_int(request.form.get('tpl_salary_amount'), 0) or 0)
+            b_en = request.form.get('tpl_bonus_enabled') == '1'
+            b_type = request.form.get('tpl_bonus_type', 'Theo doanh thu').strip()[:120]
+            b_amt = max(0, _to_int(request.form.get('tpl_bonus_amount'), 0) or 0)
+            c_en = request.form.get('tpl_commission_enabled') == '1'
+            c_type = request.form.get('tpl_commission_type', 'Theo dịch vụ').strip()[:120]
+            try:
+                c_rate = max(0.0, min(100.0, float(request.form.get('tpl_commission_rate') or 0)))
+            except (TypeError, ValueError):
+                c_rate = 0.0
+            a_en = request.form.get('tpl_allowance_enabled') == '1'
+            raw_allowances = request.form.get('tpl_allowances_json', '').strip()
+            allowances_list = []
+            if raw_allowances:
+                try:
+                    parsed_a = json.loads(raw_allowances)
+                    if isinstance(parsed_a, list):
+                        for row in parsed_a:
+                            if not isinstance(row, dict):
+                                continue
+                            r_name = str(row.get('name') or '').strip()[:120]
+                            r_type = str(row.get('type') or 'Phụ cấp cố định theo ngày').strip()[:120]
+                            r_amt = max(0, _to_int(row.get('amount'), 0) or 0)
+                            if r_name or r_amt > 0:
+                                allowances_list.append({'name': r_name or 'Phụ cấp', 'type': r_type, 'amount': r_amt})
+                except Exception:
+                    allowances_list = []
+            if allowances_list:
+                a_amt = sum(r['amount'] for r in allowances_list)
+            else:
+                a_amt = max(0, _to_int(request.form.get('tpl_allowance_amount'), 0) or 0)
+                if a_en and a_amt > 0:
+                    allowances_list = [{'name': 'Phụ cấp', 'type': 'Phụ cấp cố định hàng tháng', 'amount': a_amt}]
+
+            d_en = request.form.get('tpl_deduction_enabled') == '1'
+            raw_deductions = request.form.get('tpl_deductions_json', '').strip()
+            deductions_list = []
+            if raw_deductions:
+                try:
+                    parsed_d = json.loads(raw_deductions)
+                    if isinstance(parsed_d, list):
+                        for row in parsed_d:
+                            if not isinstance(row, dict):
+                                continue
+                            r_name = str(row.get('name') or '').strip()[:120]
+                            r_type = str(row.get('type') or 'Đi muộn').strip()[:120]
+                            r_rule = str(row.get('rule') or 'Theo block 30 phút').strip()[:120]
+                            r_amt = max(0, _to_int(row.get('amount'), 0) or 0)
+                            if r_name or r_amt > 0:
+                                deductions_list.append({'name': r_name or 'Giảm trừ', 'type': r_type, 'rule': r_rule, 'amount': r_amt})
+                except Exception:
+                    deductions_list = []
+            if deductions_list:
+                d_amt = sum(r['amount'] for r in deductions_list)
+            else:
+                d_amt = max(0, _to_int(request.form.get('tpl_deduction_amount'), 0) or 0)
+                if d_en and d_amt > 0:
+                    deductions_list = [{'name': 'Đi muộn', 'type': 'Đi muộn', 'rule': 'Theo block 30 phút', 'amount': d_amt}]
+            d_note = request.form.get('tpl_deduction_note', '').strip()[:160]
+            if not name:
+                flash('Vui lòng nhập tên mẫu lương.', 'error')
+                return redirect(url_for('employee_settings', tab='payroll', view='templates'))
+            payload = {
+                'name': name, 'note': note, 'salary_type': stype, 'salary_amount': samount,
+                'bonus_enabled': b_en, 'bonus_type': b_type, 'bonus_amount': b_amt,
+                'commission_enabled': c_en, 'commission_type': c_type, 'commission_rate': c_rate,
+                'allowance_enabled': a_en, 'allowance_amount': a_amt, 'allowances': allowances_list,
+                'deduction_enabled': d_en, 'deduction_amount': d_amt, 'deduction_note': d_note, 'deductions': deductions_list,
+            }
+            if tid:
+                for it in items:
+                    if int(it.get('id') or 0) == tid:
+                        it.update(payload)
+                flash(f'Đã cập nhật mẫu lương "{name}".', 'success')
+            else:
+                next_id = max([int(it.get('id') or 0) for it in items] or [0]) + 1
+                items.append(dict(payload, id=next_id))
+                flash(f'Đã thêm mẫu lương "{name}".', 'success')
+            database.set_setting('emp_salary_templates_json', json.dumps(items, ensure_ascii=False))
+            return redirect(url_for('employee_settings', tab='payroll', view='templates'))
+
+        if action == 'delete_salary_template':
+            tid = _to_int(request.form.get('tpl_id'))
+            items = [it for it in get_employee_salary_templates() if int(it.get('id') or 0) != tid]
+            database.set_setting('emp_salary_templates_json', json.dumps(items, ensure_ascii=False))
+            flash('Đã xóa mẫu lương.', 'success')
+            return redirect(url_for('employee_settings', tab='payroll', view='templates'))
+
+        if action == 'apply_salary_template':
+            tpl_name = request.form.get('tpl_name', '').strip()
+            selected_ids = {_to_int(x) for x in request.form.getlist('user_ids') if _to_int(x)}
+            tpl = next((t for t in get_employee_salary_templates() if t.get('name') == tpl_name), None)
+            if tpl:
+                for u in database.get_staff_users():
+                    uid = u['id']
+                    if uid in selected_ids:
+                        database.update_employee_profile(
+                            uid,
+                            salary_template=tpl_name,
+                            salary_type=tpl.get('salary_type', 'shift'),
+                            salary_amount=int(tpl.get('salary_amount') or 0),
+                            allowance_enabled=1 if tpl.get('allowance_enabled') else 0,
+                            allowance_amount=int(tpl.get('allowance_amount') or 0),
+                            deduction_enabled=1 if tpl.get('deduction_enabled') else 0,
+                            deduction_amount=int(tpl.get('deduction_amount') or 0),
+                        )
+                    elif (u['salary_template'] if 'salary_template' in u.keys() else '') == tpl_name:
+                        database.update_employee_profile(uid, salary_template='')
+                flash(f'Đã áp dụng mẫu lương "{tpl_name}" cho {len(selected_ids)} nhân viên.', 'success')
+            return redirect(url_for('employee_settings', tab='payroll', view='templates'))
+
+        if action == 'save_allowance':
+            items = get_employee_allowances()
+            aid = _to_int(request.form.get('item_id'))
+            name = request.form.get('item_name', '').strip()[:120]
+            atype = request.form.get('item_type', 'Phụ cấp cố định theo ngày').strip()[:120]
+            amount = max(0, _to_int(request.form.get('item_amount'), 0) or 0)
+            benefit_type = request.form.get('item_benefit_type', 'vnd').strip()
+            if benefit_type not in ('vnd', 'percent'):
+                benefit_type = 'vnd'
+            min_h_en = request.form.get('item_min_hours_enabled') == '1'
+            try:
+                min_h = max(0.0, min(24.0, float(request.form.get('item_min_hours') or 0)))
+            except (TypeError, ValueError):
+                min_h = 0.0
+            shift_allowances = []
+            raw_sa = request.form.get('item_shift_allowances_json', '').strip()
+            if atype == 'Phụ cấp theo ca làm việc' and raw_sa:
+                try:
+                    parsed_sa = json.loads(raw_sa)
+                    if isinstance(parsed_sa, list):
+                        for row in parsed_sa:
+                            if not isinstance(row, dict):
+                                continue
+                            sname = str(row.get('shift_name') or '').strip()[:120]
+                            samt = max(0, _to_int(row.get('amount'), 0) or 0)
+                            if sname:
+                                shift_allowances.append({'shift_name': sname, 'amount': samt})
+                except Exception:
+                    shift_allowances = []
+                if shift_allowances and not amount:
+                    amount = sum(r['amount'] for r in shift_allowances)
+            if not name:
+                flash('Vui lòng nhập tên phụ cấp.', 'error')
+                return redirect(url_for('employee_settings', tab='payroll', view='allowances'))
+            payload_a = {
+                'name': name,
+                'type': atype,
+                'amount': amount,
+                'benefit_type': benefit_type if atype in ('Phụ cấp hàng tháng cố định', 'Phụ cấp cố định hàng tháng', 'Phụ cấp hàng tháng tính trên số ngày công chuẩn') else 'vnd',
+                'min_hours_enabled': min_h_en if atype == 'Phụ cấp cố định theo ngày' else False,
+                'min_hours': min_h if (min_h_en and atype == 'Phụ cấp cố định theo ngày') else 0,
+                'shift_allowances': shift_allowances if atype == 'Phụ cấp theo ca làm việc' else [],
+            }
+            if aid:
+                for it in items:
+                    if int(it.get('id') or 0) == aid:
+                        it.update(payload_a)
+                flash(f'Đã cập nhật phụ cấp "{name}".', 'success')
+            else:
+                next_id = max([int(it.get('id') or 0) for it in items] or [0]) + 1
+                items.append(dict(payload_a, id=next_id))
+                flash(f'Đã thêm phụ cấp "{name}".', 'success')
+            database.set_setting('emp_allowances_json', json.dumps(items, ensure_ascii=False))
+            return redirect(url_for('employee_settings', tab='payroll', view='allowances'))
+
+        if action == 'delete_allowance':
+            aid = _to_int(request.form.get('item_id'))
+            items = [it for it in get_employee_allowances() if int(it.get('id') or 0) != aid]
+            database.set_setting('emp_allowances_json', json.dumps(items, ensure_ascii=False))
+            flash('Đã xóa phụ cấp.', 'success')
+            return redirect(url_for('employee_settings', tab='payroll', view='allowances'))
+
+        if action == 'save_deduction':
+            items = get_employee_deductions()
+            did = _to_int(request.form.get('item_id'))
+            name = request.form.get('item_name', '').strip()[:120]
+            dtype = request.form.get('item_type', 'Đi muộn').strip()[:120]
+            cond = request.form.get('item_condition', 'count').strip()
+            if cond not in ('count', 'salary_coef'):
+                cond = 'count'
+            amount = max(0, _to_int(request.form.get('item_amount'), 0) or 0)
+            if not name:
+                flash('Vui lòng nhập tên giảm trừ.', 'error')
+                return redirect(url_for('employee_settings', tab='payroll', view='deductions'))
+            payload_d = {
+                'name': name,
+                'type': dtype,
+                'condition': cond,
+                'amount': amount,
+            }
+            if did:
+                for it in items:
+                    if int(it.get('id') or 0) == did:
+                        it.update(payload_d)
+                flash(f'Đã cập nhật giảm trừ "{name}".', 'success')
+            else:
+                next_id = max([int(it.get('id') or 0) for it in items] or [0]) + 1
+                items.append(dict(payload_d, id=next_id))
+                flash(f'Đã thêm giảm trừ "{name}".', 'success')
+            database.set_setting('emp_deductions_json', json.dumps(items, ensure_ascii=False))
+            return redirect(url_for('employee_settings', tab='payroll', view='deductions'))
+
+        if action == 'delete_deduction':
+            did = _to_int(request.form.get('item_id'))
+            items = [it for it in get_employee_deductions() if int(it.get('id') or 0) != did]
+            database.set_setting('emp_deductions_json', json.dumps(items, ensure_ascii=False))
+            flash('Đã xóa giảm trừ.', 'success')
+            return redirect(url_for('employee_settings', tab='payroll', view='deductions'))
+
+        if action == 'quick_save_attendance_mode':
+            mode = request.form.get('emp_attendance_mode', 'shift')
+            if mode not in ('shift', 'flex'):
+                mode = 'shift'
+            database.set_setting('emp_attendance_mode', mode)
+            label = 'Chấm công theo ca làm việc' if mode == 'shift' else 'Chấm công theo khung giờ làm việc'
+            flash(f'Đã chọn chế độ: {label}.', 'success')
+            return redirect(url_for('employee_settings', tab='init'))
+
+        if action == 'quick_save_checkin_methods':
+            sw = '1' if request.form.get('emp_checkin_software') == '1' else '0'
+            ph = '1' if request.form.get('emp_checkin_photo') == '1' else '0'
+            database.set_setting('emp_checkin_software', sw)
+            database.set_setting('emp_checkin_photo', ph)
+            flash('Đã cập nhật hình thức chấm công.', 'success')
+            return redirect(url_for('employee_settings', tab='init'))
+
+        if action == 'quick_save_salary':
+            uid = _to_int(request.form.get('user_id'))
+            target = database.get_user_by_id(uid) if uid else None
+            if target is None or target['role'] not in ('admin', 'manager'):
+                flash('Nhân viên không hợp lệ.', 'error')
+            else:
+                stype = request.form.get('salary_type', '')
+                if stype not in dict(parking_employees.SALARY_TYPES):
+                    stype = ''
+                samount = max(0, _to_int(request.form.get('salary_amount'), 0) or 0)
+                a_en = 1 if request.form.get('allowance_enabled') == '1' else 0
+                a_amt = max(0, _to_int(request.form.get('allowance_amount'), 0) or 0)
+                d_en = 1 if request.form.get('deduction_enabled') == '1' else 0
+                d_amt = max(0, _to_int(request.form.get('deduction_amount'), 0) or 0)
+                d_note = request.form.get('deduction_note', '').strip()[:255]
+                database.update_employee_profile(
+                    uid,
+                    salary_type=stype,
+                    salary_amount=samount,
+                    allowance_enabled=a_en,
+                    allowance_amount=a_amt,
+                    deduction_enabled=d_en,
+                    deduction_amount=d_amt,
+                    deduction_note=d_note,
+                )
+                flash(f'Đã cập nhật thiết lập lương cho {target["fullname"]}.', 'success')
+            return redirect(url_for('employee_settings', tab='init', open_salary='1'))
+
+        if action == 'save_work_days':
+            gate_name = request.form.get('gate_name', '').strip()
+            days = [d for d in request.form.getlist('work_days') if d in ('T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN')]
+            try:
+                wd_map = json.loads(database.get_setting('emp_work_days_json', '{}') or '{}')
+            except Exception:
+                wd_map = {}
+            if gate_name:
+                wd_map[gate_name] = days
+                database.set_setting('emp_work_days_json', json.dumps(wd_map, ensure_ascii=False))
+                flash(f'Đã cập nhật ngày làm việc cho {gate_name}.', 'success')
+            return redirect(url_for('employee_settings', tab='schedule_rules'))
+
+        if action == 'add_holiday':
+            hid = _to_int(request.form.get('holiday_id'))
+            name = request.form.get('holiday_name', '').strip()[:120]
+            start_d = request.form.get('start_date', '').strip() or date.today().isoformat()
+            end_d = request.form.get('end_date', '').strip() or start_d
+            bonus_present = request.form.get('holiday_bonus_present') == '1'
+            bonus_enabled = (request.form.get('holiday_bonus_enabled') == '1') if bonus_present else True
+            bonus = max(0, _to_int(request.form.get('holiday_bonus'), 0) or 0) if bonus_enabled else 0
+            try:
+                days_cnt = max(1, (date.fromisoformat(end_d) - date.fromisoformat(start_d)).days + 1)
+            except ValueError:
+                days_cnt = 1
+            try:
+                holidays = json.loads(database.get_setting('emp_holidays_json', '[]') or '[]')
+            except Exception:
+                holidays = []
+            if name:
+                payload_h = {
+                    'name': name,
+                    'start_date': start_d,
+                    'end_date': end_d,
+                    'days': days_cnt,
+                    'bonus_enabled': bonus_enabled,
+                    'bonus': bonus,
+                }
+                if hid:
+                    for h in holidays:
+                        if int(h.get('id') or 0) == hid:
+                            h.update(payload_h)
+                    flash(f'Đã cập nhật kỳ nghỉ lễ "{name}".', 'success')
+                else:
+                    next_id = max([int(h.get('id') or 0) for h in holidays] or [0]) + 1
+                    holidays.append(dict(payload_h, id=next_id))
+                    flash(f'Đã thêm kỳ nghỉ lễ "{name}".', 'success')
+                database.set_setting('emp_holidays_json', json.dumps(holidays, ensure_ascii=False))
+            else:
+                flash('Vui lòng nhập tên kỳ lễ tết.', 'error')
+            return redirect(url_for('employee_settings', tab='schedule_rules'))
+
+        if action == 'delete_holiday':
+            hid = _to_int(request.form.get('holiday_id'))
+            try:
+                holidays = json.loads(database.get_setting('emp_holidays_json', '[]') or '[]')
+            except Exception:
+                holidays = []
+            holidays = [h for h in holidays if int(h.get('id') or 0) != hid]
+            database.set_setting('emp_holidays_json', json.dumps(holidays, ensure_ascii=False))
+            flash('Đã xóa kỳ nghỉ lễ.', 'success')
+            return redirect(url_for('employee_settings', tab='schedule_rules'))
+
+        bool_keys = {
+            'emp_auto_checkin', 'emp_unscheduled_checkin', 'emp_unscheduled_auto_approve', 'emp_multi_shift_single_punch',
+            'emp_overtime_enabled', 'emp_auto_create_paysheet', 'emp_auto_update_paysheet',
+            'emp_break_enabled', 'emp_convert_hours_enabled', 'emp_late_enabled', 'emp_early_leave_enabled',
+            'emp_ot_before_enabled', 'emp_ot_after_enabled', 'emp_ot_actual_all',
+        }
+        int_keys = {'emp_late_grace_minutes', 'emp_early_leave_grace_minutes', 'emp_overtime_before_minutes', 'emp_overtime_after_minutes', 'emp_standard_hours'}
+        skip_keys = {
+            'emp_work_days_json', 'emp_holidays_json', 'emp_shifts_json',
+            'emp_salary_templates_json', 'emp_allowances_json', 'emp_deductions_json',
+            'emp_checkin_software', 'emp_checkin_photo',
+        }
+        for key, default in EMPLOYEE_SETTING_DEFAULTS.items():
+            if key in skip_keys:
+                continue
+            if key in bool_keys:
+                val = '1' if request.form.get(key) == '1' else '0'
+            elif key in int_keys:
+                upper = 24 if key == 'emp_standard_hours' else 120
+                val = str(max(0, min(upper, _to_int(request.form.get(key), int(default)) or 0)))
+            else:
+                val = request.form.get(key, default).strip()[:60] or default
+            database.set_setting(key, val)
+        flash('Đã lưu thiết lập nhân viên.', 'success')
+        return redirect(url_for('employee_settings', tab=request.form.get('active_tab', 'attendance')))
+
+    emp_set = get_employee_settings()
+    staff_users = [dict(u) for u in database.get_staff_users()]
+    try:
+        wd_map = json.loads(emp_set.get('emp_work_days_json') or '{}')
+    except Exception:
+        wd_map = {}
+    try:
+        holidays = json.loads(emp_set.get('emp_holidays_json') or '[]')
+    except Exception:
+        holidays = []
+
+    default_days = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
+    gate_work_days = []
+    for gname in _employee_gate_choices():
+        days_list = wd_map.get(gname, default_days)
+        gate_work_days.append({
+            'name': gname,
+            'days_list': days_list,
+            'days_csv': ','.join(days_list),
+            'days_label': ', '.join(days_list) if days_list else 'Chưa chọn ngày',
+            'active': len(days_list) > 0,
+        })
+
+    active_tab = request.args.get('tab', 'init')
+    if active_tab not in ('init', 'attendance', 'payroll', 'schedule_rules'):
+        active_tab = 'init'
+
+    tpl_usage_counts = {}
+    for u in staff_users:
+        tname = (u.get('salary_template') or '').strip()
+        if tname:
+            tpl_usage_counts[tname] = tpl_usage_counts.get(tname, 0) + 1
+
+    return render_template(
+        'employee_settings.html',
+        employee_settings=emp_set,
+        emp_total_count=len(staff_users),
+        emp_salary_configured_count=sum(1 for u in staff_users if u.get('salary_type') or u.get('salary_amount')),
+        enriched_staff=[parking_employees.enrich_employee(u) for u in staff_users],
+        salary_types=parking_employees.SALARY_TYPES,
+        gate_work_days=gate_work_days,
+        holidays=holidays,
+        shifts=get_employee_shifts(),
+        salary_templates_data=get_employee_salary_templates(),
+        tpl_usage_counts=tpl_usage_counts,
+        allowances_catalog=get_employee_allowances(),
+        deductions_catalog=get_employee_deductions(),
+        att_view=request.args.get('view', ''),
+        pay_view=request.args.get('view', ''),
+        active_tab=active_tab,
+        open_salary=(request.args.get('open_salary') == '1'),
+        today=date.today().isoformat(),
+    )
+
+
+@app.route('/employees/payroll/<int:paysheet_id>/status', methods=['POST'])
+@login_required
+@admin_required
+def employee_payroll_status(paysheet_id):
+    new_status = request.form.get('status', '')
+    if new_status not in ('draft', 'provisional', 'finalized', 'cancelled'):
+        abort(400)
+    paid_amount = request.form.get('paid_amount')
+    paid_int = int(paid_amount) if (paid_amount is not None and paid_amount != '') else None
+    database.update_employee_paysheet_status(paysheet_id, new_status, paid_amount=paid_int)
+    flash('Đã cập nhật trạng thái bảng lương.', 'success')
+    return redirect(url_for('employee_payroll'))
+
+
 @app.route('/users')
 @login_required
 @staff_required
 def users():
-    return render_users()
+    if request.args.get('tab') == 'accounts' and session.get('role') == 'admin':
+        return redirect(url_for('accounts'))
+    return redirect(url_for('customers'))
 
 
+@app.route('/customers/recognize-plate', methods=['POST'])
 @app.route('/users/recognize-plate', methods=['POST'])
 @login_required
 @staff_required
@@ -964,21 +4542,18 @@ def recognize_user_plate():
     return jsonify(plate=plate)
 
 
-@app.route('/users/add', methods=['POST'])
+@app.route('/customers/add', methods=['POST'])
 @login_required
 @staff_required
-def add_user():
+@permission_required('customers.create')
+def add_customer():
     username = request.form.get('username', '').strip()
     fullname = request.form.get('fullname', '').strip()
     password = request.form.get('password', '')
-    role = request.form.get('role', 'user')
-    # Nhân viên chỉ được tạo tài khoản người dùng; admin tạo được người dùng hoặc nhân viên.
-    if session.get('role') != 'admin' or role not in ('user', 'manager'):
-        role = 'user'
 
-    vehicles, errors, prefill = ([], [], [])
-    if role == 'user':
-        vehicles, errors, prefill = parse_vehicle_forms(request.form)
+    vehicles, errors, prefill = parse_vehicle_forms(request.form)
+    profile, profile_errors = parking_customers.parse_profile(request.form)
+    errors.extend(profile_errors)
 
     if not username or not fullname or not password:
         errors.insert(0, 'Vui lòng nhập đầy đủ thông tin.')
@@ -990,18 +4565,69 @@ def add_user():
     if errors:
         for e in errors:
             flash(e, 'error')
-        return render_users(open_modal=True,
-                            form={'username': username, 'fullname': fullname, 'role': role},
-                            form_vehicles=prefill)
+        return render_customers(open_modal=True,
+                                form=dict(profile, username=username), form_errors=errors,
+                                form_vehicles=prefill)
 
-    new_id = database.add_user(username, fullname, password, role)
-    save_vehicles(new_id, vehicles)
+    payment_method = parse_payment_method(request.form)
+    new_id = database.add_user(username, fullname, password, 'user')
+    database.update_customer_profile(new_id, **profile)
+    save_vehicles(new_id, vehicles, payment_method=payment_method)
     extra = f' và đăng ký {len(vehicles)} xe' if vehicles else ''
     total = sum(v['paid_amount'] or 0 for v in vehicles)
     if total:
-        extra += f' — tiền vé tháng cần thu: {vnd_filter(total)}'
-    flash(f'Đã thêm tài khoản "{username}"{extra}.', 'success')
-    return redirect(url_for('users'))
+        pm_label = database.PAYMENT_METHODS.get(payment_method, 'Tiền mặt')
+        extra += f' — đã thu {vnd_filter(total)} ({pm_label})'
+    flash(f'Đã thêm khách hàng "{username}"{extra}.', 'success')
+    return redirect(url_for('customers', open=new_id))
+
+
+@app.route('/accounts/add', methods=['POST'])
+@login_required
+@permission_required('staff.create')
+def add_account():
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '')
+    emp_data = parking_employees.parse_employee_form(request.form)
+    fullname = emp_data['fullname']
+    role = emp_data['role']
+
+    errors = []
+    if not username or not fullname or not password:
+        errors.append('Vui lòng nhập đầy đủ thông tin.')
+    elif len(password) < MIN_PASSWORD_LEN:
+        errors.append(f'Mật khẩu tối thiểu {MIN_PASSWORD_LEN} ký tự.')
+    elif database.username_exists(username):
+        errors.append('Tên đăng nhập đã tồn tại.')
+
+    if errors:
+        for e in errors:
+            flash(e, 'error')
+        return render_accounts(open_modal=True,
+                               form=dict(emp_data, username=username),
+                               form_errors=errors)
+
+    new_id = database.add_user(username, fullname, password, role)
+    database.update_employee_profile(new_id, **emp_data)
+    import json as _json
+    import parking_permissions
+    clean_obj, assigned_gates = parking_permissions.sanitize_permissions(request.form.get('permissions_json', ''))
+    if clean_obj is not None:
+        wb_str = ', '.join(assigned_gates)[:240] if assigned_gates else emp_data['work_branch']
+        database.save_user_permissions(new_id, _json.dumps(clean_obj, ensure_ascii=False), work_branch=wb_str)
+    role_name = 'Quản trị viên' if role == 'admin' else 'Nhân viên vận hành'
+    flash(f'Đã tạo tài khoản {role_name} "{username}".', 'success')
+    return redirect(url_for('accounts', open=new_id))
+
+
+@app.route('/users/add', methods=['POST'])
+@login_required
+@staff_required
+def add_user():
+    role = request.form.get('role', 'user')
+    if role in ('manager', 'admin') and session.get('role') == 'admin':
+        return add_account()
+    return add_customer()
 
 
 @app.route('/users/<int:user_id>/edit', methods=['GET', 'POST'])
@@ -1014,7 +4640,9 @@ def edit_user(user_id):
         return redirect(url_for('users'))
 
     if request.method == 'GET':
-        return render_edit_user(target)
+        if target['role'] in ('admin', 'manager'):
+            return redirect(url_for('accounts', open=user_id))
+        return redirect(url_for('customers', open=user_id))
 
     fullname = request.form.get('fullname', '').strip()
     if not fullname:
@@ -1073,17 +4701,19 @@ def add_user_vehicles(user_id):
         for e in errors:
             flash(e, 'error')
         return render_edit_user(target, form_vehicles=prefill)
-    save_vehicles(user_id, vehicles)
+    payment_method = parse_payment_method(request.form)
+    save_vehicles(user_id, vehicles, payment_method=payment_method)
     total = sum(v['paid_amount'] or 0 for v in vehicles)
-    money = f' — tiền vé tháng cần thu: {vnd_filter(total)}' if total else ''
+    pm_label = database.PAYMENT_METHODS.get(payment_method, 'Tiền mặt')
+    money = f' — đã thu {vnd_filter(total)} ({pm_label})' if total else ''
     flash(f'Đã đăng ký {len(vehicles)} xe cho tài khoản "{target["username"]}"{money}.', 'success')
     return redirect(url_for('edit_user', user_id=user_id))
 
 
-def renew_vehicle(vehicle, months):
+def renew_vehicle(vehicle, months, payment_method='cash'):
     """Thuê thêm tháng: gia hạn vé tháng (nối tiếp ngày hết hạn nếu còn hạn) hoặc đổi vé lượt -> vé tháng
     (bắt đầu tính từ hôm nay). Tiền = giá tháng trong Bảng giá x số tháng; ghi vào nhật ký doanh thu.
-    Trả về (thông báo lỗi hoặc None, {'start','expires','total'})."""
+    Trả về (thông báo lỗi hoặc None, {'start','expires','total','payment_method'})."""
     if not months or not 1 <= months <= MAX_MONTHS:
         return f'Số tháng thuê phải từ 1 đến {MAX_MONTHS}.', None
     today = date.today()
@@ -1091,6 +4721,7 @@ def renew_vehicle(vehicle, months):
     if price is None:
         return 'Bảng giá chưa có giá vé tháng cho loại xe này.', None
     total = price['amount'] * months
+    pm = payment_method if payment_method in database.PAYMENT_METHODS else 'cash'
 
     active = (vehicle['ticket_type'] == 'month' and vehicle['expires_on']
               and vehicle['expires_on'] >= today.isoformat())
@@ -1103,13 +4734,14 @@ def renew_vehicle(vehicle, months):
         new_start, start_on, all_months, paid = today, today.isoformat(), months, total
     expires_on = month_ticket_period(new_start, months).isoformat()
     database.set_vehicle_month_ticket(vehicle['id'], start_on, expires_on, all_months, paid)
-    database.add_ticket_payment(vehicle['id'], vehicle['plate_number'], total, months)   # ghi vào doanh thu
-    return None, {'start': new_start.isoformat(), 'expires': expires_on, 'total': total}
+    database.add_ticket_payment(vehicle['id'], vehicle['plate_number'], total, months, payment_method=pm)
+    return None, {'start': new_start.isoformat(), 'expires': expires_on, 'total': total, 'payment_method': pm}
 
 
 @app.route('/users/<int:user_id>/vehicles/<int:vehicle_id>/renew', methods=['POST'])
 @login_required
 @staff_required
+@permission_required('monthly.renew')
 def renew_user_vehicle(user_id, vehicle_id):
     """Thuê thêm tháng: gia hạn vé tháng (nối tiếp ngày hết hạn nếu còn hạn) hoặc đổi vé lượt -> vé tháng
     (bắt đầu tính từ hôm nay). Tiền = giá tháng trong Bảng giá x số tháng."""
@@ -1118,15 +4750,17 @@ def renew_user_vehicle(user_id, vehicle_id):
     if not can_manage_user(target) or vehicle is None or vehicle['user_id'] != user_id:
         flash('Bạn không có quyền thực hiện thao tác này.', 'error')
         return redirect(url_for('users'))
-    back = redirect(url_for('edit_user', user_id=user_id))
+    back = redirect(url_for('customers', open=user_id)) if request.form.get('next') == 'customers' else redirect(url_for('edit_user', user_id=user_id))
 
     months = _to_int(request.form.get('months'))
-    error, info = renew_vehicle(vehicle, months)
+    payment_method = parse_payment_method(request.form)
+    error, info = renew_vehicle(vehicle, months, payment_method=payment_method)
     if error:
         flash(error, 'error')
         return back
-    flash(f'Đã thuê {months} tháng cho xe {vehicle["plate_number"]}: '
-          f'{vdate_filter(info["start"])} → {vdate_filter(info["expires"])} — cần thu {vnd_filter(info["total"])}.',
+    pm_label = database.PAYMENT_METHODS.get(info['payment_method'], 'Tiền mặt')
+    flash(f'Đã gia hạn {months} tháng cho xe {vehicle["plate_number"]}: '
+          f'{vdate_filter(info["start"])} → {vdate_filter(info["expires"])} — đã thu {vnd_filter(info["total"])} ({pm_label}).',
           'success')
     return back
 
@@ -1134,6 +4768,7 @@ def renew_user_vehicle(user_id, vehicle_id):
 @app.route('/users/<int:user_id>/vehicles/<int:vehicle_id>/delete', methods=['POST'])
 @login_required
 @staff_required
+@permission_required('monthly.delete')
 def remove_user_vehicle(user_id, vehicle_id):
     target = database.get_user_by_id(user_id)
     vehicle = database.get_user_vehicle(vehicle_id)
@@ -1142,6 +4777,8 @@ def remove_user_vehicle(user_id, vehicle_id):
         return redirect(url_for('users'))
     database.delete_user_vehicle(vehicle_id)
     flash(f'Đã hủy đăng ký xe {vehicle["plate_number"]}.', 'success')
+    if request.form.get('next') == 'customers':
+        return redirect(url_for('customers', open=user_id))
     return redirect(url_for('edit_user', user_id=user_id))
 
 
@@ -1152,23 +4789,30 @@ def toggle_user(user_id):
     target = database.get_user_by_id(user_id)
     if target and target['username'] == 'admin':
         flash('Không thể khóa tài khoản admin.', 'error')
-        return redirect(url_for('users'))
+        return redirect(request.referrer or url_for('accounts'))
     database.toggle_user_status(user_id)
     flash('Đã cập nhật trạng thái tài khoản.', 'success')
-    return redirect(url_for('users'))
+    if target and target['role'] == 'user':
+        return redirect(request.referrer or url_for('customers'))
+    return redirect(request.referrer or url_for('accounts'))
 
 
 @app.route('/users/<int:user_id>/delete', methods=['POST'])
 @login_required
-@admin_required
+@staff_required
 def remove_user(user_id):
     target = database.get_user_by_id(user_id)
+    needed = 'customers.delete' if (target and target['role'] == 'user') else 'staff.delete'
+    if not has_perm(needed):
+        flash('Bạn không có quyền xóa tài khoản này.', 'error')
+        return redirect(request.referrer or url_for('index'))
     if target and target['username'] == 'admin':
         flash('Không thể xóa tài khoản admin.', 'error')
-        return redirect(url_for('users'))
+        return redirect(request.referrer or url_for('accounts'))
+    is_cust = target and target['role'] == 'user'
     database.delete_user(user_id)
-    flash('Đã xóa người dùng.', 'success')
-    return redirect(url_for('users'))
+    flash('Đã xóa tài khoản thành công.', 'success')
+    return redirect(request.referrer or (url_for('customers') if is_cust else url_for('accounts')))
 
 
 # ============================================================
@@ -1185,7 +4829,8 @@ def render_user_settings(**extra):
                            vehicle_types=database.get_vehicle_types(),
                            ticket_labels=TICKET_LABELS, today=date.today().isoformat(),
                            price_info=build_price_info(), max_months=MAX_MONTHS,
-                           max_changes=MAX_SELF_CHANGES, **extra)
+                           max_changes=MAX_SELF_CHANGES, payment_methods=database.PAYMENT_METHODS,
+                           **vietqr_context(), **extra)
 
 
 def my_vehicle(vehicle_id):
@@ -1228,13 +4873,15 @@ def me_renew(vehicle_id):
         flash('Không tìm thấy xe đăng ký.', 'error')
         return redirect(url_for('settings'))
     months = _to_int(request.form.get('months'))
-    error, info = renew_vehicle(vehicle, months)
+    payment_method = parse_payment_method(request.form)
+    error, info = renew_vehicle(vehicle, months, payment_method=payment_method)
     if error:
         flash(error, 'error')
     else:
+        pm_label = database.PAYMENT_METHODS.get(info['payment_method'], 'Tiền mặt')
         flash(f'Đã gia hạn {months} tháng cho xe {vehicle["plate_number"]}: '
               f'{vdate_filter(info["start"])} → {vdate_filter(info["expires"])}. '
-              f'Số tiền cần thanh toán: {vnd_filter(info["total"])}.', 'success')
+              f'Thanh toán ({pm_label}): {vnd_filter(info["total"])}.', 'success')
     return redirect(url_for('settings') + '#vehicles')
 
 
@@ -1282,12 +4929,15 @@ def me_add_vehicle():
         for e in errors:
             flash(e, 'error')
         return render_user_settings(prefill=prefill[0] if prefill else None)
-    save_vehicles(session['user_id'], vehicles[:1])
+    payment_method = parse_payment_method(request.form)
+    save_vehicles(session['user_id'], vehicles[:1], payment_method=payment_method)
     v = vehicles[0]
-    money = f' Số tiền vé tháng cần thanh toán: {vnd_filter(v["paid_amount"])}.' if v['paid_amount'] else ''
+    pm_label = database.PAYMENT_METHODS.get(payment_method, 'Tiền mặt')
+    money = f' Thanh toán vé tháng ({pm_label}): {vnd_filter(v["paid_amount"])}.' if v['paid_amount'] else ''
     flash(f'Đã đăng ký thêm xe {v["plate_number"]}.{money}', 'success')
     return redirect(url_for('settings') + '#vehicles')
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # threaded=True: mỗi yêu cầu (làn vào, làn ra, luồng camera) chạy trên luồng riêng.
+    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)

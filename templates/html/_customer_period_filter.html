@@ -1,0 +1,14 @@
+{% from '_management_icons.html' import icon %}
+{% macro period_filter(control, groups) -%}
+<fieldset class="invoice-time-filter" data-customer-period-filter="{{ control.prefix }}" aria-label="{{ control.title }}">
+  <legend>{{ control.title }}</legend>
+  <input type="hidden" name="{{ control.prefix }}_range" value="{{ control.key }}" data-period-value>
+  <div class="invoice-time-choice"><input type="radio" name="{{ control.prefix }}_mode" value="quick" aria-label="{{ control.title }}: chọn nhanh" data-period-quick{% if control.key != 'custom' %} checked{% endif %}><button type="button" class="invoice-time-trigger{% if control.key != 'custom' %} is-selected{% endif %}" data-period-trigger popovertarget="customer-period-{{ control.prefix }}" aria-controls="customer-period-{{ control.prefix }}" aria-expanded="false" aria-haspopup="dialog"><span>{{ control.label }}</span>{{ icon('right',16) }}</button></div>
+  <section class="invoice-period-popover" id="customer-period-{{ control.prefix }}" popover="auto" role="dialog" aria-label="Chọn {{ control.title|lower }}">
+    <div class="invoice-period-grid">{% for title, options in groups %}<div class="invoice-period-column"><h2>{{ title }}</h2>{% for value, label in options %}<button type="submit" name="{{ control.prefix }}_choice" value="{{ value }}" data-customer-period="{{ value }}" class="invoice-period-pill{% if control.key == value %} is-selected{% endif %}" aria-pressed="{{ 'true' if control.key == value else 'false' }}">{{ label }}</button>{% endfor %}</div>{% endfor %}</div>
+    <div class="invoice-period-footer"><button type="submit" name="{{ control.prefix }}_choice" value="all" data-customer-period="all">Đặt về mặc định</button></div>
+  </section>
+  <div class="invoice-time-choice"><input type="radio" name="{{ control.prefix }}_mode" value="custom" aria-label="{{ control.title }}: chọn khoảng riêng" data-period-custom{% if control.key == 'custom' %} checked{% endif %}><button type="button" class="invoice-time-trigger invoice-time-custom-trigger{% if control.key == 'custom' %} is-selected{% endif %}" data-period-custom-trigger aria-controls="customer-dates-{{ control.prefix }}" aria-expanded="{{ 'true' if control.key == 'custom' else 'false' }}"><span>Lựa chọn khác</span>{{ icon('calendar',17) }}</button></div>
+  <div class="invoice-custom-dates" id="customer-dates-{{ control.prefix }}" data-period-dates{% if control.key != 'custom' %} hidden{% endif %}><label for="customer-{{ control.prefix }}-from">Từ ngày giờ</label><input type="datetime-local" id="customer-{{ control.prefix }}-from" name="{{ control.prefix }}_from" value="{{ control.start }}"><label for="customer-{{ control.prefix }}-to">Đến ngày giờ</label><input type="datetime-local" id="customer-{{ control.prefix }}-to" name="{{ control.prefix }}_to" value="{{ control.end }}"></div>
+</fieldset>
+{%- endmacro %}

@@ -1,0 +1,100 @@
+.parking-monitor-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.parking-monitor-camera {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.parking-monitor-camera .panel-heading {
+  padding-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.parking-camera-placeholder {
+  min-height: 280px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px;
+  background: #102c48;
+  color: #d5e2f5;
+  text-align: center;
+}
+
+.parking-camera-placeholder p {
+  max-width: 380px;
+  color: #a8bdd8;
+  font-size: 13px;
+}
+
+.parking-monitor-status {
+  padding: 23px;
+}
+
+.parking-monitor-status > .muted {
+  margin-top: 5px;
+}
+
+.parking-monitor-counts {
+  margin: 20px 0;
+}
+
+.parking-monitor-counts > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.parking-monitor-counts dt {
+  font-size: 13px;
+}
+
+.parking-monitor-counts dd {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.parking-monitor-counts .available dd {
+  color: #278557;
+}
+
+.parking-monitor-counts .occupied dd {
+  color: #0875f9;
+}
+
+.parking-monitor-counts .maintenance dd {
+  color: #a66d10;
+}
+
+.parking-monitor-note {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 16px;
+}
+
+.parking-monitor-area-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1050px) {
+  .parking-monitor-overview {
+    grid-template-columns: 1fr;
+  }
+}

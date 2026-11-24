@@ -38,6 +38,9 @@ IF %ERRORLEVEL% NEQ 0 (
 echo Dang tai san model EasyOCR (chi tai 1 lan, can Internet)...
 python -c "import sys; sys.path.insert(0, 'py'); import easyocr; from config import EASYOCR_DIR; easyocr.Reader(['en'], gpu=False, model_storage_directory=EASYOCR_DIR, user_network_directory=EASYOCR_DIR); print('Da tai xong model EasyOCR.')"
 
+echo Dang tai model YOLOv8 nhan dien vung bien so (tuy chon, can Internet)...
+python py\download_yolo_model.py
+
 echo Dang khoi tao database...
 python -c "import sys; sys.path.insert(0, 'py'); import database; database.init_db(); print('Da khoi tao database (cache/parking.db).')"
 

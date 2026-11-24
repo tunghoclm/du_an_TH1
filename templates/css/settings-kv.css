@@ -1,0 +1,809 @@
+/* KiotViet PosParameter (Thiết lập) 3-column layout */
+.kv-settings-page {
+  display: grid;
+  gap: 18px;
+}
+
+.kv-settings-header {
+  display: grid;
+  grid-template-columns: 236px minmax(220px, 460px) 1fr;
+  align-items: center;
+  gap: 18px;
+}
+
+.kv-settings-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #15171a;
+}
+
+.kv-settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid #d9dce1;
+  border-radius: 999px;
+  background: #fff;
+  color: #7b8594;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.kv-settings-search:focus-within {
+  border-color: #0070f4;
+  box-shadow: 0 0 0 2px #0070f41a;
+}
+
+.kv-settings-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #15171a;
+  font-size: 13px;
+  outline: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.kv-settings-search input::placeholder {
+  color: #898f98;
+}
+
+.kv-settings-layout {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr) 216px;
+  align-items: start;
+  gap: 18px;
+}
+
+/* Left Category Sidebar */
+.kv-settings-sidebar {
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  padding: 10px 8px;
+  position: sticky;
+  top: 16px;
+}
+
+.kv-sidebar-group-title {
+  padding: 10px 12px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #898f98;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.kv-sidebar-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: #3e464f;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background .12s, color .12s;
+}
+
+.kv-sidebar-link:hover {
+  background: #f5f7fa;
+  color: #0070f4;
+}
+
+.kv-sidebar-link.active {
+  background: #e8f2ff;
+  color: #0070f4;
+  font-weight: 600;
+}
+
+.kv-sidebar-link-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.kv-sidebar-ext {
+  color: #898f98;
+  font-size: 12px;
+}
+
+.kv-sidebar-divider {
+  height: 1px;
+  background: #eceef1;
+  margin: 8px 10px;
+}
+
+/* Center Content */
+.kv-settings-main {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.kv-settings-main .dashboard-bottom {
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.kv-settings-main .panel {
+  border-radius: 12px;
+  border: 1px solid #e6ebf2;
+  box-shadow: none;
+}
+
+.kv-settings-main .panel-heading h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #15171a;
+}
+
+.kv-settings-main .panel-heading p {
+  color: #7b8594;
+  font-size: 12px;
+}
+
+.kv-search-empty {
+  padding: 36px 20px;
+  text-align: center;
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  color: #7b8594;
+  font-size: 13px;
+}
+
+/* Right Anchor / Table of Contents */
+.kv-settings-toc {
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  padding: 14px 12px;
+  position: sticky;
+  top: 16px;
+}
+
+.kv-toc-title {
+  padding: 0 10px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #898f98;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.kv-toc-list {
+  display: grid;
+  gap: 2px;
+}
+
+.kv-toc-link {
+  display: block;
+  padding: 7px 10px;
+  border-left: 2px solid transparent;
+  border-radius: 0 6px 6px 0;
+  color: #51565e;
+  font-size: 13px;
+  text-decoration: none;
+  transition: color .12s, background .12s, border-color .12s;
+}
+
+.kv-toc-link:hover {
+  color: #0070f4;
+  background: #f5f9ff;
+}
+
+.kv-toc-link.active {
+  border-left-color: #0070f4;
+  color: #0070f4;
+  font-weight: 600;
+  background: #f5f9ff;
+}
+
+.kv-auto-entry-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #e8f2ff;
+  color: #005fd1;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Store Info (#store-info style) */
+.kv-store-body {
+  padding: 20px;
+}
+
+.kv-store-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.kv-store-avatar {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 16px;
+  background: #e8f2ff;
+  color: #0070f4;
+  font-size: 22px;
+  font-weight: 700;
+  flex: 0 0 68px;
+}
+
+.kv-store-title {
+  display: block;
+  font-size: 16px;
+  color: #15171a;
+  margin-bottom: 4px;
+}
+
+.kv-store-note {
+  margin: 0;
+  color: #7b8594;
+  font-size: 12px;
+}
+
+.kv-store-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px 24px;
+  margin: 0;
+}
+
+.kv-store-grid > div {
+  min-width: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eceef1;
+}
+
+.kv-store-grid dt {
+  margin-bottom: 6px;
+  color: #7b8594;
+  font-size: 12px;
+}
+
+.kv-store-grid dd {
+  margin: 0;
+  color: #15171a;
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.kv-store-link {
+  color: #0070f4;
+  text-decoration: none;
+}
+
+/* Zones / Gates Management (#branch style) */
+.kv-zones-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eceef1;
+}
+
+.kv-zones-filter-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.kv-zones-filter-form select {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #d9dce1;
+  border-radius: 8px;
+  background: #fff;
+  color: #15171a;
+  font-size: 13px;
+}
+
+.kv-zones-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #d9dce1;
+  border-radius: 8px;
+  background: #fff;
+  color: #7b8594;
+}
+
+.kv-zones-search input {
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: #15171a;
+  min-width: 210px;
+}
+
+.kv-zones-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.kv-zones-table th {
+  padding: 12px 16px;
+  background: #e6f1fe;
+  color: #15171a;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.kv-zones-table td {
+  padding: 13px 16px;
+  border-bottom: 1px solid #eceef1;
+  font-size: 13px;
+  color: #15171a;
+  vertical-align: middle;
+}
+
+.kv-zone-note {
+  margin-top: 3px;
+  color: #7b8594;
+  font-size: 12px;
+}
+
+.kv-zone-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kv-zone-actions form {
+  margin: 0;
+}
+
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.kv-tip-card {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #eceef1;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #51565e;
+}
+
+.kv-tip-card strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #15171a;
+  font-size: 13px;
+}
+
+dialog.kv-compact-dialog {
+  width: min(760px, calc(100vw - 28px));
+}
+
+/* KiotViet #branch toolbar buttons & column options */
+.kv-zones-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kv-btn-outline-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid #0070f4;
+  border-radius: 9999px;
+  background: #fff;
+  color: #0070f4;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 112, 244, 0.08);
+  transition: background .15s, box-shadow .15s;
+}
+
+.kv-btn-outline-primary:hover {
+  background: #f0f7ff;
+  box-shadow: 0 2px 6px rgba(0, 112, 244, 0.14);
+}
+
+.kv-col-options-wrap {
+  position: relative;
+}
+
+.kv-btn-icon-only {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #d9dce1;
+  border-radius: 8px;
+  background: #fff;
+  color: #51565e;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+
+.kv-btn-icon-only:hover {
+  border-color: #0070f4;
+  color: #0070f4;
+  background: #f5f9ff;
+}
+
+.kv-col-options-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 210px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(21, 23, 26, 0.12);
+  display: grid;
+  gap: 6px;
+}
+
+.kv-col-options-popover[hidden] {
+  display: none;
+}
+
+.kv-col-options-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #898f98;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #eceef1;
+}
+
+.kv-col-options-popover label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #15171a;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+/* Clickable gate rows & inline detail panel */
+.kv-gate-row {
+  cursor: pointer;
+  transition: background .12s;
+}
+
+.kv-gate-row:hover td {
+  background: #f5f9ff;
+}
+
+.kv-gate-row.is-expanded td {
+  background: #eef5ff;
+  border-bottom-color: transparent;
+}
+
+.kv-gate-name-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.kv-gate-chevron {
+  display: inline-block;
+  color: #898f98;
+  font-size: 12px;
+  line-height: 20px;
+  transition: transform .15s, color .15s;
+}
+
+.kv-gate-row.is-expanded .kv-gate-chevron {
+  transform: rotate(90deg);
+  color: #0070f4;
+}
+
+.kv-gate-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kv-center-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e8f2ff;
+  color: #0070f4;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.kv-gate-detail-row td {
+  padding: 0;
+  background: #f8fafd;
+  border-bottom: 1px solid #dce5f2;
+}
+
+.kv-gate-detail-card {
+  padding: 14px 20px 18px;
+}
+
+.kv-detail-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 16px;
+}
+
+.kv-detail-tab {
+  position: relative;
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  color: #51565e;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.kv-detail-tab:hover {
+  color: #0070f4;
+}
+
+.kv-detail-tab.active {
+  color: #0070f4;
+  font-weight: 600;
+  border-bottom-color: #0070f4;
+}
+
+.kv-detail-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 24px;
+  margin: 0;
+}
+
+.kv-detail-kv-grid > div {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eceef1;
+}
+
+.kv-detail-kv-grid .kv-detail-kv-full {
+  grid-column: 1 / -1;
+}
+
+.kv-detail-kv-grid dt {
+  font-size: 12px;
+  color: #7b8594;
+  margin-bottom: 4px;
+}
+
+.kv-detail-kv-grid dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #15171a;
+}
+
+.kv-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.kv-detail-actions form {
+  margin: 0;
+}
+
+.kv-detail-staff-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.kv-detail-staff-table th {
+  padding: 10px 14px;
+  background: #f1f5f9;
+  color: #51565e;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.kv-detail-staff-table td {
+  padding: 10px 14px;
+  border-top: 1px solid #eceef1;
+  font-size: 13px;
+  background: #fff;
+}
+
+/* Right Tip Panel (Gợi ý) */
+.kv-right-tip-box {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #51565e;
+}
+
+.kv-right-tip-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #15171a;
+  margin-bottom: 8px;
+}
+
+.kv-right-tip-head svg {
+  color: #0070f4;
+}
+
+.kv-right-tip-box p {
+  margin: 0 0 8px;
+}
+
+.kv-right-tip-sub {
+  color: #7b8594;
+  font-size: 12px;
+}
+
+/* Multi-select Vehicle Types (Xe 2 bánh / 4 bánh) */
+.kv-vt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kv-vt-hint {
+  font-weight: 400;
+  color: #7b8594;
+  font-size: 12px;
+}
+
+.kv-vt-presets {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.kv-vt-preset-btn {
+  border: 1px solid #d9dce1;
+  background: #fff;
+  color: #0070f4;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.kv-vt-preset-btn:hover {
+  background: #eef5ff;
+  border-color: #0070f4;
+}
+
+.kv-vt-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #d9dce1;
+  border-radius: 8px;
+  background: #f8fafd;
+}
+
+.form-field .kv-vt-check-item,
+.kv-vt-check-item {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid #d9dce1;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  color: #15171a;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.form-field .kv-vt-check-item input[type="checkbox"],
+.kv-vt-check-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  padding: 0;
+  margin: 0;
+  border-radius: 4px;
+  flex: 0 0 16px;
+  box-shadow: none;
+  accent-color: #0070f4;
+  cursor: pointer;
+}
+
+.kv-vt-check-item input:checked + span {
+  color: #0070f4;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .kv-detail-kv-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .kv-store-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .kv-store-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1100px) {
+  .kv-settings-header {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .kv-settings-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .kv-settings-toc {
+    display: none;
+  }
+}
+
+@media (max-width: 800px) {
+  .kv-settings-header {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .kv-settings-layout {
+    grid-template-columns: 1fr;
+  }
+  .kv-settings-sidebar {
+    position: static;
+  }
+}

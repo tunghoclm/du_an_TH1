@@ -1,0 +1,619 @@
+{% from '_cabin_icons.html' import icon %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Cabin — Smart Parking{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/images/logo.svg">
+  <link rel="stylesheet" href="/css/theme.css">
+  {% block extra_css %}{% endblock %}
+  <link rel="stylesheet" href="/css/cabin.css">
+</head>
+<body class="cabin-page" data-cabin-page="{{ active_page }}">
+  <h1 class="cabin-sr-only">Cabin quản lý bãi xe</h1>
+  <div class="cabin-shell">
+    <header class="cabin-topbar">
+      <div class="cabin-topbar-left">
+        {% set _is_admin = (current_user_role == 'admin') %}
+        {% set _gate_ztype = selected_gate.zone_type if selected_gate else 'gate_inout' %}
+        <nav class="cabin-tabs" aria-label="Chức năng cabin">
+          {% if _is_admin or has_perm('parking.view') or has_perm('gate.view') %}
+          <a href="{{ url_for('gate') }}" class="cabin-tab parking{% if active_page == 'gate' %} active{% endif %}"{% if active_page == 'gate' %} aria-current="page"{% endif %}>
+            <span class="menu-content"><span class="btn-icon-min">{{ icon('parking', 16) }}</span><span class="tab-title">BÃI ĐỖ</span></span>
+            <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
+          </a>
+          {% endif %}
+          {% if (_is_admin or has_perm('gate.exit')) and _gate_ztype != 'gate_in' %}
+          <a href="{{ url_for('exit_gate') }}" class="cabin-tab exit{% if active_page == 'exit' %} active{% endif %}"{% if active_page == 'exit' %} aria-current="page"{% endif %}>
+            <span class="menu-content"><span class="btn-icon-min">{{ icon('exit', 16) }}</span><span class="tab-title">Xe ra</span></span>
+            <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
+          </a>
+          {% endif %}
+          {% if (_is_admin or has_perm('gate.entry')) and _gate_ztype != 'gate_out' %}
+          <a href="{{ url_for('entry') }}" class="cabin-tab entry{% if active_page == 'entry' %} active{% endif %}"{% if active_page == 'entry' %} aria-current="page"{% endif %}>
+            <span class="menu-content"><span class="btn-icon-min">{{ icon('entry', 16) }}</span><span class="tab-title">Xe vào</span></span>
+            <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
+          </a>
+          {% endif %}
+          {% if (_is_admin or has_perm('gate.view')) and _gate_ztype == 'gate_inout' %}
+          <a href="{{ url_for('gate_lanes') }}" class="cabin-tab lanes{% if active_page == 'lanes' %} active{% endif %}"{% if active_page == 'lanes' %} aria-current="page"{% endif %}>
+            <span class="menu-content"><span class="btn-icon-min">{{ icon('lanes', 16) }}</span><span class="tab-title">2 làn</span></span>
+            <span class="menu-bg" aria-hidden="true">{{ icon('tab-tail-normal') }}{{ icon('tab-tail-active') }}</span>
+          </a>
+          {% endif %}
+        </nav>
+        <form action="{{ url_for('gate') }}" method="get" class="cabin-search" role="search">
+          {{ icon('search', 16) }}
+          <input type="search" id="cabin-search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Tìm kiếm" aria-label="Tìm ô đỗ hoặc biển số" autocomplete="off">
+        </form>
+      </div>
+      <div class="cabin-topbar-right">
+        <div class="cabin-status-strip" aria-label="Trạng thái cabin">
+          <span class="cabin-gate-badge" title="Cổng đang vận hành">
+            <span class="cabin-live-dot" aria-hidden="true"></span>
+            <span>{{ selected_gate.name if selected_gate else 'Toàn bãi xe' }}</span>
+          </span>
+          {% if counts is defined and counts %}
+          <span class="cabin-cap-pill" title="Số chỗ trống hiện tại">
+            Trống <strong>{{ counts.available }}</strong>/{{ counts.total }}
+          </span>
+          {% endif %}
+          {% if open_shift %}
+          <span class="cabin-shift-pill" title="Ca trực đang mở">Đang trực ca</span>
+          {% endif %}
+        </div>
+        <div class="cabin-tools">
+          <button type="button" id="cabin-refresh" class="cabin-tool" aria-label="Làm mới cabin" title="Làm mới dữ liệu (F5)">{{ icon('refresh', 15) }}</button>
+          <span class="cabin-tool-sep" aria-hidden="true"></span>
+          <div class="cabin-menu-wrap">
+            <button type="button" id="cabin-menu-toggle" class="cabin-user-pill" aria-label="Menu cabin" title="{{ current_user_fullname or session.get('username') or 'Tài khoản' }}" aria-controls="cabin-menu" aria-expanded="false">
+              <span class="cabin-operator">{{ current_user_fullname or session.get('username') or 'Tài khoản' }}</span>
+              {{ icon('menu', 16) }}
+            </button>
+            <nav id="cabin-menu" class="cabin-menu" aria-label="Menu cabin" hidden>
+              <div class="cabin-drawer-header">
+                <div class="cabin-drawer-user">
+                  <span class="cabin-drawer-avatar" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#D9EAFF"/><circle cx="12" cy="9.5" r="3.5" fill="#4A90E2"/><path d="M6 19.5c1.3-2.6 3.5-4 6-4s4.7 1.4 6 4" fill="#4A90E2"/></svg>
+                  </span>
+                  <div class="cabin-drawer-user-meta">
+                    <span class="cabin-drawer-username">{{ current_user_fullname or session.get('username') or 'Tài khoản' }}</span>
+                    <span class="cabin-drawer-role">{{ role_label }}{% if selected_gate %} · {{ selected_gate.name }}{% endif %}</span>
+                  </div>
+                </div>
+                <button type="button" id="cabin-menu-close" class="cabin-drawer-close" aria-label="Đóng menu">×</button>
+              </div>
+
+              <div class="cabin-drawer-content">
+                {% set _is_admin = (current_user_role == 'admin') %}
+                <!-- Nhóm 1: Chế độ vận hành Cabin -->
+                <div class="cabin-drawer-section is-grid">
+                  {% if _is_admin or has_perm('gate.view') or has_perm('parking.view') %}
+                  <a href="{{ url_for('parking_monitor') }}" target="_blank" rel="noopener" class="cabin-drawer-grid-item">
+                    <span class="cabin-drawer-badge">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                    </span>
+                    <span>Màn hình phụ</span>
+                  </a>
+                  {% endif %}
+                  {% if _is_admin or has_perm('dashboard.view') %}
+                  <a href="{{ url_for('index') }}" target="_blank" rel="noopener" class="cabin-drawer-grid-item">
+                    <span class="cabin-drawer-badge">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                    </span>
+                    <span>Trang quản lý</span>
+                  </a>
+                  {% endif %}
+                  {% if _is_admin or has_perm('parking.edit') or has_perm('parking.create') %}
+                  <a href="{{ url_for('parking') }}" target="_blank" rel="noopener" class="cabin-drawer-grid-item">
+                    <span class="cabin-drawer-badge">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+                    </span>
+                    <span>Quản lý khu &amp; ô đỗ</span>
+                  </a>
+                  {% endif %}
+                </div>
+
+                <!-- Nhóm 2: Nghiệp vụ ca trực & tra cứu -->
+                <div class="cabin-drawer-section">
+                  <button type="button" id="open-cabin-eod-report" class="cabin-menu-item">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                    <span>Báo cáo cuối ngày</span>
+                  </button>
+                  {% if _is_admin or has_perm('history.view') %}
+                  <a href="{{ url_for('history') }}" target="_blank" rel="noopener" class="cabin-menu-item">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+                    <span>Lịch sử vào / ra</span>
+                  </a>
+                  {% endif %}
+                  {% if _is_admin or has_perm('invoices.view') %}
+                  <a href="{{ url_for('invoices') }}" target="_blank" rel="noopener" class="cabin-menu-item">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg>
+                    <span>Hóa đơn thu phí</span>
+                  </a>
+                  {% endif %}
+                  {% if _is_admin or has_perm('customers.view') %}
+                  <a href="{{ url_for('customers') }}" target="_blank" rel="noopener" class="cabin-menu-item">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    <span>Khách hàng &amp; vé tháng</span>
+                  </a>
+                  {% endif %}
+                </div>
+
+                <!-- Nhóm 3: Cài đặt cabin & Phím tắt -->
+                <div class="cabin-drawer-section">
+                  <button type="button" id="open-cabin-settings" class="cabin-menu-item">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    <span>Cài đặt cabin</span>
+                  </button>
+                  {% if _is_admin or has_perm('pricing.view') or has_perm('pricing.edit') %}
+                  <a href="{{ url_for('pricing') }}" target="_blank" rel="noopener" class="cabin-menu-item">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                    <span>Thiết lập giá</span>
+                  </a>
+                  {% endif %}
+                  <button type="button" id="cabin-fullscreen" class="cabin-menu-item" aria-pressed="false">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                    <span>Toàn màn hình</span>
+                  </button>
+                  <div class="cabin-shortcuts-wrap">
+                    <button type="button" class="cabin-menu-item cabin-shortcuts-trigger">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                      <span>Phím tắt</span>
+                      <svg class="cabin-chevron-right" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                    <div class="cabin-shortcuts-flyout">
+                      <button type="button" class="cabin-shortcut-row" data-run-shortcut="new_entry"><span>Tạo phiếu xe vào mới</span><kbd data-shortcut-badge="new_entry">F1</kbd></button>
+                      <button type="button" class="cabin-shortcut-row" data-run-shortcut="search_slot"><span>Tìm vị trí ô đỗ / biển số</span><kbd data-shortcut-badge="search_slot">F2</kbd></button>
+                      <button type="button" class="cabin-shortcut-row" data-run-shortcut="quick_exit"><span>Tra cứu nhanh làn ra</span><kbd data-shortcut-badge="quick_exit">F3</kbd></button>
+                      <button type="button" class="cabin-shortcut-row" data-run-shortcut="capture_scan"><span>Chụp &amp; quét biển số</span><kbd data-shortcut-badge="capture_scan">F8</kbd></button>
+                      <button type="button" class="cabin-shortcut-row" data-run-shortcut="confirm_pay"><span>Xác nhận &amp; Thanh toán</span><kbd data-shortcut-badge="confirm_pay">F9</kbd></button>
+                      <button type="button" class="cabin-shortcut-row" data-run-shortcut="refresh_cabin"><span>Làm mới dữ liệu Cabin</span><kbd data-shortcut-badge="refresh_cabin">F5</kbd></button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Nhóm 4: Tài khoản -->
+                <div class="cabin-drawer-section is-last">
+                  <a href="{{ url_for('settings') }}#password" target="_blank" rel="noopener" class="cabin-menu-item">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <span>Đổi mật khẩu</span>
+                  </a>
+                  <a href="{{ url_for('logout') }}" class="cabin-menu-item is-signout">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    <span>Đăng xuất</span>
+                  </a>
+                </div>
+              </div>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </header>
+    <dialog id="cabin-settings-dialog" class="cabin-settings-dialog" aria-labelledby="cabin-settings-title">
+      <div class="cabin-settings-head">
+        <h2 id="cabin-settings-title">Tùy chọn cài đặt</h2>
+        <button type="button" class="cabin-settings-close" id="close-cabin-settings" aria-label="Đóng">×</button>
+      </div>
+      <div class="cabin-settings-body">
+        <div class="cabin-settings-col">
+          <div class="cabin-settings-sec-title">NHẬN DIỆN &amp; LÀN XE</div>
+          <div class="cabin-settings-list">
+            <div class="cabin-settings-row">
+              <span class="cabin-settings-label">
+                Tự động nhận diện xe vào/ra (không cần bấm Chụp &amp; quét)
+                <span class="cabin-settings-info" tabindex="0">i
+                  <span class="cabin-settings-tooltip">Khi bật camera làn vào hoặc làn ra, hệ thống tự động quét khung hình định kỳ để nhận diện biển số.</span>
+                </span>
+              </span>
+              <label class="cabin-switch"><input type="checkbox" data-cabin-pref="auto_recognize"><span></span></label>
+            </div>
+            <div class="cabin-settings-row">
+              <span class="cabin-settings-label">Tự động bật camera</span>
+              <label class="cabin-switch"><input type="checkbox" data-cabin-pref="auto_start_camera"><span></span></label>
+            </div>
+            <div class="cabin-settings-row">
+              <span class="cabin-settings-label">Âm báo khi nhận diện biển số thành công</span>
+              <label class="cabin-switch"><input type="checkbox" data-cabin-pref="beep_on_detect" checked><span></span></label>
+            </div>
+            <div class="cabin-settings-row">
+              <span class="cabin-settings-label">
+                Tự động làm mới làn sau khi xác nhận
+                <span class="cabin-settings-info" tabindex="0">i
+                  <span class="cabin-settings-tooltip">Xóa kết quả lượt vừa xử lý để sẵn sàng đón lượt xe tiếp theo.</span>
+                </span>
+              </span>
+              <label class="cabin-switch"><input type="checkbox" data-cabin-pref="auto_reset_lane" checked><span></span></label>
+            </div>
+          </div>
+
+          <div class="cabin-settings-sec-title" style="margin-top: 18px;">PHIẾU XE &amp; CẢNH BÁO</div>
+          <div class="cabin-settings-list">
+            <div class="cabin-settings-row">
+              <span class="cabin-settings-label">Tự động mở in hóa đơn khi xe ra thanh toán</span>
+              <label class="cabin-switch"><input type="checkbox" data-cabin-pref="auto_print_exit"><span></span></label>
+            </div>
+            <div class="cabin-settings-row">
+              <span class="cabin-settings-label">Cảnh báo khi bãi xe sắp hết chỗ trống</span>
+              <label class="cabin-switch"><input type="checkbox" data-cabin-pref="warn_low_slots" checked><span></span></label>
+            </div>
+          </div>
+        </div>
+        <div class="cabin-settings-col">
+          <div class="cabin-settings-sec-title">THANH TOÁN</div>
+          <div class="cabin-settings-list">
+            <div class="cabin-settings-row">
+              <span class="cabin-settings-label">
+                Tự động điền giá trị khách thanh toán
+                <span class="cabin-settings-info" tabindex="0">i
+                  <span class="cabin-settings-tooltip">Mặc định số tiền “Khách thanh toán” bằng số tiền “Khách cần trả”.</span>
+                </span>
+              </span>
+              <label class="cabin-switch"><input type="checkbox" data-cabin-pref="auto_fill_pay" checked><span></span></label>
+            </div>
+            <div class="cabin-settings-row is-radio-row">
+              <span class="cabin-settings-label">Hình thức thanh toán mặc định</span>
+              <div class="cabin-settings-radios">
+                <label><input type="radio" name="cabin_default_payment" value="cash" data-cabin-pref-radio="default_payment" checked> Tiền mặt</label>
+                <label><input type="radio" name="cabin_default_payment" value="transfer" data-cabin-pref-radio="default_payment"> Chuyển khoản</label>
+              </div>
+            </div>
+            <div class="cabin-settings-row is-radio-row">
+              <span class="cabin-settings-label">
+                Giảm giá
+                <span class="cabin-settings-info" tabindex="0">i
+                  <span class="cabin-settings-tooltip">Chọn đơn vị nhập giảm giá mặc định khi thu phí.</span>
+                </span>
+              </span>
+              <div class="cabin-settings-radios">
+                <label><input type="radio" name="cabin_discount_unit" value="vnd" data-cabin-pref-radio="discount_unit" checked> Giá tiền (VND)</label>
+                <label><input type="radio" name="cabin_discount_unit" value="percent" data-cabin-pref-radio="discount_unit"> Phần trăm (%)</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="cabin-settings-sec-head" style="margin-top: 18px;">
+            <span class="cabin-settings-sec-title" style="margin-bottom:0;">PHÍM TẮT THAO TÁC</span>
+            <button type="button" class="cabin-shortcut-reset-btn" id="reset-cabin-shortcuts" title="Khôi phục bộ phím tắt mặc định">Mặc định</button>
+          </div>
+          <p class="cabin-shortcut-hint">Nhấp vào ô phím rồi nhấn phím hoặc tổ hợp phím mới để thay đổi.</p>
+          <div class="cabin-settings-list cabin-shortcut-config-list">
+            <div class="cabin-settings-row is-shortcut-row">
+              <span class="cabin-settings-label">Tạo phiếu xe vào mới</span>
+              <input type="text" class="cabin-shortcut-input" data-cabin-shortcut-input="new_entry" value="F1" readonly aria-label="Phím tắt Tạo phiếu xe vào mới">
+            </div>
+            <div class="cabin-settings-row is-shortcut-row">
+              <span class="cabin-settings-label">Tìm vị trí ô đỗ / biển số</span>
+              <input type="text" class="cabin-shortcut-input" data-cabin-shortcut-input="search_slot" value="F2" readonly aria-label="Phím tắt Tìm vị trí ô đỗ / biển số">
+            </div>
+            <div class="cabin-settings-row is-shortcut-row">
+              <span class="cabin-settings-label">Tra cứu nhanh làn ra</span>
+              <input type="text" class="cabin-shortcut-input" data-cabin-shortcut-input="quick_exit" value="F3" readonly aria-label="Phím tắt Tra cứu nhanh làn ra">
+            </div>
+            <div class="cabin-settings-row is-shortcut-row">
+              <span class="cabin-settings-label">Chụp &amp; quét biển số</span>
+              <input type="text" class="cabin-shortcut-input" data-cabin-shortcut-input="capture_scan" value="F8" readonly aria-label="Phím tắt Chụp & quét biển số">
+            </div>
+            <div class="cabin-settings-row is-shortcut-row">
+              <span class="cabin-settings-label">Xác nhận &amp; Thanh toán</span>
+              <input type="text" class="cabin-shortcut-input" data-cabin-shortcut-input="confirm_pay" value="F9" readonly aria-label="Phím tắt Xác nhận & Thanh toán">
+            </div>
+            <div class="cabin-settings-row is-shortcut-row">
+              <span class="cabin-settings-label">Làm mới dữ liệu Cabin</span>
+              <input type="text" class="cabin-shortcut-input" data-cabin-shortcut-input="refresh_cabin" value="F5" readonly aria-label="Phím tắt Làm mới dữ liệu Cabin">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cabin-settings-foot">
+        <button type="button" class="cabin-settings-btn is-cancel" id="cancel-cabin-settings">Bỏ qua</button>
+        <button type="button" class="cabin-settings-btn is-save" id="save-cabin-settings">Lưu</button>
+      </div>
+    </dialog>
+
+    <!-- Modal Báo cáo cuối ngày (giống KiotViet POS Cashier) -->
+    {% set eod = eod_initial or {} %}
+    <dialog id="cabin-eod-dialog" class="kv-eod-dialog" aria-labelledby="cabin-eod-title">
+      <div class="kv-eod-head">
+        <h4 id="cabin-eod-title">Báo cáo cuối ngày</h4>
+        <button type="button" class="kv-eod-close" id="close-cabin-eod" aria-label="Đóng">×</button>
+      </div>
+
+      <!-- Hàng 4 ô lọc trên cùng (kiểu underline & custom Kendo dropdown của KiotViet) -->
+      <div class="kv-eod-filters">
+        <!-- 1. Lịch chọn ngày (3 cấp: Ngày -> Tháng -> Năm) -->
+        <div class="kv-eod-filter-field is-date" id="eod-date-field">
+          <input type="text" id="eod-date-display" class="kv-eod-input" value="{{ eod.date_vdate or today_vdate }}" placeholder="DD/MM/YYYY" autocomplete="off" aria-label="Ngày báo cáo">
+          <input type="hidden" id="eod-date-input" value="{{ eod.date_iso or today_iso }}">
+          <button type="button" class="kv-eod-calendar-btn" id="eod-calendar-btn" title="Chọn ngày" aria-label="Mở lịch chọn ngày" aria-expanded="false">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a1 1 0 0 1 1 1v1h6V3a1 1 0 1 1 2 0v1h1a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1V3a1 1 0 0 1 1-1zm10 6H4v8h12V8z"/></svg>
+          </button>
+          <div class="kv-cal-popover" id="eod-cal-popover" hidden>
+            <div class="kv-cal-header">
+              <button type="button" class="kv-cal-nav" id="eod-cal-prev" aria-label="Lùi">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <button type="button" class="kv-cal-title-btn" id="eod-cal-title">Tháng Mười Một 2026</button>
+              <button type="button" class="kv-cal-nav" id="eod-cal-next" aria-label="Tiến">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
+            <div class="kv-cal-weekdays" id="eod-cal-weekdays">
+              <span>H</span><span>B</span><span>T</span><span>N</span><span>S</span><span>B</span><span>C</span>
+            </div>
+            <div class="kv-cal-grid" id="eod-cal-grid"></div>
+            <button type="button" class="kv-cal-footer" id="eod-cal-today">22 Tháng Mười Một 2026</button>
+          </div>
+        </div>
+
+        <!-- 2. Chọn mẫu / khổ báo cáo -->
+        <div class="kv-eod-filter-field is-dropdown" data-eod-dd="template">
+          <input type="hidden" id="eod-template-select" value="a4">
+          <button type="button" class="kv-eod-dd-trigger" aria-expanded="false">
+            <span class="kv-eod-dd-label" data-eod-dd-label>Khổ A4</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="kv-eod-dd-menu" hidden>
+            <button type="button" class="kv-eod-dd-item is-selected" data-val="a4">
+              <span>Khổ A4</span>
+              <svg class="kv-eod-dd-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <button type="button" class="kv-eod-dd-item" data-val="k80">
+              <span>Khổ K80</span>
+              <svg class="kv-eod-dd-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <button type="button" class="kv-eod-dd-item" data-val="thermal">
+              <span>Báo cáo cuối ngày (K80)</span>
+              <svg class="kv-eod-dd-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Người tiếp nhận xe (Nhân viên trực làn vào) -->
+        <div class="kv-eod-filter-field is-dropdown" data-eod-dd="receiver">
+          <input type="hidden" id="eod-receiver-select" value="">
+          <button type="button" class="kv-eod-dd-trigger" aria-expanded="false">
+            <span class="kv-eod-dd-label" data-eod-dd-label>Người tiếp nhận</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="kv-eod-dd-menu" hidden>
+            <button type="button" class="kv-eod-dd-item is-selected" data-val="">
+              <span>Người tiếp nhận</span>
+              <svg class="kv-eod-dd-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            {% for s in staff_members %}
+            <button type="button" class="kv-eod-dd-item" data-val="{{ s.fullname }}">
+              <span>{{ s.fullname }}</span>
+              <svg class="kv-eod-dd-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- 4. Người thu phí / Người tạo -->
+        <div class="kv-eod-filter-field is-dropdown" data-eod-dd="creator">
+          <input type="hidden" id="eod-creator-select" value="">
+          <button type="button" class="kv-eod-dd-trigger" aria-expanded="false">
+            <span class="kv-eod-dd-label" data-eod-dd-label>Người thu phí</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="kv-eod-dd-menu" hidden>
+            <button type="button" class="kv-eod-dd-item is-selected" data-val="">
+              <span>Người thu phí</span>
+              <svg class="kv-eod-dd-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            {% for s in staff_members %}
+            <button type="button" class="kv-eod-dd-item" data-val="{{ s.fullname }}">
+              <span>{{ s.fullname }}</span>
+              <svg class="kv-eod-dd-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Thanh công cụ Telerik Report Viewer (hiện khi chọn Khổ A4 hoặc Khổ K80) -->
+      <div class="kv-eod-menubar" id="eod-trv-menubar" role="menubar" aria-label="Thanh công cụ báo cáo">
+        <button type="button" class="kv-trv-tool is-disabled" title="Quay lại" disabled>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+        </button>
+        <button type="button" class="kv-trv-tool is-disabled" title="Tiếp theo" disabled>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
+        </button>
+        <button type="button" class="kv-trv-tool" id="eod-btn-refresh" title="Làm mới báo cáo">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+        </button>
+        <button type="button" class="kv-trv-tool is-disabled" title="Trang đầu" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+        </button>
+        <button type="button" class="kv-trv-tool is-disabled" title="Trang trước" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+        </button>
+        <span class="kv-trv-page-box">
+          <input type="number" value="1" min="1" max="1" aria-label="Trang hiện tại" readonly>
+          <span>/ 1</span>
+        </span>
+        <button type="button" class="kv-trv-tool is-disabled" title="Trang sau" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+        </button>
+        <button type="button" class="kv-trv-tool is-disabled" title="Trang cuối" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="m6 18 8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+        </button>
+        <button type="button" class="kv-trv-tool" id="eod-btn-layout" title="Chế độ xem trang in">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+        </button>
+        <div class="kv-trv-export-wrap">
+          <button type="button" class="kv-trv-tool" id="eod-btn-export" title="Xuất file" aria-expanded="false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" style="margin-left:2px;"><path d="M7 10l5 5 5-5z"/></svg>
+          </button>
+          <div class="kv-trv-export-menu" id="eod-export-menu" hidden>
+            <a id="eod-export-pdf" href="{{ url_for('statistics_export', fmt='pdf', range='custom', **{'from': eod.date_iso or today_iso, 'to': eod.date_iso or today_iso}) }}" target="_blank" rel="noopener">Acrobat (PDF) file</a>
+            <a id="eod-export-xlsx" href="{{ url_for('statistics_export', fmt='xlsx', range='custom', **{'from': eod.date_iso or today_iso, 'to': eod.date_iso or today_iso}) }}" target="_blank" rel="noopener">Excel 97-2003</a>
+          </div>
+        </div>
+        <button type="button" class="kv-trv-tool" id="eod-btn-print" title="In báo cáo">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+        </button>
+        <button type="button" class="kv-trv-tool" id="eod-btn-zoom-in" title="Phóng to">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zm2.5-4h-2v2H9v-2H7V9h2V7h1v2h2v1z"/></svg>
+        </button>
+        <button type="button" class="kv-trv-tool" id="eod-btn-zoom-out" title="Thu nhỏ">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z"/></svg>
+        </button>
+        <button type="button" class="kv-trv-tool is-search" id="eod-btn-fit-page" title="Thu phóng vừa trang / toàn bộ trang">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.2-4.2"/></svg>
+        </button>
+      </div>
+
+      <!-- Thanh công cụ rút gọn (chỉ nút In ở giữa) khi chọn Báo cáo cuối ngày (K80) -->
+      <div class="kv-eod-menubar is-simple" id="eod-thermal-menubar" hidden>
+        <button type="button" class="kv-trv-tool" id="eod-btn-print-thermal" title="In báo cáo cuối ngày">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+        </button>
+      </div>
+
+      <!-- Vùng hiển thị nội dung báo cáo (3 mẫu: Khổ A4, Khổ K80, Báo cáo cuối ngày (K80)) -->
+      <div class="kv-eod-body" id="eod-report-body">
+        <div class="kv-eod-zoom-stage" id="eod-zoom-stage">
+          <!-- MẪU 1: KHỔ A4 -->
+          <div class="kv-eod-view is-a4" id="eod-view-a4" data-eod-view="a4">
+            <div class="kv-eod-a4-meta">Ngày lập <span data-eod-field="generated_at">{{ eod.generated_at or '' }}</span></div>
+            <div class="kv-eod-a4-title-wrap">
+              <h3>Báo cáo cuối ngày về vận hành bãi xe</h3>
+              <p>Ngày báo cáo <span data-eod-field="date_vdate">{{ eod.date_vdate or today_vdate }}</span></p>
+              <p>Cổng: <span data-eod-field="branch_name">{{ eod.branch_name or 'Tất cả các cổng' }}</span></p>
+              <p id="eod-a4-receiver-line" hidden>Người tiếp nhận: <span data-eod-field="receiver_filter"></span></p>
+              <p id="eod-a4-creator-line" hidden>Người thu phí: <span data-eod-field="creator_filter"></span></p>
+            </div>
+
+            <table class="kv-eod-a4-table">
+              <thead>
+                <tr>
+                  <th class="left">Mã chứng từ</th>
+                  <th class="center">Thời gian</th>
+                  <th class="center">Ô đỗ / Biển số</th>
+                  <th class="center">SL xe</th>
+                  <th class="right">Phí gửi xe</th>
+                  <th class="right">Vé tháng</th>
+                  <th class="right">Giảm giá</th>
+                  <th class="right">Phí hoàn<br>vé</th>
+                  <th class="right">Thanh toán</th>
+                </tr>
+              </thead>
+              <tbody id="eod-a4-tbody"></tbody>
+            </table>
+            <div class="kv-eod-a4-footer" data-eod-field="branch_name">{{ eod.branch_name or 'Tất cả các cổng' }}</div>
+          </div>
+
+          <!-- MẪU 2: KHỔ K80 (Telerik 80mm Styled Summary) -->
+          <div class="kv-eod-view is-k80" id="eod-view-k80" data-eod-view="k80" hidden>
+            <div class="kv-eod-k80-sheet">
+              <div class="kv-eod-k80-meta">Ngày lập <span data-eod-field="generated_at">{{ eod.generated_at or '' }}</span></div>
+              <div class="kv-eod-k80-meta">Người tạo: <span data-eod-field="creator_name">{{ eod.creator_name or '' }}</span></div>
+              <div class="kv-eod-k80-header">
+                <h3>Báo cáo cuối ngày về bãi xe</h3>
+                <p>Ngày báo cáo <span data-eod-field="date_vdate">{{ eod.date_vdate or today_vdate }}</span></p>
+                <p>Cổng: <span data-eod-field="branch_name">{{ eod.branch_name or 'Tất cả các cổng' }}</span></p>
+              </div>
+
+              <div class="kv-eod-k80-sec-head">Tổng kết thu chi</div>
+              <div class="kv-eod-k80-row"><span>Tổng thu</span><span id="eod-k80-total-in">{{ "{:,}".format(eod.net_revenue_with_other or 0).replace(",", ".") }}</span></div>
+              <div class="kv-eod-k80-row"><span>Tổng chi</span><span>0</span></div>
+              <div class="kv-eod-k80-row"><span>Thu / Chi</span><span id="eod-k80-net">{{ "{:,}".format(eod.net_revenue_with_other or 0).replace(",", ".") }}</span></div>
+
+              <div class="kv-eod-k80-sec-head">Phương thức thanh toán</div>
+              <div class="kv-eod-k80-row"><span>Tiền mặt</span><span id="eod-k80-cash">{{ "{:,}".format(eod.cash_total or 0).replace(",", ".") }}</span></div>
+              <div class="kv-eod-k80-row"><span>Chuyển khoản</span><span id="eod-k80-transfer">{{ "{:,}".format(eod.transfer_total or 0).replace(",", ".") }}</span></div>
+              <div class="kv-eod-k80-row"><span>Thẻ</span><span id="eod-k80-card">{{ "{:,}".format(eod.card_total or 0).replace(",", ".") }}</span></div>
+              <div class="kv-eod-k80-row"><span>Vé tháng</span><span id="eod-k80-month">{{ "{:,}".format(eod.other_revenue or 0).replace(",", ".") }}</span></div>
+
+              <div class="kv-eod-k80-sec-head">Tổng kết lượt gửi xe</div>
+              <div class="kv-eod-k80-sub-head"><span>Hóa đơn (Xe đã ra)</span><span id="eod-k80-inv-count">{{ eod.invoice_count or 0 }}</span></div>
+              <div class="kv-eod-k80-row"><span>Giá trị thu</span><span id="eod-k80-inv-val">{{ "{:,}".format(eod.total_revenue or 0).replace(",", ".") }}</span></div>
+              <div class="kv-eod-k80-row"><span>SL Phương tiện</span><span id="eod-k80-inv-qty">{{ eod.invoice_count or 0 }} ({{ eod.distinct_types_out or 0 }} loại xe)</span></div>
+              <div class="kv-eod-k80-row"><span>Số lượt ra</span><span id="eod-k80-inv-cust">{{ eod.invoice_count or 0 }}</span></div>
+
+              <div class="kv-eod-k80-sub-head"><span>Xe đang gửi trong bãi</span><span id="eod-k80-srv-count">{{ eod.serving_count or 0 }}</span></div>
+              <div class="kv-eod-k80-row"><span>Phí tạm tính</span><span id="eod-k80-srv-val">{{ "{:,}".format(eod.serving_est_total or 0).replace(",", ".") }}</span></div>
+              <div class="kv-eod-k80-row"><span>SL Phương tiện</span><span id="eod-k80-srv-qty">{{ eod.serving_count or 0 }} ({{ eod.distinct_types_in or 0 }} loại xe)</span></div>
+              <div class="kv-eod-k80-row"><span>Số xe đang đỗ</span><span id="eod-k80-srv-cust">{{ eod.serving_count or 0 }}</span></div>
+
+              <div class="kv-eod-k80-sub-head"><span>Hoàn vé</span><span>0</span></div>
+              <div class="kv-eod-k80-row"><span>Giá trị hoàn</span><span>0</span></div>
+              <div class="kv-eod-k80-row"><span>SL Phương tiện</span><span>0 (0 loại xe)</span></div>
+
+              <div class="kv-eod-k80-sec-head" style="margin-top:16px;">Hủy lượt gửi</div>
+              <div class="kv-eod-k80-row"><span>Số lượt xóa / hủy</span><span id="eod-k80-cancel-qty">{{ eod.cancel_count or 0 }} (0 loại xe)</span></div>
+              <div class="kv-eod-k80-row"><span>Giá trị hủy</span><span>0</span></div>
+            </div>
+          </div>
+
+          <!-- MẪU 3: BÁO CÁO CUỐI NGÀY (K80) (Thermal Receipt Preview) -->
+          <div class="kv-eod-view is-thermal" id="eod-view-thermal" data-eod-view="thermal" hidden>
+            <div class="kv-eod-thermal-sheet">
+              <h3 class="kv-eod-thermal-title">BÁO CÁO CUỐI NGÀY</h3>
+              <div class="kv-eod-thermal-meta">
+                <div>
+                  <span data-eod-field="branch_name">{{ eod.branch_name or 'Tất cả các cổng' }}</span>
+                  <span>Người lập: <b data-eod-field="creator_name">{{ eod.creator_name or '' }}</b></span>
+                </div>
+                <div>
+                  <span>Báo cáo ngày: <span data-eod-field="date_vdate">{{ eod.date_vdate or today_vdate }}</span></span>
+                  <span>Thời gian lập: <span data-eod-field="generated_at">{{ eod.generated_at or '' }}</span></span>
+                </div>
+              </div>
+
+              <div class="kv-eod-thermal-sec"><span>TỔNG KẾT THU PHÍ BÃI XE</span><i></i></div>
+              <div class="kv-eod-thermal-row"><span>Doanh thu vé lượt</span><span id="eod-th-gross">{{ "{:,}".format(eod.total_revenue or 0) }}</span></div>
+              <div class="kv-eod-thermal-row"><span>Tổng giảm giá vé</span><span>0 (0%)</span></div>
+              <div class="kv-eod-thermal-row"><span>Thu vé tháng</span><span id="eod-th-other">{{ "{:,}".format(eod.other_revenue or 0) }}</span></div>
+              <div class="kv-eod-thermal-row"><span>Hoàn vé</span><span>0</span></div>
+              <div class="kv-eod-thermal-row is-bold">
+                <span>Doanh thu thuần<small>bao gồm thu vé tháng</small></span>
+                <span id="eod-th-net-with">{{ "{:,}".format(eod.net_revenue_with_other or 0) }}</span>
+              </div>
+              <div class="kv-eod-thermal-row is-bold">
+                <span>Doanh thu thuần<small>chỉ tính vé lượt</small></span>
+                <span id="eod-th-net-no">{{ "{:,}".format(eod.net_revenue_no_other or 0) }} (100%)</span>
+              </div>
+              <div class="kv-eod-thermal-row"><span>Số hóa đơn (lượt xe ra)</span><span id="eod-th-inv-count">{{ eod.invoice_count or 0 }}</span></div>
+              <div class="kv-eod-thermal-row"><span>Số xe đang gửi trong bãi</span><span id="eod-th-cust-count">{{ eod.serving_count or 0 }}</span></div>
+              <div class="kv-eod-thermal-row"><span>Doanh thu TB/Lượt</span><span id="eod-th-avg">{{ "{:,}".format(eod.avg_per_invoice or 0) }}</span></div>
+
+              <div class="kv-eod-thermal-sec"><span>SỔ QUỸ</span><i></i></div>
+              <div class="kv-eod-thermal-row is-bold"><span>Thu phí vé lượt</span><span id="eod-th-sales-in">{{ "{:,}".format(eod.total_revenue or 0) }}</span></div>
+              <div class="kv-eod-thermal-row is-indent"><span>- Tiền mặt</span><span id="eod-th-sales-cash">{{ "{:,}".format(eod.cash_total or 0) }}</span></div>
+              {% if (eod.transfer_total or 0) > 0 %}
+              <div class="kv-eod-thermal-row is-indent" id="eod-th-sales-transfer-row"><span>- Chuyển khoản</span><span id="eod-th-sales-transfer">{{ "{:,}".format(eod.transfer_total or 0) }}</span></div>
+              {% else %}
+              <div class="kv-eod-thermal-row is-indent" id="eod-th-sales-transfer-row" hidden><span>- Chuyển khoản</span><span id="eod-th-sales-transfer">0</span></div>
+              {% endif %}
+              {% if (eod.card_total or 0) > 0 %}
+              <div class="kv-eod-thermal-row is-indent" id="eod-th-sales-card-row"><span>- Thẻ</span><span id="eod-th-sales-card">{{ "{:,}".format(eod.card_total or 0) }}</span></div>
+              {% else %}
+              <div class="kv-eod-thermal-row is-indent" id="eod-th-sales-card-row" hidden><span>- Thẻ</span><span id="eod-th-sales-card">0</span></div>
+              {% endif %}
+              <div class="kv-eod-thermal-row is-bold"><span>Thu đăng ký / gia hạn vé tháng</span><span id="eod-th-receipt-in">{{ "{:,}".format(eod.other_revenue or 0) }}</span></div>
+              <div class="kv-eod-thermal-row is-bold"><span>Phiếu chi</span><span>0</span></div>
+              <div class="kv-eod-thermal-row is-bold"><span>Tiền thực nhận</span><span id="eod-th-actual-in">{{ "{:,}".format(eod.net_revenue_with_other or 0) }}</span></div>
+              <div class="kv-eod-thermal-row is-indent"><span>- Tiền mặt</span><span id="eod-th-actual-cash">{{ "{:,}".format((eod.cash_total or 0) + (eod.other_revenue or 0)) }}</span></div>
+
+              <div class="kv-eod-thermal-sec"><span>BÁO CÁO HỦY LƯỢT GỬI</span><i></i></div>
+              <div class="kv-eod-thermal-row"><span>Số lượt xe hủy / xóa</span><span id="eod-th-cancel-qty">{{ eod.cancel_count or 0 }}</span></div>
+              <div class="kv-eod-thermal-row"><span>Giá trị hủy</span><span>0</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </dialog>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}<div class="cabin-flashes" role="status">{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}<button type="button" id="cabin-dismiss-flash" aria-label="Đóng thông báo">{{ icon('close', 16) }}</button></div>{% endif %}
+    {% endwith %}
+    <main class="cabin-main">{% block content %}{% endblock %}</main>
+  </div>
+  <script src="{{ url_for('static', filename='js/cabin.js') }}" defer></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

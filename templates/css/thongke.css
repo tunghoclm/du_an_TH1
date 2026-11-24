@@ -1,27 +1,334 @@
-/* thongke.css — riêng cho trang Thống kê (phần chung nằm trong theme.css) */
+/* Trang Doanh thu & Báo cáo thống kê (KiotViet Report Layout) */
+.kv-report-page {
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
 
-/* bộ lọc thời gian nằm ở đầu khung Doanh thu */
-.range-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.range-label { color: var(--muted); font-size: 13px; }
-.range-label strong { color: var(--navy); }
-.range-select { width: auto; min-width: 150px; }
-.custom-dates { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.custom-dates[hidden] { display: none; }
-.custom-dates .input { width: auto; }
+.kv-report-left {
+  display: grid;
+  gap: 12px;
+}
 
-/* các thẻ số liệu nằm trong khung (không đổ bóng thêm) */
-.stats.flat { margin-bottom: 0; }
-.stats.flat .stat { box-shadow: none; border: 1px solid var(--line); align-items: flex-start; }
-.stats.flat .stat b { white-space: nowrap; }
+.kv-report-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 28px;
+  color: #15171a;
+}
 
-/* khu vực */
-.area-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-.area-card { border: 1px solid var(--line); border-radius: 14px; padding: 18px; background: #fff; }
-.area-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
-.area-card-header h3 { font-size: 16px; color: var(--navy); margin-bottom: 3px; }
-.area-card-header span { color: var(--muted); font-size: 13px; }
-.area-card-header strong { font-size: 22px; color: var(--navy); }
-.progress-bar { height: 10px; background: #e6ebf6; border-radius: 999px; overflow: hidden; margin-bottom: 14px; }
-.progress-fill { height: 100%; background: linear-gradient(90deg, var(--blue), var(--navy-2)); border-radius: 999px; }
-.area-info { display: flex; justify-content: space-between; font-size: 13.5px; color: #55607a; }
-.area-info strong { color: var(--text); }
+.kv-report-sidebar {
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: -8px 8px 24px rgba(0, 0, 0, 0.04);
+  display: grid;
+  gap: 16px;
+}
+
+.kv-filter-card {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #eceef1;
+}
+
+.kv-filter-card:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.kv-filter-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #15171a;
+}
+
+.kv-filter-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #292e35;
+  cursor: pointer;
+}
+
+.kv-filter-radio input {
+  width: auto;
+  height: auto;
+  margin: 0;
+  accent-color: #0070f4;
+}
+
+.kv-filter-select,
+.kv-filter-date {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #d1d5da;
+  border-radius: 8px;
+  background: #fff;
+  color: #15171a;
+  font-size: 13px;
+}
+
+.kv-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 9999px;
+  background: #e6f1fe;
+  color: #0070f4;
+  font-size: 12px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.kv-filter-custom-dates {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.kv-filter-custom-dates label {
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+  color: #7b8594;
+  font-weight: 600;
+}
+
+/* Right Content Area */
+.kv-report-main {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.kv-report-topbar {
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.kv-report-topbar-info {
+  font-size: 13px;
+  color: #525d6a;
+}
+
+.kv-report-topbar-info b {
+  color: #15171a;
+}
+
+.kv-report-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Chart Mode */
+.kv-report-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kv-report-kpi {
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 4px;
+}
+
+.kv-report-kpi span {
+  font-size: 12px;
+  color: #7b8594;
+  font-weight: 500;
+}
+
+.kv-report-kpi strong {
+  font-size: 20px;
+  font-weight: 700;
+  color: #15171a;
+}
+
+.kv-report-kpi small {
+  font-size: 11px;
+  color: #525d6a;
+}
+
+/* KiotViet Telerik-style Report Viewer Mode */
+.kv-trv-viewer {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #7f7f7f;
+  background: #909090;
+}
+
+.kv-trv-nav {
+  background: #7d7d7d;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #6b6b6b;
+}
+
+.kv-trv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .12s;
+}
+
+.kv-trv-btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
+}
+
+.kv-trv-canvas {
+  background: #909090;
+  padding: 18px 20px 40px;
+}
+
+.kv-trv-sheet {
+  background: #fff;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 22px 26px 32px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+  font-family: Arial, Helvetica, sans-serif;
+  color: #333;
+}
+
+.kv-trv-timestamp {
+  font-size: 12px;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.kv-trv-header {
+  text-align: center;
+  margin-bottom: 18px;
+}
+
+.kv-trv-header h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #292929;
+}
+
+.kv-trv-header p {
+  margin: 2px 0;
+  font-size: 12px;
+  color: #333;
+}
+
+.kv-trv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 18px;
+}
+
+.kv-trv-table thead th {
+  background: #b2e8ff;
+  border-bottom: 1px solid #abd3e1;
+  color: #333;
+  font-weight: 700;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.kv-trv-table thead th.right,
+.kv-trv-table td.right {
+  text-align: right;
+}
+
+.kv-trv-total td {
+  background: #f2eed6;
+  border-bottom: 1px solid #cacaca;
+  font-weight: 700;
+  padding: 9px 10px;
+  color: #333;
+}
+
+.kv-trv-total td.net {
+  color: #2173ad;
+}
+
+.kv-trv-table tbody tr.kv-trv-row td {
+  background: #fff;
+  border-bottom: 1px solid #cacaca;
+  padding: 8px 10px;
+  color: #333;
+}
+
+.kv-trv-section-title {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #292929;
+}
+
+@media (max-width: 960px) {
+  .kv-report-page {
+    grid-template-columns: 1fr;
+  }
+  .kv-report-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .kv-report-kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .kv-report-left,
+  .kv-report-topbar,
+  .kv-trv-nav {
+    display: none !important;
+  }
+  .kv-report-page {
+    grid-template-columns: 1fr;
+  }
+  .kv-trv-viewer,
+  .kv-trv-canvas {
+    background: #fff;
+    border: 0;
+    padding: 0;
+  }
+  .kv-trv-sheet {
+    box-shadow: none;
+    padding: 0;
+  }
+}

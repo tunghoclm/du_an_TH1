@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Smart Parking | Quản lý bãi xe thông minh{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/images/logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/theme.css">
+  {% block extra_css %}{% endblock %}
+  <link rel="stylesheet" href="/css/navigation.css">
+  <link rel="stylesheet" href="/css/support.css">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  {% set _fullname = current_user_fullname or session.get('username') or 'Người dùng' %}
+  {% set _words = _fullname.split() %}
+  {% set _initials = (_words[-2][0] ~ _words[-1][0])|upper if _words|length >= 2 else (_fullname[:2]|upper) %}
+  {% set _is_staff = current_user_role in ('admin', 'manager') %}
+  {% set _is_admin = current_user_role == 'admin' %}
+
+  <div class="app-shell" id="app-shell">
+    <div class="app-body">
+      {% include "_navigation.html" %}
+
+      <main class="main-content">
+        <div class="visually-hidden">{% block breadcrumb %}Tổng quan{% endblock %}</div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-list">
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">
+                  <span>{{ message }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+
+        <footer class="page-footer">
+          <span>
+            © 2026 Smart Parking. Quản lý thông minh, vận hành an tâm.
+          </span>
+          <span>
+            <span class="live-dot"></span>
+            Hệ thống trực tuyến
+          </span>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  {% include '_support_widget.html' %}
+  <script src="/static/js/navigation.js" defer></script>
+  <script src="/static/js/support.js" defer></script>
+  <script>
+    (function () {
+      document.querySelectorAll('[data-table-search]').forEach(function (input) {
+        var panel = input.closest('.data-panel');
+        if (!panel) return;
+        var tbody = panel.querySelector('tbody');
+        if (!tbody) return;
+        input.addEventListener('input', function () {
+          var q = (input.value || '').trim().toLowerCase();
+          tbody.querySelectorAll('tr').forEach(function (tr) {
+            if (tr.querySelector('.empty-cell')) return;
+            tr.hidden = q && tr.textContent.toLowerCase().indexOf(q) === -1;
+          });
+        });
+      });
+    })();
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

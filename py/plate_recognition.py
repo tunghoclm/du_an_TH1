@@ -1,216 +1,334 @@
+"""YOLO + EasyOCR, with bounded live/accurate profiles and optional cloud fallback.
+
+Clear plate rows bypass CRAFT. Uncertain uploads try geometric and lighting
+alternatives. Coordinates stay in the original image; shared models are locked.
 """
-plate_recognition.py
-Module nhận diện biển số xe bằng OpenCV (xử lý ảnh, tìm vùng biển số)
-kết hợp với EasyOCR (deep learning) để đọc ký tự.
+from collections import Counter, namedtuple
+import logging
+import os
+import threading
+import time
 
-Vì sao dùng EasyOCR thay vì Tesseract-OCR?
- - Tesseract được huấn luyện chủ yếu cho văn bản in tài liệu (sách, giấy tờ),
-   nên với biển số xe (font đặc thù, ảnh nghiêng, ánh sáng không đều,
-   nền/khung viền) độ chính xác thường rất thấp nếu không tinh chỉnh nhiều.
- - EasyOCR dùng mô hình deep learning (CRAFT để detect text + CRNN để đọc),
-   chịu được xoay/nghiêng, ánh sáng khác nhau tốt hơn nhiều, mà vẫn miễn phí,
-   mã nguồn mở, cài đặt thuần Python (không cần cài thêm phần mềm hệ thống
-   như Tesseract).
-
-Nếu đặt biến môi trường PLATE_API_TOKEN thì thử nhận diện bằng API đám mây trước (xem plate_api.py);
-API lỗi / không đọc được thì tự quay về quy trình EasyOCR bên dưới.
-
-Quy trình:
- 1. Đọc ảnh -> chuyển xám -> khử nhiễu (bilateral filter)
- 2. Dò cạnh (Canny) -> tìm contour hình chữ nhật (khung biển số)
- 3. Cắt vùng biển số -> phóng to
- 4. Đưa vào EasyOCR để đọc ký tự (giới hạn bảng ký tự = chữ+số biển số)
- 5. Gom các ô chữ thành từng dòng, ghép lại và đặt dấu '-' đúng chỗ (vd 61T3-2222, 51F-12345)
- 6. Nếu đọc vùng cắt thất bại -> fallback đọc lại trên toàn ảnh gốc
-"""
-
-import re
 import cv2
 import easyocr
+import torch
 
 import plate_api
+import plate_preprocess
+import plate_yolo
 from config import EASYOCR_DIR
-from plate_utils import plate_key, assemble_plate, normalize_plate, fix_ocr_plate
+from plate_utils import plate_key, assemble_plate, normalize_plate, fix_ocr_plate, is_valid_plate_format
 
-# Khởi tạo Reader MỘT LẦN DUY NHẤT ở mức module (nạp model rất tốn thời gian,
-# nếu khởi tạo lại mỗi lần gọi hàm sẽ rất chậm).
-# gpu=False để chạy được trên máy không có GPU/CUDA (demo). Nếu máy có GPU, đổi thành True.
-_reader = easyocr.Reader(['en'], gpu=False, model_storage_directory=EASYOCR_DIR,
-                         user_network_directory=EASYOCR_DIR)
-
-# Chỉ cho phép các ký tự thường xuất hiện trên biển số (chữ cái không dấu + số).
-# Có thêm '-' và '.' (dấu gạch, dấu chấm in trên biển): nếu không cho phép, OCR sẽ ép các dấu này
-# thành một chữ/số khác (thường là '1', 'I', 'T') làm sai biển số. Sau khi đọc, các dấu sẽ được
-# chuẩn hóa lại bằng plate_utils (đặt dấu '-' đúng chỗ giữa series và số).
+_Cand = namedtuple('_Cand', 'text conf img rect rows engine', defaults=['easyocr'])
+_INFERENCE_LOCK = threading.RLock()
+_gpu = os.environ.get('PLATE_GPU', 'auto').strip().lower()
+_reader = easyocr.Reader(['en'], gpu=torch.cuda.is_available() if _gpu == 'auto' else _gpu in ('1', 'true', 'yes'),
+                         model_storage_directory=EASYOCR_DIR, user_network_directory=EASYOCR_DIR)
 PLATE_ALLOWLIST = 'ABCDEFGHKLMNPRSTUVXYZ0123456789-.'
+PAD_FRAC = 0.15
+MAX_OCR_SIDE = 640
+LOG = logging.getLogger(__name__)
 
 
-def preprocess_image(image_path: str):
-    img = cv2.imread(image_path)
-    if img is None:
-        raise ValueError(f"Không đọc được ảnh: {image_path}")
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.bilateralFilter(gray, 11, 17, 17)
-    edged = cv2.Canny(gray, 30, 200)
-    return img, gray, edged
-
-
-def find_plate_contour(edged):
-    """Tìm contour 4 cạnh lớn nhất - giả định đó là khung biển số."""
-    contours, _ = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:10]
-
-    for c in contours:
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-        if len(approx) == 4:
-            return approx
-    return None
-
-
-def crop_plate(img, contour):
-    if contour is None:
-        return img  # fallback: dùng cả ảnh gốc nếu không tìm được khung
-    x, y, w, h = cv2.boundingRect(contour)
-    # Bỏ qua vùng quá nhỏ (khả năng không phải biển số)
-    if w < 40 or h < 15:
-        return img
-    return img[y:y + h, x:x + w]
-
-
-def clean_plate_text(text: str) -> str:
-    """Chỉ giữ chữ hoa + số (không dấu '-'), dùng để đo độ dài / so khớp."""
+def clean_plate_text(text):
     return plate_key(text)
 
 
 def group_rows(results):
-    """Gom các ô chữ EasyOCR tìm được thành từng DÒNG (trên -> dưới, trái -> phải).
-    Biển xe máy có 2 dòng: dòng trên '61-T3', dòng dưới '2222'."""
     items = []
     for bbox, text, conf in results:
-        ys = [p[1] for p in bbox]
-        xs = [p[0] for p in bbox]
-        items.append({'text': text, 'y': sum(ys) / len(ys), 'h': max(ys) - min(ys), 'x': min(xs)})
+        xs, ys = [p[0] for p in bbox], [p[1] for p in bbox]
+        items.append(dict(text=text, x=min(xs), y=sum(ys) / len(ys), h=max(ys) - min(ys)))
     if not items:
         return []
-
     items.sort(key=lambda it: it['y'])
-    heights = sorted(it['h'] for it in items)
-    row_gap = 0.6 * heights[len(heights) // 2]          # lệch tâm theo chiều dọc quá 60% chiều cao chữ -> dòng mới
-
-    rows, current = [], [items[0]]
+    gap = 0.6 * sorted(it['h'] for it in items)[len(items) // 2]
+    groups = [[items[0]]]
     for it in items[1:]:
-        mean_y = sum(c['y'] for c in current) / len(current)
-        if abs(it['y'] - mean_y) <= row_gap:
-            current.append(it)
+        if abs(it['y'] - sum(c['y'] for c in groups[-1]) / len(groups[-1])) <= gap:
+            groups[-1].append(it)
         else:
-            rows.append(current)
-            current = [it]
-    rows.append(current)
-    return [' '.join(c['text'] for c in sorted(r, key=lambda c: c['x'])) for r in rows]
+            groups.append([it])
+    return [' '.join(c['text'] for c in sorted(row, key=lambda c: c['x'])) for row in groups]
+
+
+def _ocr_result(results):
+    if not results:
+        return '', 0.0, []
+    rows = group_rows(results)
+    weights = [max(1, len(plate_key(r[1]))) for r in results]
+    confidence = sum(float(r[2]) * n for r, n in zip(results, weights)) / sum(weights)
+    return assemble_plate(rows), confidence, rows
 
 
 def ocr_read(image, allowlist=PLATE_ALLOWLIST):
-    """Chạy EasyOCR trên 1 ảnh. Trả về (biển số đã định dạng có dấu '-', điểm tin cậy trung bình 0-1)."""
-    results = _reader.readtext(image, detail=1, allowlist=allowlist)
-    if not results:
-        return '', 0.0
-    confidences = [r[2] for r in results]
-    avg_conf = sum(confidences) / len(confidences)
-    return assemble_plate(group_rows(results)), avg_conf
+    return _ocr_result(_reader.readtext(image, detail=1, allowlist=allowlist,
+                                       canvas_size=1280, workers=0, decoder='greedy'))
 
 
-def _contour_rect(contour):
-    """Contour -> (x, y, w, h), hoặc None nếu không có / quá nhỏ."""
-    if contour is None:
+def _expand_rect(rect, frac, shape):
+    x, y, w, h = rect
+    height, width = shape[:2]
+    x0, y0 = max(0, int(x - frac * w)), max(0, int(y - frac * h))
+    x1, y1 = min(width, int(x + w + frac * w)), min(height, int(y + h + frac * h))
+    return x0, y0, max(0, x1 - x0), max(0, y1 - y0)
+
+
+def crop_plate(img, rect):
+    if rect is None:
+        return img
+    x, y, w, h = _expand_rect(rect, PAD_FRAC, img.shape)
+    crop = img[y:y + h, x:x + w]
+    return crop if crop.size else img
+
+
+def _resize(crop, max_side):
+    scale = min(3.0, max_side / max(crop.shape[:2]))
+    if abs(scale - 1) < 0.02:
+        return crop
+    return cv2.resize(crop, None, fx=scale, fy=scale,
+                      interpolation=cv2.INTER_CUBIC if scale > 1 else cv2.INTER_AREA)
+
+
+def _valid(c):
+    return is_valid_plate_format(c.text, len(c.rows))
+
+
+def _score(text, confidence, rows=()):
+    return (is_valid_plate_format(text, len(rows)), confidence, min(len(plate_key(text)), 9))
+
+
+def _best(candidates):
+    votes = Counter(plate_key(c.text) for c in candidates if _valid(c) and c.conf >= 0.45)
+    return max(candidates, key=lambda c: (_valid(c), votes[plate_key(c.text)] >= 2,
+                                         c.conf, min(len(plate_key(c.text)), 9)))
+
+
+def _read_crop(crop, rect, fast=False, direct=True, engine='easyocr', detect=True):
+    image = _resize(crop, MAX_OCR_SIDE)
+    candidates = []
+    if direct and rect is not None:
+        boxes = plate_preprocess.text_rows(image)
+        if boxes:
+            result = _ocr_result(_reader.recognize(image, horizontal_list=boxes, free_list=[],
+                                                  allowlist=PLATE_ALLOWLIST, detail=1, workers=0))
+            cand = _Cand(*result[:2], image, rect, result[2], 'easyocr-rows')
+            candidates.append(cand)
+            if _valid(cand) and cand.conf >= (0.75 if fast else 0.85):
+                return cand
+    if not detect:
+        return candidates[0] if candidates else _Cand('', 0.0, image, rect, [], engine)
+    text, conf, rows = ocr_read(image)
+    candidates.append(_Cand(text, conf, image, rect, rows, engine))
+    return _best(candidates)
+
+
+def _use_yolo():
+    return os.environ.get('PLATE_DETECTOR', 'auto').lower() != 'contour' and plate_yolo.is_available()
+
+
+def find_plate_contour(edged):
+    contours, _ = cv2.findContours(edged, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in sorted(contours, key=cv2.contourArea, reverse=True)[:30]:
+        quad = cv2.approxPolyDP(contour, 0.025 * cv2.arcLength(contour, True), True)
+        x, y, w, h = cv2.boundingRect(quad)
+        if (len(quad) == 4 and cv2.isContourConvex(quad) and w >= 40 and h >= 15
+                and 1.1 <= w / h <= 6.5 and cv2.contourArea(quad) >= 0.45 * w * h):
+            return quad
+    return None
+
+
+def _contour_rect(image, *, strict=False):
+    regions = plate_preprocess.plate_regions(image, limit=1)
+    if regions:
+        return regions[0]
+    if strict:
         return None
-    x, y, w, h = cv2.boundingRect(contour)
-    return (x, y, w, h) if (w >= 40 and h >= 15) else None
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(cv2.GaussianBlur(gray, (3, 3), 0), 40, 160)
+    contour = find_plate_contour(edges)
+    return cv2.boundingRect(contour) if contour is not None else None
 
 
-def _recognize_api(img, image_path: str):
-    """Thử nhận diện bằng API. Trả về (biển số, ảnh vùng biển, rect) hoặc None nếu không dùng được."""
-    if not plate_api.is_enabled():
+def _fast_crop(img, rect, detection, ratio, yolo):
+    x, y, w, h = rect
+    tight = img[y:y+h, x:x+w]
+    padded = crop_plate(img, rect)
+    candidates = []
+    # Two cheap recognizer passes retain the original character detail. CRAFT
+    # is reserved for crops whose row segmentation cannot yield a valid plate.
+    for crop in (padded, plate_preprocess.enhance(tight)):
+        candidate = _read_crop(crop, rect, fast=True, detect=False)
+        candidates.append(candidate)
+        if _valid(candidate) and candidate.conf >= 0.75:
+            return candidate
+    best = _best(candidates)
+    if _valid(best):
+        return best
+    if yolo:
+        border = _contour_rect(detection, strict=True)
+        if border is not None:
+            border = tuple(int(round(v / ratio)) for v in border) if ratio < 1 else border
+            if border != rect:
+                candidate = _read_crop(plate_preprocess.enhance(crop_plate(img, border)), border, fast=True)
+                candidates.append(candidate)
+                if _valid(candidate):
+                    return _best(candidates)
+    corrected = plate_preprocess.rectify_detected(img, rect)
+    if corrected is not None:
+        recovered, recovered_rect = corrected
+        candidate = _read_crop(plate_preprocess.enhance(recovered), recovered_rect, fast=True,
+                               engine='easyocr-perspective')
+    else:
+        candidate = _read_crop(plate_preprocess.enhance(tight), rect, fast=True, direct=False)
+    return _best(candidates + [candidate])
+
+
+def _recognize_api(img, image_path, fast=False):
+    if not plate_api.is_enabled() or (fast and os.environ.get('PLATE_API_CAMERA', '0') != '1'):
         return None
     try:
-        raw, rect, _score = plate_api.recognize(image_path)
-    except Exception as e:                       # mạng lỗi, sai token, hết hạn mức... -> dùng EasyOCR
-        print(f'[plate_api] Lỗi gọi API, chuyển sang EasyOCR: {e}')
+        raw, rect, score = plate_api.recognize(image_path, min_interval=3 if fast else 0)
+    except plate_api.ApiUnavailable:
+        return None
+    except Exception as error:
+        LOG.warning('Plate API unavailable; using local OCR (%s)', type(error).__name__)
         return None
     plate = fix_ocr_plate(normalize_plate(raw))
-    if len(plate_key(plate)) < 5:
+    if not is_valid_plate_format(plate) or score < plate_api.min_score():
         return None
-    if rect and rect[2] > 0 and rect[3] > 0:
-        x, y, w, h = rect
-        crop = img[max(0, y):y + h, max(0, x):x + w]
-        if crop.size == 0:
-            crop = img
-    else:
-        crop = img
-    return plate, crop, rect
+    if rect:
+        rect = _expand_rect(rect, 0, img.shape)
+        if rect[2] < 1 or rect[3] < 1:
+            rect = None
+    return _Cand(plate, float(score), crop_plate(img, rect), rect, [raw], 'plate-recognizer')
 
 
-def _recognize(image_path: str):
-    """Chạy toàn bộ quy trình, trả về (biển số, ảnh vùng biển số, rect (x,y,w,h) hoặc None, ảnh gốc)."""
-    img, gray, edged = preprocess_image(image_path)
+def _local(img, fast=False):
+    # Detect on a bounded copy; OCR the original crop, preserving 4K detail.
+    ratio = min(1.0, (1280 if fast else 1920) / max(img.shape[:2]))
+    detection = cv2.resize(img, None, fx=ratio, fy=ratio) if ratio < 1 else img
+    yolo = _use_yolo()
+    rect = plate_yolo.detect_best(detection) if yolo else None
+    if rect is None:
+        rect = _contour_rect(detection, strict=fast)
+    if rect is not None and ratio < 1:
+        rect = tuple(int(round(v / ratio)) for v in rect)
+    if fast and rect is None:
+        return _Cand('', 0.0, detection, None, [], 'easyocr')
+    if rect is None:
+        image = _resize(img, 960 if fast else 1280)
+        text, conf, rows = ocr_read(image)
+        return _Cand(text, conf, image, None, rows, 'easyocr')
 
-    via_api = _recognize_api(img, image_path)
-    if via_api is not None:
-        plate, crop, rect = via_api
-        return plate, crop, rect, img
+    if fast:
+        return _fast_crop(img, rect, detection, ratio, yolo)
 
-    contour = find_plate_contour(edged)
-    plate_img = crop_plate(img, contour)
+    seed = _fast_crop(img, rect, detection, ratio, yolo)
+    if _valid(seed) and seed.conf >= 0.80:
+        return seed
 
-    # Phóng to giúp EasyOCR đọc chính xác hơn với ảnh có độ phân giải thấp
-    plate_img_big = cv2.resize(plate_img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    crop = crop_plate(img, rect)
+    original = _read_crop(plate_preprocess.enhance(crop), rect, fast)
+    if _valid(original) and original.conf >= (0.75 if fast else 0.85):
+        return original
+    candidates = [seed, original]
+    # Some plate detectors return just the digits of one row. A cheap border
+    # fallback recovers the full plate before any expensive lighting retries.
+    if yolo and not _valid(original):
+        border = _contour_rect(detection)
+        if border is not None:
+            border = tuple(int(round(v / ratio)) for v in border) if ratio < 1 else border
+            if border != rect:
+                cand = _read_crop(plate_preprocess.enhance(crop_plate(img, border)), border, fast)
+                candidates.append(cand)
+                if _valid(cand) and cand.conf >= 0.85:
+                    return cand
+    corrected = plate_preprocess.rectify_detected(img, rect)
+    if corrected is not None:
+        recovered, recovered_rect = corrected
+        cand = _read_crop(plate_preprocess.enhance(recovered), recovered_rect, fast, engine='easyocr-perspective')
+        candidates.append(cand)
+        if _valid(cand) and cand.conf >= 0.85:
+            return cand
+    # Small live retry budget: the next frame often improves focus.
+    for index, (name, variant) in enumerate(plate_preprocess.recovery_variants(_resize(crop, MAX_OCR_SIDE))):
+        if fast and index >= 1:
+            break
+        cand = _read_crop(variant, rect, fast, engine='easyocr-' + name)
+        candidates.append(cand)
+        winner = _best(candidates)
+        if _valid(winner) and (winner.conf >= 0.90 or
+                              sum(plate_key(c.text) == plate_key(winner.text) and c.conf >= 0.55
+                                  for c in candidates) >= 2):
+            return winner
+    winner = _best(candidates)
+    if not fast and not _valid(winner):
+        image = _resize(img, 1280)
+        text, conf, rows = ocr_read(image)
+        candidates.append(_Cand(text, conf, image, rect, rows, 'easyocr-full'))
+    return _best(candidates)
 
-    plate_text, confidence = ocr_read(plate_img_big)
 
-    # Nếu kết quả quá ngắn hoặc độ tin cậy thấp (khả năng cắt sai vùng),
-    # thử đọc lại trên toàn bộ ảnh gốc rồi chọn kết quả tốt hơn.
-    if len(plate_key(plate_text)) < 5 or confidence < 0.4:
-        fallback_text, confidence_full = ocr_read(img)
-        if len(plate_key(fallback_text)) > len(plate_key(plate_text)) or confidence_full > confidence:
-            plate_text = fallback_text
-
-    return plate_text, plate_img_big, _contour_rect(contour), img
-
-
-def recognize_plate(image_path: str):
-    """
-    Nhận diện biển số từ file ảnh bằng EasyOCR.
-    Trả về: (chuoi_bien_so_da_lam_sach, anh_vung_bien_so_da_cat)
-    """
-    plate_text, plate_img_big, _, _ = _recognize(image_path)
-    return plate_text, plate_img_big
+def _run(image_path, fast=False, *, camera=False):
+    started = time.perf_counter()
+    img = cv2.imread(image_path)
+    if img is None:
+        raise ValueError('Cannot read image')
+    mode = os.environ.get('PLATE_API_MODE', 'fallback').strip().lower()
+    allow_api = not camera or os.environ.get('PLATE_API_CAMERA', '0') == '1'
+    with _INFERENCE_LOCK:
+        result = _recognize_api(img, image_path, fast) if mode == 'first' and allow_api else None
+        if result is None:
+            result = _local(img, fast)
+            if allow_api and mode not in ('off', 'first') and (not _valid(result) or result.conf < 0.80):
+                remote = _recognize_api(img, image_path, fast)
+                if remote is not None:
+                    result = remote
+    return result, img, round((time.perf_counter() - started) * 1000)
 
 
-def recognize_plate_annotated(image_path: str, max_width: int = 900):
-    """
-    Giống recognize_plate nhưng trả về ảnh GỐC có vẽ khung xanh quanh biển số và chữ biển số
-    (để hiển thị xem trước trên web). Trả về: (chuoi_bien_so, anh_da_danh_dau)
-    """
-    plate_text, _, rect, img = _recognize(image_path)
+def _recognize(image_path):
+    result, img, _ = _run(image_path)
+    return result.text, result.img, result.rect, img
+
+
+def recognize_plate(image_path):
+    plate, crop, _, _ = _recognize(image_path)
+    return plate, crop
+
+
+def recognize_plate_annotated(image_path, max_width=900):
+    plate, _, rect, img = _recognize(image_path)
+    return plate, _annotate_plate(img, plate, rect, max_width)
+
+
+def recognize_plate_live(image_path, max_width=900, *, details=False, accurate=False):
+    result, img, elapsed = _run(image_path, fast=not accurate, camera=True)
+    height, width = img.shape[:2]
+    values = (result.text, _annotate_plate(img, result.text, result.rect, max_width), result.rect, width, height)
+    if details:
+        return (*values, dict(confidence=round(result.conf, 3), engine=result.engine, elapsed_ms=elapsed))
+    return values
+
+
+def _annotate_plate(img, plate_text, rect, max_width=900):
     out = img.copy()
-    h_img, w_img = out.shape[:2]
-    scale = max(1.0, w_img / 600.0)          # nét vẽ dày hơn với ảnh lớn
-    thickness = max(2, int(round(2 * scale)))
-
+    height, width = out.shape[:2]
+    scale = max(1.0, width / 600)
+    thickness = max(2, round(2 * scale))
     if rect is not None:
         x, y, w, h = rect
         cv2.rectangle(out, (x, y), (x + w, y + h), (0, 200, 0), thickness)
-        if plate_text:
-            ty = y - int(8 * scale)
-            if ty < int(20 * scale):          # sát mép trên -> đặt chữ bên dưới khung
-                ty = y + h + int(24 * scale)
-            cv2.putText(out, plate_text, (x, min(ty, h_img - 5)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7 * scale, (0, 255, 255), thickness)
-    elif plate_text:
-        cv2.putText(out, plate_text, (10, int(30 * scale)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7 * scale, (0, 255, 255), thickness)
-
-    if w_img > max_width:                     # thu nhỏ ảnh xem trước cho nhẹ
-        ratio = max_width / float(w_img)
-        out = cv2.resize(out, (max_width, int(h_img * ratio)), interpolation=cv2.INTER_AREA)
-    return plate_text, out
+        ty = y - int(8 * scale)
+        if ty < 20 * scale:
+            ty = y + h + int(24 * scale)
+        position = (x, min(ty, height - 5))
+    else:
+        position = (10, int(30 * scale))
+    if plate_text:
+        cv2.putText(out, plate_text, position, cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7 * scale, (0, 255, 255), thickness)
+    if width > max_width:
+        out = cv2.resize(out, (max_width, int(height * max_width / width)), interpolation=cv2.INTER_AREA)
+    return out

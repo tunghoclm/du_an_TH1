@@ -1,0 +1,112 @@
+<section class="panel kv-store-card" id="kv-sec-store">
+  <div class="panel-heading">
+    <div>
+      <h2>Thông tin bãi xe</h2>
+      <p>Thông tin định danh, liên hệ và địa điểm vận hành bãi đỗ xe</p>
+    </div>
+    <button type="button" class="btn btn-outline" id="open-edit-store">Chỉnh sửa</button>
+  </div>
+
+  <div class="kv-store-body">
+    <div class="kv-store-avatar-row">
+      <div class="kv-store-avatar" aria-hidden="true">SP</div>
+      <div>
+        <strong class="kv-store-title">{{ store_settings.store_name or 'Smart Parking' }}</strong>
+        <p class="kv-store-note">Thông tin hiển thị trên phiếu gửi xe, hóa đơn và mã VietQR.</p>
+      </div>
+    </div>
+
+    <dl class="kv-store-grid">
+      <div>
+        <dt>Địa chỉ truy cập</dt>
+        <dd><a href="{{ url_for('index') }}" class="kv-store-link">{{ request.host_url.rstrip('/') }}</a></dd>
+      </div>
+      <div>
+        <dt>Tên bãi xe</dt>
+        <dd>{{ store_settings.store_name or '--' }}</dd>
+      </div>
+      <div>
+        <dt>Điện thoại</dt>
+        <dd>{{ store_settings.store_phone or '--' }}</dd>
+      </div>
+      <div>
+        <dt>Email</dt>
+        <dd>{{ store_settings.store_email or '--' }}</dd>
+      </div>
+      <div>
+        <dt>Loại hình bãi xe</dt>
+        <dd>{{ store_settings.store_type or '--' }}</dd>
+      </div>
+      <div>
+        <dt>Địa chỉ</dt>
+        <dd>{{ store_settings.store_address or '--' }}</dd>
+      </div>
+      <div>
+        <dt>Tỉnh / Thành phố</dt>
+        <dd>{{ store_settings.store_province or '--' }}</dd>
+      </div>
+      <div>
+        <dt>Quận / Huyện</dt>
+        <dd>{{ store_settings.store_district or '--' }}</dd>
+      </div>
+      <div>
+        <dt>Phường / Xã</dt>
+        <dd>{{ store_settings.store_ward or '--' }}</dd>
+      </div>
+    </dl>
+  </div>
+</section>
+
+<dialog id="edit-store-dialog" class="customer-dialog kv-compact-dialog" aria-labelledby="edit-store-title">
+  <form method="post" action="{{ url_for('settings', section='store') }}">
+    <input type="hidden" name="setting_type" value="store">
+    <div class="customer-dialog-heading">
+      <h2 id="edit-store-title">Sửa thông tin bãi xe</h2>
+      <button type="button" data-close-dialog aria-label="Đóng">×</button>
+    </div>
+    <div class="customer-dialog-body">
+      <div class="customer-form-grid">
+        <div class="form-field">
+          <label for="store-host">Địa chỉ truy cập</label>
+          <input id="store-host" type="text" value="{{ request.host_url.rstrip('/') }}" disabled readonly>
+        </div>
+        <div class="form-field">
+          <label for="store-name">Tên bãi xe <span class="required">*</span></label>
+          <input id="store-name" name="store_name" value="{{ store_settings.store_name }}" required maxlength="160">
+        </div>
+        <div class="form-field">
+          <label for="store-phone">Điện thoại</label>
+          <input id="store-phone" type="tel" name="store_phone" value="{{ store_settings.store_phone }}" placeholder="Nhập số điện thoại" maxlength="32">
+        </div>
+        <div class="form-field">
+          <label for="store-email">Email</label>
+          <input id="store-email" type="email" name="store_email" value="{{ store_settings.store_email }}" placeholder="Nhập email" maxlength="120">
+        </div>
+        <div class="form-field">
+          <label for="store-type">Loại hình bãi xe</label>
+          <input id="store-type" name="store_type" value="{{ store_settings.store_type }}" placeholder="VD: Bãi xe thông minh 24/7" maxlength="120">
+        </div>
+        <div class="form-field">
+          <label for="store-address">Địa chỉ</label>
+          <input id="store-address" name="store_address" value="{{ store_settings.store_address }}" placeholder="Nhập số nhà, tên đường" maxlength="200">
+        </div>
+        <div class="form-field">
+          <label for="store-province">Tỉnh / Thành phố</label>
+          <input id="store-province" name="store_province" value="{{ store_settings.store_province }}" placeholder="VD: TP. Hồ Chí Minh" maxlength="120">
+        </div>
+        <div class="form-field">
+          <label for="store-district">Quận / Huyện</label>
+          <input id="store-district" name="store_district" value="{{ store_settings.store_district }}" placeholder="VD: Quận 5" maxlength="120">
+        </div>
+        <div class="form-field">
+          <label for="store-ward">Phường / Xã</label>
+          <input id="store-ward" name="store_ward" value="{{ store_settings.store_ward }}" placeholder="VD: Phường 4" maxlength="120">
+        </div>
+      </div>
+    </div>
+    <div class="customer-dialog-footer">
+      <button type="button" class="invoice-action" data-close-dialog>Bỏ qua</button>
+      <button type="submit" class="invoice-action invoice-action-primary">Lưu</button>
+    </div>
+  </form>
+</dialog>

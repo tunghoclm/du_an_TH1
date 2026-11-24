@@ -1,87 +1,365 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cài đặt - Smart Parking</title>
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='entry_exit.css') }}">
-</head>
-<body>
-<div class="wrap narrow">
+{% extends "_layout.html" %}
+{% set active_page = 'settings' %}
+{% block title %}{{ 'Thông tin bãi xe' if settings_section == 'store' else ('Cài đặt cổng' if settings_section == 'gates' else ('Tài khoản VietQR' if settings_section == 'payment' else 'Camera, Barrier & Máy in')) }} — Smart Parking{% endblock %}
+{% block breadcrumb %}Thiết lập{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/users.css">
+<link rel="stylesheet" href="/css/customers.css">
+<link rel="stylesheet" href="/css/settings-kv.css">
+<link rel="stylesheet" href="/css/employees.css">
+{% endblock %}
 
-    <!-- ============ TIÊU ĐỀ ============ -->
-    <header class="topbar">
-        <div class="topbar-left">
-            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
-            <div>
-                <h1>⚙️ Cài đặt hệ thống</h1>
-                <p>Lựa chọn của riêng bạn — không cần nhờ nhân viên hay admin</p>
-            </div>
-        </div>
-        <div class="topbar-right">
-            <div class="user-chip">
-                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
-                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
-            </div>
-        </div>
-    </header>
-
-    <!-- ============ THÔNG BÁO ============ -->
-    <div class="toasts" id="toasts">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-            <div class="toast toast-{{ category }}" role="status">
-                <span>{{ message }}</span>
-                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
-            </div>
-            {% endfor %}
-        {% endwith %}
+{% block content %}
+<div class="kv-settings-page">
+  <div class="kv-settings-header">
+    <h1>Thiết lập</h1>
+    <div class="kv-settings-search" role="search">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="search" id="kv-settings-search" placeholder="Tìm kiếm thiết lập" aria-label="Tìm kiếm thiết lập">
     </div>
+    <div></div>
+  </div>
 
-    <section class="panel">
-        <div class="panel-head">
-            <div>
-                <h2>Cách chọn vị trí đỗ khi xe vào bãi</h2>
-                <p>Chỉ áp dụng cho tài khoản của bạn khi dùng chức năng "Xe vào bãi". Người khác không bị ảnh hưởng.</p>
-            </div>
+  <div class="kv-settings-layout">
+    <!-- Cột trái: Danh mục thiết lập giống KiotViet -->
+    <aside class="kv-settings-sidebar" aria-label="Danh mục thiết lập">
+      <div class="kv-sidebar-group-title">Thiết bị &amp; Vận hành</div>
+      <a href="{{ url_for('settings', section='devices') }}"
+         class="kv-sidebar-link{% if settings_section == 'devices' %} active{% endif %}"
+         {% if settings_section == 'devices' %}aria-current="page"{% endif %}>
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+          <span>Camera, Barrier &amp; Máy in</span>
+        </span>
+      </a>
+
+      <div class="kv-sidebar-divider"></div>
+      <div class="kv-sidebar-group-title">Tiện ích</div>
+      <a href="{{ url_for('settings', section='payment') }}"
+         class="kv-sidebar-link{% if settings_section == 'payment' %} active{% endif %}"
+         {% if settings_section == 'payment' %}aria-current="page"{% endif %}>
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect width="6" height="6" x="3" y="3" rx="1"/><rect width="6" height="6" x="15" y="3" rx="1"/><rect width="6" height="6" x="3" y="15" rx="1"/><path d="M15 15h2v2h-2zM19 15h2v2h-2zM15 19h2v2h-2zM19 19h2v2h-2z"/></svg>
+          <span>Thanh toán &amp; VietQR</span>
+        </span>
+      </a>
+
+      <div class="kv-sidebar-divider"></div>
+      <div class="kv-sidebar-group-title">Bãi xe</div>
+      <a href="{{ url_for('settings', section='store') }}"
+         class="kv-sidebar-link{% if settings_section == 'store' %} active{% endif %}"
+         {% if settings_section == 'store' %}aria-current="page"{% endif %}>
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>Thông tin bãi xe</span>
+        </span>
+      </a>
+      <a href="{{ url_for('settings', section='gates') }}"
+         class="kv-sidebar-link{% if settings_section == 'gates' %} active{% endif %}"
+         {% if settings_section == 'gates' %}aria-current="page"{% endif %}>
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"/><path d="M2 20h20"/><path d="M8 10h8"/><path d="M12 4v16"/></svg>
+          <span>Cài đặt cổng</span>
+        </span>
+      </a>
+
+      <div class="kv-sidebar-divider"></div>
+      <div class="kv-sidebar-group-title">Quản lý</div>
+      <a href="{{ url_for('customers') }}" class="kv-sidebar-link">
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          <span>Khách hàng</span>
+        </span>
+        <span class="kv-sidebar-ext" aria-hidden="true">↗</span>
+      </a>
+      {% if current_user_role == 'admin' %}
+      <a href="{{ url_for('accounts') }}" class="kv-sidebar-link">
+        <span class="kv-sidebar-link-main">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+          <span>Quản lý nhân viên</span>
+        </span>
+        <span class="kv-sidebar-ext" aria-hidden="true">↗</span>
+      </a>
+      {% endif %}
+    </aside>
+
+    <!-- Cột giữa: Nội dung thiết lập -->
+    <main class="kv-settings-main" id="kv-settings-main">
+      {% if settings_section == 'devices' %}
+      <div class="kv-auto-entry-note">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <span><strong>Chế độ cổng vào tự động:</strong> Hệ thống tự động gán vị trí đỗ trống phù hợp khi xe vào bãi.</span>
+      </div>
+      {% endif %}
+
+      {% if settings_section == 'payment' %}
+        {% include '_settings_payment.html' %}
+      {% elif settings_section == 'store' %}
+        {% include '_settings_store.html' %}
+      {% elif settings_section == 'gates' %}
+        {% include '_settings_gates.html' %}
+      {% else %}
+        {% include '_settings_devices.html' %}
+      {% endif %}
+
+      <div class="kv-search-empty" id="kv-search-empty" hidden>
+        Không tìm thấy mục thiết lập phù hợp trong trang này.
+      </div>
+    </main>
+
+    <!-- Cột phải: Mục lục neo nhanh / Gợi ý giống KiotViet -->
+    <aside class="kv-settings-toc" aria-label="Mục lục thiết lập">
+      {% if settings_section == 'gates' %}
+        <div class="kv-right-tip-box">
+          <div class="kv-right-tip-head">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>
+            <span>Gợi ý</span>
+          </div>
+          <p>Thiết lập các cổng để phân tách làn vào/ra, phân công nhân viên trực ca và theo dõi doanh thu theo từng cổng tại bãi xe.</p>
+          <p class="kv-right-tip-sub">Chọn <strong>Tất cả các cổng</strong> ở góc trên bên phải để xem toàn bộ cổng; <strong>Cổng chính</strong> là cổng mặc định của bãi xe.</p>
         </div>
-        <div class="panel-body">
-            <form method="POST" id="settings-form">
-                <div class="mode-options">
-                    <label class="mode-option {{ 'selected' if entry_mode == 'auto' }}">
-                        <input type="radio" name="entry_mode" value="auto" {{ 'checked' if entry_mode == 'auto' }}>
-                        <div class="mode-icon">🤖</div>
-                        <div>
-                            <h4>Tự động chọn vị trí</h4>
-                            <p>Hệ thống tự động gán 1 vị trí trống bất kỳ cho xe vừa vào, không cần bạn chọn thủ công. Nhanh hơn, tiện khi cần gửi xe gấp.</p>
-                        </div>
-                    </label>
-
-                    <label class="mode-option {{ 'selected' if entry_mode == 'manual' or not entry_mode }}">
-                        <input type="radio" name="entry_mode" value="manual" {{ 'checked' if entry_mode == 'manual' or not entry_mode }}>
-                        <div class="mode-icon">🖐️</div>
-                        <div>
-                            <h4>Tự chọn vị trí</h4>
-                            <p>Bạn tự chọn vị trí cụ thể (theo khu A/B/C) khi gửi xe. Linh hoạt hơn, phù hợp khi muốn đỗ gần lối ra hoặc đúng khu mình thích.</p>
-                        </div>
-                    </label>
-                </div>
-
-                <button type="submit" class="btn btn-green submit-button">Lưu cài đặt</button>
-            </form>
-        </div>
-    </section>
+      {% else %}
+        <div class="kv-toc-title">Trong mục này</div>
+        <nav class="kv-toc-list" id="kv-toc-list"></nav>
+      {% endif %}
+    </aside>
+  </div>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
-    document.querySelectorAll('.mode-option input').forEach(function (input) {
-        input.addEventListener('change', function () {
-            document.querySelectorAll('.mode-option').forEach(function (el) { el.classList.remove('selected'); });
-            input.closest('.mode-option').classList.add('selected');
-        });
+(function () {
+  'use strict';
+  var main = document.getElementById('kv-settings-main');
+  var tocList = document.getElementById('kv-toc-list');
+  var searchInput = document.getElementById('kv-settings-search');
+  var emptyMsg = document.getElementById('kv-search-empty');
+  if (!main) return;
+
+  // Build Right Table of Contents from panel headings
+  var panels = Array.prototype.slice.call(main.querySelectorAll('.panel'));
+  if (tocList && panels.length) {
+    panels.forEach(function (panel, idx) {
+      var heading = panel.querySelector('h2, h3');
+      if (!heading) return;
+      if (!panel.id) panel.id = 'kv-sec-' + (idx + 1);
+      var link = document.createElement('a');
+      link.href = '#' + panel.id;
+      link.className = 'kv-toc-link' + (idx === 0 ? ' active' : '');
+      link.textContent = heading.textContent.trim();
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        tocList.querySelectorAll('.kv-toc-link').forEach(function (l) { l.classList.remove('active'); });
+        link.classList.add('active');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      tocList.appendChild(link);
     });
-    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
+  }
+
+  // Live filter setting panels
+  if (searchInput) {
+    searchInput.addEventListener('input', function () {
+      var q = (searchInput.value || '').trim().toLowerCase();
+      var visibleCount = 0;
+      panels.forEach(function (panel) {
+        var match = !q || panel.textContent.toLowerCase().indexOf(q) !== -1;
+        panel.hidden = !match;
+        if (match) visibleCount += 1;
+      });
+      if (emptyMsg) emptyMsg.hidden = visibleCount > 0;
+    });
+  }
+
+  // Store & Zones dialogs
+  function openDlg(dlg) {
+    if (!dlg) return;
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+  }
+  function closeDlg(dlg) {
+    if (!dlg) return;
+    if (typeof dlg.close === 'function') dlg.close();
+    else dlg.removeAttribute('open');
+  }
+  document.querySelectorAll('[data-close-dialog]').forEach(function (btn) {
+    btn.addEventListener('click', function () { closeDlg(btn.closest('dialog')); });
+  });
+  var editStoreBtn = document.getElementById('open-edit-store');
+  if (editStoreBtn) {
+    editStoreBtn.addEventListener('click', function () {
+      openDlg(document.getElementById('edit-store-dialog'));
+    });
+  }
+
+  var gateDlg = document.getElementById('gate-dialog');
+  var gateTitle = document.getElementById('gate-dialog-title');
+  var gateIdInput = document.getElementById('gate-id');
+  var gateCentralInput = document.getElementById('gate-is-central');
+  var gateNameInput = document.getElementById('gate-name');
+  var gateLaneInput = document.getElementById('gate-lane-type');
+  var gateLocationInput = document.getElementById('gate-location');
+  var gateHoursInput = document.getElementById('gate-hours');
+  var gateStatusInput = document.getElementById('gate-status');
+  var gateNoteInput = document.getElementById('gate-note');
+  var gateVtCheckboxes = Array.prototype.slice.call(document.querySelectorAll('#gate-vt-group input[name="vehicle_type_ids"]'));
+
+  function setSelectedVehicleTypes(csv) {
+    var set = {};
+    (csv || '').split(',').forEach(function (x) {
+      var t = x.trim();
+      if (t) set[t] = true;
+    });
+    gateVtCheckboxes.forEach(function (cb) {
+      cb.checked = !!set[cb.value];
+    });
+  }
+
+  document.querySelectorAll('[data-vt-preset]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var mode = btn.dataset.vtPreset;
+      if (mode === 'all') {
+        gateVtCheckboxes.forEach(function (cb) { cb.checked = false; });
+      } else {
+        gateVtCheckboxes.forEach(function (cb) { cb.checked = cb.dataset.wheel === mode; });
+      }
+    });
+  });
+
+  var addGateBtn = document.getElementById('open-add-gate');
+  if (addGateBtn && gateDlg) {
+    addGateBtn.addEventListener('click', function () {
+      if (gateTitle) gateTitle.textContent = 'Tạo cổng';
+      if (gateIdInput) gateIdInput.value = '';
+      if (gateCentralInput) gateCentralInput.value = '0';
+      if (gateNameInput) { gateNameInput.value = ''; gateNameInput.readOnly = false; }
+      if (gateLaneInput) gateLaneInput.value = 'gate_inout';
+      if (gateLocationInput) gateLocationInput.value = '';
+      setSelectedVehicleTypes('');
+      if (gateHoursInput) gateHoursInput.value = '24/7';
+      if (gateStatusInput) { gateStatusInput.value = 'active'; gateStatusInput.disabled = false; }
+      if (gateNoteInput) gateNoteInput.value = '';
+      openDlg(gateDlg);
+    });
+  }
+
+  document.querySelectorAll('[data-edit-gate]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!gateDlg) return;
+      var isCentral = btn.dataset.central === '1';
+      if (gateTitle) gateTitle.textContent = isCentral ? 'Cập nhật Cổng chính' : 'Cập nhật cổng';
+      if (gateIdInput) gateIdInput.value = btn.dataset.id || '';
+      if (gateCentralInput) gateCentralInput.value = isCentral ? '1' : '0';
+      if (gateNameInput) { gateNameInput.value = btn.dataset.name || ''; gateNameInput.readOnly = isCentral; }
+      if (gateLaneInput) gateLaneInput.value = btn.dataset.zone_type || 'gate_inout';
+      if (gateLocationInput) gateLocationInput.value = btn.dataset.location || '';
+      setSelectedVehicleTypes(btn.dataset.vehicle_type_ids || btn.dataset.vehicle_type_id || '');
+      if (gateHoursInput) gateHoursInput.value = btn.dataset.operating_hours || '24/7';
+      if (gateStatusInput) { gateStatusInput.value = btn.dataset.status || 'active'; gateStatusInput.disabled = isCentral; }
+      if (gateNoteInput) gateNoteInput.value = btn.dataset.note || '';
+      openDlg(gateDlg);
+    });
+  });
+
+  // Inline row expansion (KiotViet #branch style)
+  var gateRows = Array.prototype.slice.call(document.querySelectorAll('.kv-gate-row'));
+  function toggleGateRow(row) {
+    var key = row.dataset.gateRow;
+    var detailRow = document.querySelector('.kv-gate-detail-row[data-gate-detail="' + key + '"]');
+    if (!detailRow) return;
+    var willOpen = detailRow.hidden;
+    document.querySelectorAll('.kv-gate-detail-row').forEach(function (dr) { dr.hidden = true; });
+    gateRows.forEach(function (r) {
+      r.classList.remove('is-expanded');
+      r.setAttribute('aria-expanded', 'false');
+    });
+    if (willOpen) {
+      detailRow.hidden = false;
+      row.classList.add('is-expanded');
+      row.setAttribute('aria-expanded', 'true');
+    }
+  }
+  gateRows.forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('a, button, input, select, form')) return;
+      toggleGateRow(row);
+    });
+    row.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleGateRow(row);
+      }
+    });
+  });
+
+  // Detail card tabs (Thông tin / Nhân viên)
+  document.querySelectorAll('.kv-gate-detail-card').forEach(function (card) {
+    var tabs = card.querySelectorAll('[data-detail-tab]');
+    var panes = card.querySelectorAll('[data-detail-pane]');
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var target = tab.dataset.detailTab;
+        tabs.forEach(function (t) {
+          var active = t === tab;
+          t.classList.toggle('active', active);
+          t.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        panes.forEach(function (p) {
+          var active = p.dataset.detailPane === target;
+          p.hidden = !active;
+          p.classList.toggle('active', active);
+        });
+      });
+    });
+  });
+
+  // Column visibility options popover
+  var colBtn = document.getElementById('kv-col-options-btn');
+  var colPop = document.getElementById('kv-col-options-popover');
+  var gatesTable = document.getElementById('kv-gates-table');
+  if (colBtn && colPop && gatesTable) {
+    var colStorageKey = 'kv_gates_visible_cols';
+    function applyColVisibility(col, visible) {
+      gatesTable.querySelectorAll('[data-col="' + col + '"]').forEach(function (cell) {
+        cell.hidden = !visible;
+      });
+    }
+    try {
+      var savedCols = JSON.parse(localStorage.getItem(colStorageKey) || 'null');
+      if (savedCols && typeof savedCols === 'object') {
+        colPop.querySelectorAll('[data-col-toggle]').forEach(function (cb) {
+          var col = cb.dataset.colToggle;
+          if (Object.prototype.hasOwnProperty.call(savedCols, col)) {
+            cb.checked = !!savedCols[col];
+            applyColVisibility(col, cb.checked);
+          }
+        });
+      }
+    } catch (err) {}
+    colPop.querySelectorAll('[data-col-toggle]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        applyColVisibility(cb.dataset.colToggle, cb.checked);
+        var state = {};
+        colPop.querySelectorAll('[data-col-toggle]').forEach(function (item) {
+          state[item.dataset.colToggle] = item.checked;
+        });
+        try { localStorage.setItem(colStorageKey, JSON.stringify(state)); } catch (err) {}
+      });
+    });
+    colBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var nextHidden = !colPop.hidden;
+      colPop.hidden = nextHidden;
+      colBtn.setAttribute('aria-expanded', nextHidden ? 'false' : 'true');
+    });
+    document.addEventListener('click', function (e) {
+      if (!colPop.hidden && !colPop.contains(e.target) && e.target !== colBtn) {
+        colPop.hidden = true;
+        colBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+})();
 </script>
-</body>
-</html>
+{% endblock %}

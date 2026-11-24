@@ -1,0 +1,102 @@
+[
+  {
+    "title": "Chào hỏi và phạm vi hỗ trợ",
+    "questions": ["Xin chào", "Chào bạn", "Bạn là ai?", "Bạn làm được gì?", "Trợ lý hỗ trợ những gì?"],
+    "answer": "Chào bạn! Tôi là trợ lý nội bộ của Smart Parking. Tôi có thể kiểm tra số ô đỗ trống hiện tại và hướng dẫn xe vào/ra, vé tháng, hóa đơn, bảng giá từ kho kiến thức đã huấn luyện. Tôi không tra cứu dữ liệu riêng của từng xe, tài khoản hoặc mở cổng. Bạn cần hỗ trợ chức năng nào?"
+  },
+  {
+    "title": "Ghi nhận xe vào",
+    "questions": ["Làm thế nào để ghi nhận xe vào?", "Hướng dẫn xe vào", "Cho xe vào bãi như thế nào?", "Cách nhập biển số xe vào", "Thủ tục nhận xe vào bãi", "Xe vào"],
+    "answer": "Admin hoặc nhân viên mở Cabin → Xe vào (/entry).\n1. Nhập biển số hoặc nhận diện từ ảnh/camera.\n2. Kiểm tra biển số, chọn loại xe và ô đỗ trống (nếu chọn vị trí thủ công).\n3. Bấm Xác nhận xe vào.\nChỉ sau khi xác nhận hệ thống mới ghi nhận lượt gửi; xe đang ở trong bãi không được ghi nhận vào lần nữa."
+  },
+  {
+    "title": "Ghi nhận xe ra",
+    "questions": ["Làm thế nào để ghi nhận xe ra?", "Hướng dẫn xe ra", "Còn xe ra?", "Cho xe ra bãi như thế nào?", "Thanh toán khi lấy xe", "Xe ra"],
+    "answer": "Admin hoặc nhân viên mở Cabin → Xe ra (/exit). Nhập hoặc nhận diện biển số, đối chiếu lượt gửi đang mở và phí hiển thị. Chọn phương thức thanh toán rồi bấm Xác nhận xe ra. Chỉ xe đang gửi trong bãi mới được xác nhận ra. Nếu thông tin không khớp, kiểm tra biển số và chọn Chat với đội ngũ."
+  },
+  {
+    "title": "Đăng ký và gia hạn vé tháng",
+    "questions": ["Đăng ký vé tháng ở đâu?", "Làm sao gia hạn vé tháng?", "Cách mua vé tháng", "Vé tháng hết hạn", "Hướng dẫn đăng ký vé tháng"],
+    "answer": "Nhân viên mở Khách hàng (/customers), chọn khách rồi vào Phương tiện & vé để đăng ký hoặc gia hạn vé tháng. Kiểm tra loại xe, biển số, thời hạn và số tiền trước khi lưu. Khách hàng xem xe và vé của mình trong Cài đặt; nếu cần hỗ trợ, chọn Chat với đội ngũ. Vé tháng còn hiệu lực được áp dụng khi tính phí lượt."
+  },
+  {
+    "title": "Tra cứu hóa đơn",
+    "questions": ["Tra cứu hóa đơn ở đâu?", "Cách xem hóa đơn", "Xuất hóa đơn CSV", "In phiếu thu gửi xe", "Tìm hóa đơn theo biển số"],
+    "answer": "Mở Hóa đơn (/invoices), tìm theo mã, biển số hoặc khách hàng và chọn khoảng thời gian. Mở chi tiết để kiểm tra phí, xuất CSV hoặc in phiếu thu. Khách hàng chỉ xem được hóa đơn liên quan đến xe của mình. Tôi không truy cập nội dung hóa đơn thực tế."
+  },
+  {
+    "title": "Bảng giá và cách tính phí",
+    "questions": ["Phí gửi xe tính thế nào?", "Xem bảng giá ở đâu?", "Giá gửi xe bao nhiêu?", "Cách cấu hình giá gửi xe", "Phí gửi qua đêm", "Giá vé tháng bao nhiêu?"],
+    "answer": "Mở Bảng giá (/pricing) để xem loại xe, khung thời gian và giá hiện hành. Bạn có thể hỏi tôi ước tính phí bằng cách nêu loại xe và giờ gửi, ví dụ: gửi xe máy từ 1h sáng đến 10h đêm hết bao nhiêu. Admin/nhân viên có thể chỉnh chính sách phí. Ước tính dùng bảng giá hiện hành; vé tháng còn hiệu lực cần được đối chiếu khi tính phí thực tế tại Xe ra."
+  },
+  {
+    "title": "Sơ đồ ô đỗ và chuyển xe",
+    "questions": ["Xem ô đỗ trống ở đâu?", "Làm sao chuyển xe sang ô khác?", "Sơ đồ bãi đỗ", "Cách chuyển vị trí xe", "Quản lý khu và ô đỗ"],
+    "answer": "Mở Bãi đỗ (/parking) để xem khu, ô trống và ô có xe. Bạn cũng có thể hỏi tôi số chỗ trống hiện tại của bãi hoặc một khu cụ thể. Admin/nhân viên chọn xe và thao tác chuyển sang ô phù hợp, rồi kiểm tra lại thông tin. Admin quản lý khu/ô và loại xe được phép. Tôi không tra cứu vị trí riêng của từng xe hoặc tự chuyển xe."
+  },
+  {
+    "title": "Bảo trì ô đỗ",
+    "questions": ["Đặt ô đỗ bảo trì như thế nào?", "Khóa ô đỗ để sửa chữa", "Cách bỏ bảo trì ô đỗ"],
+    "answer": "Admin/nhân viên mở Bãi đỗ (/parking), chọn ô cần xử lý và dùng thao tác bảo trì, nhập lý do nếu được yêu cầu. Kiểm tra xe đang ở ô trước khi thay đổi. Khi hoàn tất sửa chữa, bỏ trạng thái bảo trì để ô có thể được sử dụng lại."
+  },
+  {
+    "title": "Lịch sử gửi xe",
+    "questions": ["Xem lịch sử gửi xe ở đâu?", "Tra cứu lượt xe vào ra", "Lọc lịch sử theo biển số", "Lịch sử di chuyển xe", "Xem lịch sử"],
+    "answer": "Mở Lịch sử (/history), nhập biển số và chọn loại giao dịch, khoảng ngày hoặc khung giờ. Bạn có thể lọc theo thời gian vào hoặc thời gian ra/xóa để đối chiếu. Dữ liệu hiển thị phụ thuộc quyền của tài khoản."
+  },
+  {
+    "title": "Quản lý khách hàng",
+    "questions": ["Thêm khách hàng mới thế nào?", "Sửa hồ sơ khách hàng", "Quản lý phương tiện khách hàng", "Tạo khách hàng"],
+    "answer": "Admin/nhân viên mở Khách hàng (/customers). Dùng Thêm khách hàng để tạo hồ sơ hoặc chọn khách hiện có để sửa liên hệ, quản lý nhiều phương tiện và vé tháng. Kiểm tra biển số và người sở hữu trước khi lưu. Không gửi mật khẩu hay thông tin nhạy cảm vào chat."
+  },
+  {
+    "title": "Tài khoản nhân viên và phân quyền",
+    "questions": ["Thêm tài khoản nhân viên", "Phân quyền người dùng", "Khóa tài khoản nhân viên", "Ai được quản lý nhân viên?", "Thêm nhân viên"],
+    "answer": "Chỉ quản trị viên quản lý tài khoản nhân viên/quản trị tại Nhân viên (/accounts): cấp tài khoản, phân quyền và khóa/mở khóa. Nếu bạn không có quyền, chọn Chat với đội ngũ để liên hệ người phụ trách. Tôi không có quyền tạo hoặc sửa tài khoản."
+  },
+  {
+    "title": "Đổi mật khẩu và đăng nhập",
+    "questions": ["Tôi quên mật khẩu", "Làm sao đổi mật khẩu?", "Không đăng nhập được", "Tài khoản bị khóa"],
+    "answer": "Nếu còn đăng nhập, mở Cài đặt tài khoản để kiểm tra chức năng đổi mật khẩu. Nếu quên mật khẩu hoặc tài khoản bị khóa, liên hệ quản trị viên qua kênh hỗ trợ của bãi xe. Không gửi mật khẩu hoặc OTP vào chat; tôi không xem hay khôi phục mật khẩu."
+  },
+  {
+    "title": "Nhận diện ảnh sai biển số",
+    "questions": ["Nhận diện sai biển số phải làm sao?", "OCR không đọc được biển số", "Cách sửa biển số nhận diện", "Ảnh biển số bị mờ"],
+    "answer": "Chọn ảnh rõ, đủ sáng và thấy toàn bộ biển số. Thử nhận diện lại hoặc sửa biển số ở màn hình Xe vào/Xe ra, rồi bấm Cập nhật biển số và kiểm tra trước khi xác nhận. Không xác nhận lượt xe nếu biển số hoặc xe đối chiếu chưa đúng."
+  },
+  {
+    "title": "Sử dụng camera",
+    "questions": ["Không mở được camera", "Cách bật camera nhận diện", "Camera không hiện hình", "Trình duyệt không cho dùng camera"],
+    "answer": "Ở Xe vào/Xe ra, chọn Camera, chọn thiết bị và bấm Bắt đầu. Cấp quyền camera cho trình duyệt; nếu thiết bị đang bị ứng dụng khác sử dụng, đóng ứng dụng đó rồi thử lại. Truy cập bằng localhost hoặc HTTPS để dùng camera. Bạn cũng có thể chọn Tải ảnh và kiểm tra biển số thủ công."
+  },
+  {
+    "title": "Báo cáo thống kê",
+    "questions": ["Xem báo cáo doanh thu ở đâu?", "Xuất báo cáo Excel", "Xuất thống kê PDF", "Thống kê lượt gửi xe"],
+    "answer": "Mở Báo cáo/Thống kê (/statistics), chọn bộ lọc thời gian rồi xem lượt gửi, doanh thu và tỷ lệ lấp đầy theo quyền tài khoản. Dùng nút xuất Excel hoặc PDF để tải báo cáo. Tôi không đọc hay tính doanh thu thực tế từ database."
+  },
+  {
+    "title": "Liên hệ người hỗ trợ",
+    "questions": ["Tôi muốn gặp nhân viên", "Chat với người thật", "Liên hệ quản trị viên", "Cần hỗ trợ trực tiếp"],
+    "answer": "Trong cửa sổ Hỗ trợ, quay lại trang đầu và chọn Chat với đội ngũ. Chọn một quản trị viên hoặc nhân viên đang hoạt động rồi gửi nội dung cần hỗ trợ. Họ cần mở cùng máy chủ Smart Parking để đọc và trả lời. Tôi không tự chuyển tin nhắn của bạn sang người khác."
+  },
+  {
+    "title": "Dữ liệu xe và tài khoản thực tế",
+    "questions": ["Xe tôi đang đỗ ở đâu?", "Xe 51F12345 có trong bãi không?", "Cho xem thông tin khách hàng", "Biển số xe của tôi", "Số dư tài khoản của tôi", "Xe tôi ở đâu?"],
+    "answer": "Tôi không truy cập thông tin riêng của từng xe, hồ sơ hoặc số dư. Tôi chỉ có thể tra cứu số ô đỗ trống tổng hợp. Với thông tin riêng, hãy mở trang phù hợp với quyền tài khoản của bạn (Bãi đỗ, Lịch sử, Hóa đơn hoặc Cài đặt), hoặc chọn Chat với đội ngũ để nhờ kiểm tra."
+  },
+  {
+    "title": "Bảo mật và AI nội bộ",
+    "questions": ["Chat có gửi dữ liệu ra ngoài không?", "AI có dùng API bên ngoài không?", "Ai xem được lịch sử chat?", "AI được huấn luyện bằng dữ liệu gì?", "Chatbot có bảo mật không?"],
+    "answer": "Chatbot xử lý trên máy chủ Smart Parking, không gọi API AI bên ngoài. Chat AI được lưu theo tài khoản; chat với nhân viên chỉ dành cho hai người tham gia. Mô hình học từ bộ hỏi–đáp do quản trị viên biên soạn và bấm huấn luyện; hội thoại và hồ sơ khách hàng không tự động trở thành dữ liệu huấn luyện. Người có quyền truy cập máy chủ/database vẫn có thể đọc dữ liệu, vì vậy không gửi mật khẩu hoặc OTP."
+  },
+  {
+    "title": "Quản lý và huấn luyện chatbot",
+    "questions": ["Huấn luyện AI như thế nào?", "Thêm kiến thức cho chatbot", "AI trả lời sai thì sửa ở đâu?", "Quản lý AI nội bộ ở đâu?"],
+    "answer": "Quản trị viên mở Cài đặt → Trợ lý AI (/settings?section=ai). Thêm hoặc sửa tiêu đề, các cách hỏi và câu trả lời; lưu rồi bấm Huấn luyện. Dùng Thử câu hỏi để kiểm tra phiên bản đã huấn luyện. Chỉ thêm hướng dẫn có thể chia sẻ cho mọi tài khoản; không đưa thông tin khách hàng hoặc bí mật vào kho kiến thức."
+  },
+  {
+    "title": "Cảm ơn",
+    "questions": ["Cảm ơn", "Cảm ơn bạn", "Cám ơn", "Đã hiểu rồi"],
+    "answer": "Bạn có thể tiếp tục hỏi về các chức năng của Smart Parking. Nếu cần xử lý trường hợp cụ thể, hãy chọn Chat với đội ngũ."
+  }
+]

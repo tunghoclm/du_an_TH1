@@ -1,0 +1,108 @@
+{% macro perm_role_panel() -%}
+<div class="kv-perm-3col">
+  <div class="kv-perm-gates">
+    <input type="search" class="kv-perm-search-inp" data-perm-gate-search placeholder="Tìm cổng">
+    <div class="kv-perm-gate-list" data-perm-gate-list></div>
+  </div>
+
+  <div class="kv-perm-center">
+    <div class="kv-perm-toolbar">
+      <div class="kv-perm-role-wrap">
+        <label>Vai trò</label>
+        <select data-perm-role-select aria-label="Chọn vai trò">
+          <option value="">Chọn vai trò</option>
+          {% for pname in perm_presets.keys() %}
+            <option value="{{ pname }}">{{ pname }}</option>
+          {% endfor %}
+        </select>
+        <button type="button" class="kv-perm-clear-role" data-perm-clear-role title="Xóa vai trò">×</button>
+      </div>
+      <input type="search" class="kv-perm-search-inp" style="width:220px;" data-perm-item-search placeholder="Tìm phân quyền">
+    </div>
+
+    <div class="kv-perm-scroll" data-perm-scroll>
+      <div class="kv-perm-empty" data-perm-empty hidden>
+        <div class="kv-perm-empty-icon">👤</div>
+        <b>Chưa có vai trò</b>
+        <span>Hãy chọn vai trò cho cổng này ở thanh phía trên</span>
+      </div>
+
+      <div data-perm-groups-wrap style="display:grid;gap:14px;">
+        {% for g in perm_groups %}
+          <section class="kv-perm-group-card" data-perm-group="{{ g.id }}">
+            <div class="kv-perm-group-head">
+              <h3>{{ g.name }}</h3>
+              <small>{{ g.desc }}</small>
+            </div>
+            {% for s in g.singles %}
+              <label class="kv-perm-check">
+                <input type="checkbox" data-perm-key="{{ s.key }}">
+                <span>{{ s.label }}</span>
+              </label>
+            {% endfor %}
+            {% for sec in g.sections %}
+              <div class="kv-perm-acc{% if loop.first %} is-open{% endif %}">
+                <div class="kv-perm-acc-head">
+                  <label class="kv-perm-check">
+                    <input type="checkbox" data-perm-parent>
+                    <b>{{ sec.name }}</b>
+                  </label>
+                  <span class="kv-perm-acc-chevron">▾</span>
+                </div>
+                <div class="kv-perm-acc-body">
+                  {% if sec.cols %}
+                    <div class="kv-perm-matrix">
+                      {% for col_name, items in sec.cols.items() %}
+                        <div class="kv-perm-col">
+                          <div class="kv-perm-col-title">{{ col_name }}</div>
+                          {% for item in items %}
+                            <label class="kv-perm-check">
+                              <input type="checkbox" data-perm-key="{{ item.key }}">
+                              <span>{{ item.label }}</span>
+                            </label>
+                          {% endfor %}
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  {% if sec.other %}
+                    <div class="kv-perm-other-row">
+                      <span class="kv-perm-col-title">Khác</span>
+                      {% for item in sec.other %}
+                        <label class="kv-perm-check">
+                          <input type="checkbox" data-perm-key="{{ item.key }}">
+                          <span>{{ item.label }}</span>
+                        </label>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </section>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <nav class="kv-perm-toc" aria-label="Nhóm phân quyền">
+    {% for g in perm_groups %}
+      <button type="button" class="kv-perm-toc-btn{% if loop.first %} is-active{% endif %}" data-perm-toc="{{ g.id }}">{{ g.name }}</button>
+    {% endfor %}
+  </nav>
+</div>
+{%- endmacro %}
+
+{% macro perm_other_panel() -%}
+<div class="kv-perm-other-panel">
+  {% for op in other_perms %}
+    <label class="kv-perm-other-card">
+      <input type="checkbox" data-other-perm="{{ op.key }}" style="width:16px;height:16px;margin-top:2px;accent-color:#0070f4;">
+      <div>
+        <div style="font-size:14px;font-weight:500;color:#0f172a;">{{ op.label }}</div>
+        <small>{{ op.hint }}</small>
+      </div>
+    </label>
+  {% endfor %}
+</div>
+{%- endmacro %}

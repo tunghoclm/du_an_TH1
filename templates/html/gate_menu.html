@@ -1,0 +1,344 @@
+{% extends "_cabin_layout.html" %}
+{% set active_page = 'lanes' %}
+{% from '_cabin_icons.html' import icon %}
+
+{% block title %}Cabin · 2 làn — Smart Parking{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/css/gate.css">
+{% endblock %}
+
+{% macro lane_card(direction, lane_name, endpoint, record) -%}
+  {% set is_entry = (direction == 'entry') %}
+  <form class="lane-card is-{{ direction }}"
+        method="POST"
+        action="{{ url_for(endpoint) }}"
+        enctype="multipart/form-data"
+        data-lane-form="{{ direction }}"
+        data-camera-url="{{ url_for('gate_camera', direction=direction) }}"
+        data-cabin-slot="Làn {{ lane_name }}"
+        data-area="{{ direction }}"
+        data-status="{{ 'occupied' if record else 'available' }}"
+        data-plate="{{ record.plate_number if record else '' }}"
+        data-fee="{{ record.preview_fee if record else 0 }}"
+        data-action-url="{{ url_for(endpoint) }}"
+        aria-pressed="false">
+    <input type="hidden" name="inline" value="1">
+    <input type="hidden" name="token" value="" data-lane-token="{{ direction }}">
+    <input type="hidden" name="checked_plate" value="" data-lane-checked="{{ direction }}">
+    <input type="hidden" name="source" value="camera" data-lane-source="{{ direction }}">
+
+    <header class="lane-card-header">
+      <div class="lane-card-title">
+        <span class="gate-lane-dot {{ direction }}"></span>
+        <h2>LÀN {{ lane_name|upper }}</h2>
+        <span class="lane-badge is-{{ direction }}">{{ 'Tiếp nhận xe' if is_entry else 'Thu phí & Ra bãi' }}</span>
+      </div>
+      <div class="lane-source-switch" role="group" aria-label="Nguồn ảnh làn {{ lane_name }}">
+        <button type="button" class="lane-chip-btn is-active" data-lane-mode="camera" data-lane-dir="{{ direction }}" aria-pressed="true">Camera</button>
+        <button type="button" class="lane-chip-btn" data-lane-mode="upload" data-lane-dir="{{ direction }}" aria-pressed="false">Tải ảnh</button>
+      </div>
+    </header>
+
+    <div class="lane-visuals is-pair">
+      <!-- Ô 1: Camera nhận diện biển số / Ảnh tải lên -->
+      <div class="lane-photo-box lane-plate-cam-box" data-lane-cam-box="{{ direction }}">
+        <div class="lane-photo-head">
+          <span>Camera biển số · {{ lane_name }}</span>
+          <span class="lane-photo-tag" data-lane-cam-status="{{ direction }}">CHỜ BẬT</span>
+        </div>
+        <video class="lane-overview-video" data-lane-video="{{ direction }}" autoplay playsinline muted hidden></video>
+        <img class="lane-overview-video" data-lane-stream="{{ direction }}" alt="Camera IP làn {{ lane_name }}" hidden>
+        <canvas class="lane-cam-overlay" data-lane-overlay="{{ direction }}" hidden></canvas>
+        <img class="lane-photo-img" data-lane-preview="{{ direction }}" alt="Ảnh nhận diện làn {{ lane_name }}" hidden>
+        <div class="lane-photo-empty" data-lane-cam-empty="{{ direction }}">
+          {{ icon('camera', 24) }}
+          <span>Camera nhận diện {{ lane_name }}</span>
+          <small>Nhấn "Bật camera" hoặc chọn "Tải ảnh"</small>
+        </div>
+        <span class="lane-photo-corner">{{ 'IN' if is_entry else 'OUT' }}-OCR</span>
+      </div>
+
+      <!-- Ô 2: Camera toàn cảnh -->
+      <div class="lane-photo-box lane-overview-box" data-overview-box="{{ direction }}">
+        <div class="lane-photo-head">
+          <span>Camera toàn cảnh · {{ lane_name }}</span>
+          <button type="button" class="lane-overview-btn"
+                  data-overview-toggle="{{ direction }}"
+                  data-default-device="{{ device_settings[direction ~ '_overview_camera'] if device_settings else '' }}"
+                  aria-pressed="false">Bật toàn cảnh</button>
+        </div>
+        <video class="lane-overview-video" data-overview-video="{{ direction }}" autoplay playsinline muted hidden></video>
+        <img class="lane-overview-video" data-overview-stream="{{ direction }}" alt="Toàn cảnh IP làn {{ lane_name }}" hidden>
+        <div class="lane-photo-empty" data-overview-empty="{{ direction }}">
+          {{ icon('camera', 24) }}
+          <span>Toàn cảnh làn {{ lane_name }}</span>
+          <small>Nhấn "Bật toàn cảnh" để xem trực tiếp</small>
+        </div>
+        <span class="lane-photo-corner">{{ 'IN' if is_entry else 'OUT' }}-VIEW</span>
+      </div>
+    </div>
+
+    <!-- Thanh điều khiển camera / tải ảnh trực tiếp trên làn -->
+    {% set all_cam_vals = [device_settings.entry_plate_camera, device_settings.exit_plate_camera, device_settings.entry_overview_camera, device_settings.exit_overview_camera] if device_settings else [] %}
+    <div class="lane-controls-bar" data-lane-controls-camera="{{ direction }}">
+      <select class="lane-cam-select"
+              data-lane-camera-select="{{ direction }}"
+              data-default-device="{{ device_settings[direction ~ '_plate_camera'] if device_settings else '' }}"
+              data-ip-cameras="{{ all_cam_vals|join('|') }}"
+              aria-label="Chọn camera làn {{ lane_name }}">
+        <option value="">Camera mặc định</option>
+      </select>
+      <button type="button" class="lane-ctrl-btn" data-lane-start="{{ direction }}">Bật camera</button>
+      <button type="button" class="lane-ctrl-btn is-accent" data-lane-capture="{{ direction }}" disabled>Chụp &amp; quét</button>
+    </div>
+
+    <div class="lane-controls-bar" data-lane-controls-upload="{{ direction }}" hidden>
+      <input type="file" name="image" accept="image/*" class="lane-file-input" data-lane-file="{{ direction }}" aria-label="Chọn ảnh xe {{ lane_name }}">
+      <button type="button" class="lane-ctrl-btn is-accent" data-lane-recognize="{{ direction }}">Nhận diện ảnh</button>
+    </div>
+
+    <!-- Nhập / sửa biển số & ghi chú -->
+    <div class="lane-input-row">
+      <div class="lane-input-group">
+        <label for="lane-plate-{{ direction }}">Biển số</label>
+        <div class="lane-plate-edit">
+          <input type="text" id="lane-plate-{{ direction }}" name="plate" data-lane-plate="{{ direction }}" placeholder="VD: 51F-12345" autocomplete="off">
+          <button type="button" class="lane-ctrl-btn" data-lane-recheck="{{ direction }}">Cập nhật</button>
+        </div>
+      </div>
+      <div class="lane-input-group">
+        <label for="lane-note-{{ direction }}">Ghi chú</label>
+        <input type="text" id="lane-note-{{ direction }}" name="note" data-lane-note="{{ direction }}" placeholder="Ghi chú (tùy chọn)">
+      </div>
+    </div>
+
+    <!-- Thông báo kết quả inline -->
+    <div class="lane-feedback" data-lane-feedback="{{ direction }}" hidden></div>
+
+    <!-- Kết quả đối chiếu (_gate_result.html) -->
+    <div class="lane-result-wrap" data-lane-result="{{ direction }}">
+      <div class="lane-result-placeholder">
+        Chụp từ camera hoặc tải ảnh để nhận diện biển số làn {{ lane_name }}.
+      </div>
+    </div>
+
+    <footer class="lane-card-footer">
+      {% if is_entry %}
+        <button type="button" class="lane-primary-btn is-entry" data-lane-submit="{{ direction }}" data-submit-action="confirm" disabled>
+          Xác nhận Xe vào
+        </button>
+      {% else %}
+        <div class="lane-exit-btns">
+          <button type="button" class="lane-primary-btn is-exit" data-lane-submit="{{ direction }}" data-submit-action="confirm" disabled>
+            Xác nhận Xe ra
+          </button>
+          <button type="button" class="lane-primary-btn is-pay" data-lane-submit="{{ direction }}" data-submit-action="pay" disabled>
+            Thanh toán &amp; In
+          </button>
+        </div>
+      {% endif %}
+      <button type="button" class="lane-secondary-btn" data-lane-reset="{{ direction }}">Làm mới</button>
+    </footer>
+  </form>
+{%- endmacro %}
+
+{% block content %}
+<section class="cabin-lanes cabin-pane" aria-label="Bảng điều khiển hai làn xe">
+  <!-- Thanh thống kê nhanh -->
+  <div class="lanes-kpi-bar" id="lanes-kpi-bar" aria-label="Thống kê nhanh trong ngày">
+    <div class="lanes-kpi-card">
+      <span class="lanes-kpi-label">Đang trong bãi</span>
+      <strong class="lanes-kpi-value">{{ counts.occupied }}<small>/{{ counts.total }} chỗ</small></strong>
+      <span class="lanes-kpi-sub">{{ counts.available }} chỗ còn trống</span>
+    </div>
+    <div class="lanes-kpi-card">
+      <span class="lanes-kpi-label">Xe vào hôm nay</span>
+      <strong class="lanes-kpi-value is-entry">{{ stats.period_entries }}<small>lượt</small></strong>
+      <span class="lanes-kpi-sub">Làn vào đang sẵn sàng</span>
+    </div>
+    <div class="lanes-kpi-card">
+      <span class="lanes-kpi-label">Xe ra hôm nay</span>
+      <strong class="lanes-kpi-value is-exit">{{ stats.period_exits }}<small>lượt</small></strong>
+      <span class="lanes-kpi-sub">Đã đối chiếu &amp; thu phí</span>
+    </div>
+    <div class="lanes-kpi-card">
+      <span class="lanes-kpi-label">Doanh thu gửi xe</span>
+      <strong class="lanes-kpi-value is-revenue">{{ stats.period_parking_revenue|vnd }}</strong>
+      <span class="lanes-kpi-sub">Tính trong ngày hôm nay</span>
+    </div>
+  </div>
+
+  <!-- Làn Vào / Ra theo cấu hình cổng đang chọn -->
+  {% set gate_mode = selected_gate.zone_type if selected_gate else 'gate_inout' %}
+  <div class="lanes-board" id="cabin-slot-grid">
+    {% if gate_mode != 'gate_out' %}
+      {{ lane_card('entry', 'vào', 'entry', entry_record) }}
+    {% endif %}
+    {% if gate_mode != 'gate_in' %}
+      {{ lane_card('exit', 'ra', 'exit_gate', exit_record) }}
+    {% endif %}
+  </div>
+</section>
+
+<!-- Khung bên phải: Lịch sử xe ra vào & Tra cứu nhanh -->
+<section class="cabin-ticket cabin-pane" aria-label="Lịch sử xe vào ra">
+  <form class="lanes-quick-lookup" id="lanes-quick-lookup-form">
+    <label for="lanes-plate-lookup">Tra cứu nhanh &amp; đưa vào làn ra</label>
+    <div class="lanes-lookup-row">
+      <input type="text" id="lanes-plate-lookup" name="plate" placeholder="Nhập biển số (VD: 51F-12345)" autocomplete="off">
+      <button type="submit">Đưa vào làn ra</button>
+    </div>
+  </form>
+
+  <section class="lanes-activity lanes-history-pane" id="lanes-activity" aria-label="Lịch sử xe đang gửi và lượt ra gần đây">
+    <div class="lanes-activity-head">
+      <div class="lanes-activity-tabs" role="tablist">
+        <button type="button" class="lanes-tab active" role="tab" aria-selected="true" data-lanes-tab="in">
+          Đang trong bãi <span class="lanes-tab-count">{{ open_records|length }}</span>
+        </button>
+        <button type="button" class="lanes-tab" role="tab" aria-selected="false" data-lanes-tab="recent">
+          Vào / Ra gần đây <span class="lanes-tab-count">{{ recent_records|length }}</span>
+        </button>
+      </div>
+      <div class="lanes-activity-tools">
+        <input type="search" id="lanes-quick-filter" placeholder="Lọc nhanh biển số, ô đỗ..." aria-label="Lọc nhanh biển số hoặc ô đỗ">
+      </div>
+    </div>
+
+    <div class="lanes-history-scroll" data-lanes-panel="in">
+      {% if open_records %}
+      <div class="lanes-history-list">
+        {% for r in open_records %}
+        <article class="lanes-history-item"
+                 tabindex="0"
+                 role="button"
+                 aria-label="Xem chi tiết xe {{ r.plate_number }}"
+                 data-lane-item="{{ r.plate_number }} {{ r.slot_name or '' }} {{ r.vehicle_type_name or '' }}"
+                 data-history-detail
+                 data-record-id="{{ r.id }}"
+                 data-plate="{{ r.plate_number }}"
+                 data-slot="{{ r.slot_name or '—' }}"
+                 data-vehicle-type="{{ r.vehicle_type_name or '—' }}"
+                 data-status="IN"
+                 data-time-in="{{ r.entry_time[:10]|vdate }} · {{ r.entry_time[11:19] }}"
+                 data-time-out="—"
+                 data-duration="{{ r.preview_duration or '—' }}"
+                 data-fee="{{ r.preview_fee|vnd }}"
+                 data-note="{{ r.note or '' }}"
+                 data-image-in="{{ r.entry_image_url or '' }}"
+                 data-image-out=""
+                 data-invoice-url="">
+          <div class="lanes-history-top">
+            <div class="lanes-history-id">
+              <strong class="lanes-plate-chip">{{ r.plate_number }}</strong>
+              <span class="lanes-slot-badge">{{ r.slot_name or '—' }}</span>
+              <span class="lanes-type-text">{{ r.vehicle_type_name or '—' }}</span>
+            </div>
+            <span class="lanes-fee-cell">{{ r.preview_fee|vnd }}</span>
+          </div>
+          <div class="lanes-history-bottom">
+            <span class="lanes-time-text">Vào: {{ r.entry_time[11:19] }} · {{ r.entry_time[:10]|vdate }}{% if r.preview_duration %} · {{ r.preview_duration }}{% endif %}</span>
+            <button type="button" class="lanes-row-btn" data-fill-exit-plate="{{ r.plate_number }}">Đưa vào làn ra</button>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+        <div class="lanes-empty-list">Hiện chưa có xe nào đang gửi trong bãi.</div>
+      {% endif %}
+    </div>
+
+    <div class="lanes-history-scroll" data-lanes-panel="recent" hidden>
+      {% if recent_records %}
+      <div class="lanes-history-list">
+        {% for r in recent_records %}
+        {% set is_in = (r.status == 'IN') %}
+        <article class="lanes-history-item"
+                 tabindex="0"
+                 role="button"
+                 aria-label="Xem chi tiết xe {{ r.plate_number }}"
+                 data-lane-item="{{ r.plate_number }} {{ r.slot_name or '' }} {{ r.vehicle_type_name or '' }} {{ 'vào' if is_in else 'ra' }}"
+                 data-history-detail
+                 data-record-id="{{ r.id }}"
+                 data-plate="{{ r.plate_number }}"
+                 data-slot="{{ r.slot_name or '—' }}"
+                 data-vehicle-type="{{ r.vehicle_type_name or '—' }}"
+                 data-status="{{ r.status }}"
+                 data-time-in="{{ r.entry_time[:10]|vdate }} · {{ r.entry_time[11:19] }}"
+                 data-time-out="{{ (r.exit_time[:10]|vdate ~ ' · ' ~ r.exit_time[11:19]) if r.exit_time else '—' }}"
+                 data-duration="{{ r.preview_duration or '—' }}"
+                 data-fee="{{ (r.preview_fee if is_in else r.fee)|vnd }}"
+                 data-note="{{ r.note or '' }}"
+                 data-image-in="{{ r.entry_image_url or '' }}"
+                 data-image-out="{{ r.exit_image_url or '' }}"
+                 data-invoice-url="{{ url_for('invoice_print', record_id=r.id) if not is_in else '' }}">
+          <div class="lanes-history-top">
+            <div class="lanes-history-id">
+              <span class="lanes-dir-badge {{ 'is-in' if is_in else 'is-out' }}">{{ 'VÀO' if is_in else 'RA' }}</span>
+              <strong class="lanes-plate-chip">{{ r.plate_number }}</strong>
+              <span class="lanes-slot-badge">{{ r.slot_name or '—' }}</span>
+              <span class="lanes-type-text">{{ r.vehicle_type_name or '—' }}</span>
+            </div>
+            <span class="lanes-fee-cell{{ '' if is_in else ' is-paid' }}">{{ (r.preview_fee if is_in else r.fee)|vnd }}</span>
+          </div>
+          <div class="lanes-history-bottom">
+            {% if is_in %}
+              <span class="lanes-time-text">Vào: {{ r.entry_time[11:19] }} · {{ r.entry_time[:10]|vdate }}{% if r.preview_duration %} · {{ r.preview_duration }}{% endif %}</span>
+              <button type="button" class="lanes-row-btn" data-fill-exit-plate="{{ r.plate_number }}">Đưa vào làn ra</button>
+            {% else %}
+              <span class="lanes-time-text">Vào {{ r.entry_time[11:19] }} → Ra {{ r.exit_time[11:19] if r.exit_time else '—' }} · {{ r.exit_time[:10]|vdate if r.exit_time else '' }}</span>
+              <a href="{{ url_for('invoice_print', record_id=r.id) }}" target="_blank" rel="noopener" class="lanes-row-btn is-muted">In phiếu ↗</a>
+            {% endif %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+        <div class="lanes-empty-list">Chưa có lượt xe vào / ra nào được ghi nhận.</div>
+      {% endif %}
+    </div>
+  </section>
+
+  <footer class="lanes-history-footer">
+    <a href="{{ url_for('history') }}" target="_blank" rel="noopener">Xem toàn bộ lịch sử xe ra vào ↗</a>
+  </footer>
+</section>
+<dialog id="lanes-detail-dialog" class="lanes-detail-dialog" aria-labelledby="lanes-detail-title">
+  <div class="lanes-detail-head">
+    <div class="lanes-detail-title-wrap">
+      <h3 id="lanes-detail-title">Chi tiết lượt gửi xe</h3>
+      <span class="lanes-detail-status" id="lanes-detail-status"></span>
+    </div>
+    <button type="button" class="lanes-detail-x" id="lanes-detail-close" aria-label="Đóng">×</button>
+  </div>
+  <div class="lanes-detail-body">
+    <div class="lanes-detail-photos">
+      <div class="lanes-detail-photo">
+        <span>Ảnh xe vào</span>
+        <img id="lanes-detail-img-in" alt="Ảnh xe vào" hidden>
+        <div class="lanes-detail-photo-empty" id="lanes-detail-empty-in">Không có ảnh xe vào</div>
+      </div>
+      <div class="lanes-detail-photo">
+        <span>Ảnh xe ra</span>
+        <img id="lanes-detail-img-out" alt="Ảnh xe ra" hidden>
+        <div class="lanes-detail-photo-empty" id="lanes-detail-empty-out">Chưa có ảnh xe ra</div>
+      </div>
+    </div>
+    <dl class="lanes-detail-grid">
+      <div><dt>Biển số xe</dt><dd id="lanes-detail-plate" class="is-plate">—</dd></div>
+      <div><dt>Vị trí ô đỗ</dt><dd id="lanes-detail-slot">—</dd></div>
+      <div><dt>Loại phương tiện</dt><dd id="lanes-detail-type">—</dd></div>
+      <div><dt id="lanes-detail-fee-label">Phí gửi xe</dt><dd id="lanes-detail-fee" class="is-fee">—</dd></div>
+      <div><dt>Thời gian vào</dt><dd id="lanes-detail-in">—</dd></div>
+      <div><dt id="lanes-detail-out-label">Thời gian ra</dt><dd id="lanes-detail-out">—</dd></div>
+      <div class="is-full"><dt>Ghi chú</dt><dd id="lanes-detail-note">—</dd></div>
+    </dl>
+  </div>
+  <footer class="lanes-detail-foot">
+    <button type="button" class="lanes-row-btn" id="lanes-detail-fill-exit" hidden>Đưa vào làn ra</button>
+    <a href="#" target="_blank" rel="noopener" class="lanes-row-btn" id="lanes-detail-print" hidden>In phiếu ↗</a>
+    <button type="button" class="lanes-secondary-btn" id="lanes-detail-close-btn">Đóng</button>
+  </footer>
+</dialog>
+<iframe id="lanes-print-frame" title="In hóa đơn" hidden></iframe>
+{% endblock %}

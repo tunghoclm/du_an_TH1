@@ -1,201 +1,354 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lịch sử - Smart Parking</title>
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='theme.css') }}">
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='history.css') }}">
-    {% if session.get('role') == 'user' %}
-    <link rel="stylesheet" href="{{ url_for('css_files', filename='user.css') }}">
-    {% endif %}
-</head>
-<body>
-<div class="wrap">
+{% extends "_layout.html" %}
+{% set active_page = 'history' %}
+{% set has_time_range = (time_from or time_to) %}
 
-    <!-- ============ TIÊU ĐỀ ============ -->
-    <header class="topbar">
-        <div class="topbar-left">
-            <a href="{{ url_for('index') }}" class="back" aria-label="Quay lại">←</a>
-            <div>
-                <h1>{{ 'Lịch sử xe của tôi' if user_mode else 'Lịch sử hoạt động' }}</h1>
-                <p>{{ 'Lịch sử ra vào của các xe bạn đã đăng ký' if user_mode else 'Theo dõi toàn bộ lịch sử xe ra vào bãi đỗ xe' }}</p>
-            </div>
+{% block title %}Lịch sử vào / ra — Smart Parking{% endblock %}
+{% block breadcrumb %}Lịch sử vào / ra{% endblock %}
+{% block body_class %}invoice-screen{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('css_files', filename='invoices.css') }}">
+<link rel="stylesheet" href="/css/history.css">
+{% endblock %}
+
+{% macro icon(name, size=18) -%}
+<svg aria-hidden="true" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+{% if name == 'search' %}<circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5"/>
+{% elif name == 'filter' %}<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="white"/><circle cx="15" cy="17" r="2" fill="white"/>
+{% elif name == 'export' %}<path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9M13 7l5 5-5 5m-6-5h14"/>
+{% elif name == 'columns' %}<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m6-16v16"/>
+{% endif %}</svg>
+{%- endmacro %}
+
+{% block content %}
+<section class="invoice-page" aria-label="Lịch sử vào ra bãi xe">
+  <div class="invoice-toolbar">
+    <h1>Lịch sử vào / ra <span>{{ records|length }}</span></h1>
+    <div class="invoice-search">
+      {{ icon('search') }}
+      <input type="search" id="plate-search" name="plate" form="history-filters" value="{{ keyword }}" placeholder="Tìm theo biển số xe (VD: 59A1-12345)" aria-label="Tìm theo biển số" data-table-search>
+      <button type="submit" form="history-filters" aria-label="Tìm kiếm lịch sử" title="Tìm kiếm">{{ icon('filter') }}</button>
+    </div>
+    <div class="invoice-actions">
+      <button type="button" class="invoice-action invoice-mobile-filter" id="history-filter-toggle" aria-expanded="false" aria-controls="history-filter-sidebar">{{ icon('filter') }} Bộ lọc</button>
+      {% if not current_user_role in ('admin', 'manager') or has_perm('history.export') %}
+        <a href="{{ url_for('history_export', plate=keyword, status=status_filter, gate=gate_filter, area=area_filter, vehicle_type=vt_filter, date=date_filter, time_from=time_from, time_to=time_to) }}" class="invoice-action" aria-label="Xuất file Excel">{{ icon('export') }} <span>Xuất file</span></a>
+      {% endif %}
+      <details class="invoice-column-picker">
+        <summary class="invoice-action invoice-action-square" aria-label="Cài đặt cột" title="Cài đặt cột">{{ icon('columns') }}</summary>
+        <div>
+          <b>Cột hiển thị</b>
+          <label><input type="checkbox" data-history-col="gate" checked> Cổng</label>
+          <label><input type="checkbox" data-history-col="slot" checked> Vị trí ô</label>
+          <label><input type="checkbox" data-history-col="vtype" checked> Loại xe</label>
+          <label><input type="checkbox" data-history-col="note" checked> Ghi chú</label>
         </div>
-        <div class="topbar-right">
-            <div class="user-chip">
-                <span class="avatar">{{ (session.get('fullname') or '?')[:1]|upper }}</span>
-                <span><strong>{{ session.get('fullname') }}</strong><small>{{ role_label }}</small></span>
-            </div>
-        </div>
-    </header>
+      </details>
+    </div>
+  </div>
 
-    {% if session.get('role') == 'user' %}{% include '_user_nav.html' %}{% endif %}
+  <div class="kv-history-summary" style="display:flex;flex-wrap:wrap;gap:10px 20px;padding:10px 16px;margin-bottom:14px;background:#fff;border:1px solid #e5eaf1;border-radius:12px;font-size:13px;color:#475569;">
+    <span>Tổng ghi nhận: <strong style="color:#0f172a;">{{ total_count }}</strong></span>
+    <span>Hôm nay: <strong style="color:#6d28d9;">{{ today_count }}</strong></span>
+    <span>Đang trong bãi: <strong style="color:#0070f4;">{{ in_count }}</strong></span>
+    <span>Đã ra bãi: <strong style="color:#18a967;">{{ out_count }}</strong></span>
+    <span>Đã xóa / hủy: <strong style="color:#d97706;">{{ deleted_count }}</strong></span>
+  </div>
 
-    <!-- ============ THÔNG BÁO ============ -->
-    <div class="toasts" id="toasts">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-            <div class="toast toast-{{ category }}" role="status">
-                <span>{{ message }}</span>
-                <button type="button" onclick="this.parentElement.remove()" aria-label="Đóng">×</button>
-            </div>
+  <div class="invoice-workspace">
+    <aside class="invoice-filters" id="history-filter-sidebar" aria-label="Bộ lọc lịch sử">
+      <form id="history-filters" method="GET" action="{{ url_for('history') }}">
+        <div class="invoice-filter-group">
+          <label for="history-gate">Cổng</label>
+          <select id="history-gate" name="gate" data-history-auto-submit>
+            <option value="">Tất cả các cổng</option>
+            {% for gname in gate_options %}
+              <option value="{{ gname }}"{% if gate_filter == gname %} selected{% endif %}>{{ gname }}</option>
             {% endfor %}
-        {% endwith %}
+          </select>
+        </div>
+
+        <fieldset class="customer-status-filter" style="display:grid;gap:8px;margin:0 0 14px;padding:0;border:0;">
+          <legend style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:4px;">Trạng thái</legend>
+          {% for val, lbl in [('all','Tất cả trạng thái'),('IN','Đang gửi trong bãi'),('OUT','Đã ra bãi'),('DELETED','Đã xóa / hủy')] %}
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#334155;cursor:pointer;">
+              <input type="radio" name="status" value="{{ val }}"{% if status_filter == val %} checked{% endif %} data-history-auto-submit>
+              <span>{{ lbl }}</span>
+            </label>
+          {% endfor %}
+        </fieldset>
+
+        <div class="invoice-filter-group">
+          <label for="history-area">Khu vực</label>
+          <select id="history-area" name="area" data-history-auto-submit>
+            <option value="">Tất cả khu vực</option>
+            {% for aname in area_options %}
+              <option value="{{ aname }}"{% if area_filter == aname %} selected{% endif %}>Khu {{ aname }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="invoice-filter-group">
+          <label for="history-vt">Loại xe</label>
+          <select id="history-vt" name="vehicle_type" data-history-auto-submit>
+            <option value="">Tất cả loại xe</option>
+            {% for vt in vehicle_types %}
+              <option value="{{ vt.id }}"{% if vt_filter == (vt.id|string) %} selected{% endif %}>{{ vt.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="invoice-filter-group">
+          <label for="date">Ngày ghi nhận</label>
+          <input type="date" id="date" name="date" value="{{ date_filter }}">
+        </div>
+
+        <div class="invoice-filter-group">
+          <label for="history-period">Khung giờ</label>
+          <select id="history-period" aria-label="Chọn khung giờ">
+            <option value="" {% if not selected_period %}selected{% endif %}>Tất cả khung giờ</option>
+            {% for p in time_periods %}
+              <option value="{{ p.id }}"
+                      data-start="{{ p.start_value }}"
+                      data-end="{{ p.end_value }}"
+                      {% if selected_period == (p.id|string) %}selected{% endif %}>
+                {{ p.name }} ({{ p.start_value }} – {{ p.end_value }})
+              </option>
+            {% endfor %}
+            <option value="custom" {% if selected_period == 'custom' %}selected{% endif %}>Tùy chỉnh giờ...</option>
+          </select>
+        </div>
+
+        <div id="history-time-fields" class="history-time-range" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;" {% if not has_time_range %}hidden{% endif %}>
+          <div class="form-field">
+            <label for="time-from" style="font-size:12px;">Từ giờ</label>
+            <input type="time" id="time-from" name="time_from" value="{{ time_from }}" {% if not has_time_range %}disabled{% endif %}>
+          </div>
+          <div class="form-field">
+            <label for="time-to" style="font-size:12px;">Đến giờ</label>
+            <input type="time" id="time-to" name="time_to" value="{{ time_to }}" {% if not has_time_range %}disabled{% endif %}>
+          </div>
+        </div>
+
+        <button type="submit" class="invoice-action invoice-action-primary invoice-apply">Áp dụng bộ lọc</button>
+        <a href="{{ url_for('history') }}" class="invoice-reset">Đặt lại bộ lọc</a>
+      </form>
+    </aside>
+
+    <div class="invoice-results">
+      <div class="invoice-table-card">
+        <div class="table-scroll">
+          <table class="invoice-table">
+            <thead>
+              <tr>
+                <th>Mã</th>
+                <th>Biển số</th>
+                <th data-col="gate">Cổng</th>
+                <th data-col="slot">Vị trí ô</th>
+                <th data-col="vtype">Loại xe</th>
+                <th>Thời gian vào</th>
+                <th>Thời gian ra</th>
+                <th>Phí thu</th>
+                <th data-col="note">Ghi chú</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if records %}
+                {% for r in records %}
+                  <tr class="history-row"
+                      style="cursor:pointer;"
+                      tabindex="0"
+                      data-open-record
+                      data-id="{{ r.id }}"
+                      data-plate="{{ r.plate_number }}"
+                      data-gate="{{ r.gate_label or 'Cổng chính' }}"
+                      data-slot="{{ r.slot_name or '—' }}{% if r.area_name %} (Khu {{ r.area_name }}){% endif %}"
+                      data-vehicle-type="{{ r.vehicle_type_name or '—' }}"
+                      data-time-in="{{ (r.entry_time[:10]|vdate ~ ' · ' ~ r.entry_time[11:19]) if r.entry_time else '—' }}"
+                      data-time-out="{{ (r.exit_time[:10]|vdate ~ ' · ' ~ r.exit_time[11:19]) if r.exit_time else '—' }}"
+                      data-fee="{{ ('{:,}'.format(r.fee).replace(',', '.') ~ ' ₫') if r.fee is not none else '—' }}"
+                      data-status="{{ 'Đang gửi' if r.status == 'IN' else ('Đã ra' if r.status == 'OUT' else 'Đã xóa') }}"
+                      data-note="{{ r.note or '—' }}"
+                      data-image-in="{{ url_for('static', filename='in/' ~ r.entry_image) if r.entry_image else '' }}"
+                      data-image-out="{{ url_for('static', filename='out/' ~ r.exit_image) if r.exit_image else '' }}">
+                    <td><span class="mono">#{{ r.id }}</span></td>
+                    <td><span class="plate">{{ r.plate_number }}</span></td>
+                    <td data-col="gate">{{ r.gate_label or 'Cổng chính' }}</td>
+                    <td data-col="slot">
+                      <b>{{ r.slot_name or '—' }}</b>
+                      {% if r.area_name %}<small style="color:#64748b;display:block;font-size:11px;">Khu {{ r.area_name }}</small>{% endif %}
+                    </td>
+                    <td data-col="vtype">{{ r.vehicle_type_name or '—' }}</td>
+                    <td style="font-size:12px;">{{ (r.entry_time[:10]|vdate ~ ' ' ~ r.entry_time[11:19]) if r.entry_time else '—' }}</td>
+                    <td style="font-size:12px;">{{ (r.exit_time[:10]|vdate ~ ' ' ~ r.exit_time[11:19]) if r.exit_time else '—' }}</td>
+                    <td>
+                      {% if r.fee is not none %}
+                        <b>{{ "{:,}".format(r.fee).replace(",", ".") }} ₫</b>
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+                    <td data-col="note" style="max-width:220px;font-size:12px;color:#526789;">{{ r.note or '—' }}</td>
+                    <td>
+                      {% if r.status == 'IN' %}
+                        <span class="badge badge-blue"><span></span>Đang gửi</span>
+                      {% elif r.status == 'OUT' %}
+                        <span class="badge badge-green"><span></span>Đã ra</span>
+                      {% else %}
+                        <span class="badge badge-red"><span></span>Đã xóa</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="10" class="empty-cell">Không tìm thấy lượt gửi xe nào phù hợp với bộ lọc.</td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="invoice-pagination" style="margin-top:12px;">
+        <span>Hiển thị <b>{{ 1 if records else 0 }}–{{ records|length }}</b> trên <b>{{ records|length }}</b> kết quả</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<dialog id="record-detail-dialog" class="dialog-wide">
+  <div class="dialog-content">
+    <div class="dialog-header">
+      <div>
+        <h3 id="detail-title">Chi tiết lượt gửi xe</h3>
+        <p>Thông tin ảnh chụp nhận diện biển số và đối soát thu phí</p>
+      </div>
+      <button type="button" class="dialog-close" id="detail-close" aria-label="Đóng">×</button>
     </div>
 
-    <!-- ============ SỐ LIỆU NHANH ============ -->
-    <section class="stats cols-4">
-        <div class="stat"><span class="stat-icon blue">📋</span><div><b>{{ total_count }}</b><small>Tổng lượt</small></div></div>
-        <div class="stat"><span class="stat-icon amber">🚗</span><div><b>{{ in_count }}</b><small>Đang gửi</small></div></div>
-        <div class="stat"><span class="stat-icon green">🚪</span><div><b>{{ out_count }}</b><small>Đã lấy xe</small></div></div>
-        <div class="stat"><span class="stat-icon purple">📅</span><div><b>{{ today_count }}</b><small>Hôm nay</small></div></div>
-    </section>
-
-    <!-- ============ BỘ LỌC ============ -->
-    <section class="panel">
-        <form method="GET" class="filters">
-            <div class="field">
-                <label for="plate">Biển số</label>
-                <input type="text" id="plate" name="plate" value="{{ keyword }}" placeholder="Nhập biển số...">
-            </div>
-            <div class="field">
-                <label for="status">Trạng thái</label>
-                <select id="status" name="status">
-                    <option value="all" {{ 'selected' if status_filter == 'all' }}>Tất cả</option>
-                    <option value="IN" {{ 'selected' if status_filter == 'IN' }}>Đang gửi</option>
-                    <option value="OUT" {{ 'selected' if status_filter == 'OUT' }}>Đã lấy xe</option>
-                </select>
-            </div>
-            <div class="field">
-                <label for="date">Ngày</label>
-                <input type="date" id="date" name="date" value="{{ date_filter }}">
-            </div>
-            <button type="submit" class="btn btn-navy">Lọc</button>
-            <a href="{{ url_for('history') }}" class="btn btn-soft">↻ Đặt lại</a>
-        </form>
-    </section>
-
-    <!-- ============ DANH SÁCH ============ -->
-    <section class="panel">
-        <div class="panel-head">
-            <div>
-                <h2>Danh sách lịch sử</h2>
-                <p>{{ records|length }} bản ghi</p>
-            </div>
+    <div class="session-detail">
+      <div class="detail-photos">
+        <div class="detail-photo">
+          <div style="padding:12px 14px;font-size:11px;font-weight:700;color:#fff;background:#0e274c;">ẢNH CAMERA LÚC VÀO</div>
+          <img id="detail-img-in" alt="Ảnh xe vào" style="width:100%;max-height:190px;object-fit:contain;background:#091933;" hidden>
+          <div id="detail-empty-in" style="padding:42px 16px;text-align:center;font-size:12px;color:#9db4d8;">Không có ảnh lưu lúc vào</div>
         </div>
-        <div class="table-wrap">
-            {% if records %}
-            <table class="data">
-                <thead>
-                    <tr>
-                        <th class="c-stt">STT</th>
-                        <th>Biển số</th>
-                        <th>Loại xe</th>
-                        <th>Vị trí</th>
-                        <th>Giao dịch</th>
-                        <th class="num">Phí (VNĐ)</th>
-                        <th>Thời gian vào</th>
-                        <th>Thời gian ra</th>
-                        <th>Ghi chú</th>
-                        <th class="c-act">Chi tiết</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for r in records %}
-                    <tr>
-                        <td class="c-stt" data-label="STT"><span class="stt">{{ loop.index }}</span></td>
-                        <td data-label="Biển số"><strong>{{ r['plate_number'] }}</strong></td>
-                        <td data-label="Loại xe">{{ r['vehicle_type_name'] or '—' }}</td>
-                        <td data-label="Vị trí"><span class="pill">{{ r['slot_name'] or '—' }}</span></td>
-                        <td data-label="Giao dịch">
-                            {% if r['status'] == 'IN' %}<span class="badge badge-green">Đang gửi</span>
-                            {% else %}<span class="badge badge-red">Đã lấy xe</span>{% endif %}
-                        </td>
-                        <td class="num" data-label="Phí (VNĐ)">{% if r['fee'] %}<span class="money">{{ '{:,}'.format(r['fee']).replace(',', '.') }}</span>{% else %}—{% endif %}</td>
-                        <td data-label="Thời gian vào">{{ r['entry_time'].replace('T', ' ') if r['entry_time'] else '—' }}</td>
-                        <td data-label="Thời gian ra">{{ r['exit_time'].replace('T', ' ') if r['exit_time'] else '—' }}</td>
-                        <td data-label="Ghi chú">{{ r['note'] or '—' }}</td>
-                        <td class="c-act" data-label="Chi tiết">
-                            <button type="button" class="btn btn-edit detail-button"
-                                data-plate="{{ r['plate_number'] }}"
-                                data-type="{{ r['vehicle_type_name'] or '—' }}"
-                                data-slot="{{ r['slot_name'] or '—' }}"
-                                data-entry-time="{{ r['entry_time'] or '—' }}"
-                                data-exit-time="{{ r['exit_time'] or '—' }}"
-                                data-fee="{{ '{:,}'.format(r['fee']) ~ ' VNĐ' if r['fee'] else '—' }}"
-                                data-entry-img="{{ url_for('static', filename='in/' ~ r['entry_image']) if r['entry_image'] else '' }}"
-                                data-exit-img="{{ url_for('static', filename='out/' ~ r['exit_image']) if r['exit_image'] else '' }}">
-                                🔍 Chi tiết
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty">
-                <div class="empty-icon">📭</div>
-                <p>{{ 'Chưa có lượt ra vào nào của xe bạn đã đăng ký (hoặc không có kết quả phù hợp với bộ lọc).' if user_mode else 'Không tìm thấy bản ghi phù hợp. Hãy thử thay đổi bộ lọc.' }}</p>
-            </div>
-            {% endif %}
+        <div class="detail-photo">
+          <div style="padding:12px 14px;font-size:11px;font-weight:700;color:#fff;background:#0e274c;">ẢNH CAMERA LÚC RA</div>
+          <img id="detail-img-out" alt="Ảnh xe ra" style="width:100%;max-height:190px;object-fit:contain;background:#091933;" hidden>
+          <div id="detail-empty-out" style="padding:42px 16px;text-align:center;font-size:12px;color:#9db4d8;">Chưa có ảnh xe ra</div>
         </div>
-    </section>
-</div>
+      </div>
 
-    <!-- Cửa sổ xem chi tiết: ảnh xe lúc vào / lúc ra -->
-    <div class="modal-overlay" id="detail-modal" hidden>
-        <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="detail-title">
-            <button type="button" class="modal-close" id="detail-close" aria-label="Đóng">×</button>
-            <h2 id="detail-title">Chi tiết lượt gửi xe</h2>
-            <p class="modal-sub"><strong id="d-plate"></strong> · <span id="d-type"></span> · Vị trí <span id="d-slot"></span></p>
-            <div class="modal-photos">
-                <figure>
-                    <figcaption>📥 Ảnh lúc vào <small id="d-entry-time"></small></figcaption>
-                    <img id="d-entry-img" alt="Ảnh xe lúc vào">
-                    <div class="no-photo" id="d-entry-none">Không có ảnh</div>
-                </figure>
-                <figure>
-                    <figcaption>📤 Ảnh lúc ra <small id="d-exit-time"></small></figcaption>
-                    <img id="d-exit-img" alt="Ảnh xe lúc ra">
-                    <div class="no-photo" id="d-exit-none">Xe chưa ra khỏi bãi / không có ảnh</div>
-                </figure>
-            </div>
-            <p class="modal-fee">Phí: <strong id="d-fee"></strong></p>
-        </div>
+      <div class="detail-grid">
+        <div><span>Biển số xe</span><b id="detail-plate" class="plate"></b></div>
+        <div><span>Cổng</span><b id="detail-gate"></b></div>
+        <div><span>Vị trí ô đỗ</span><b id="detail-slot"></b></div>
+        <div><span>Loại phương tiện</span><b id="detail-type"></b></div>
+        <div><span>Trạng thái</span><b id="detail-status"></b></div>
+        <div><span>Thời gian vào</span><b id="detail-in"></b></div>
+        <div><span>Thời gian ra</span><b id="detail-out"></b></div>
+        <div><span>Phí gửi xe</span><b id="detail-fee" style="color:var(--primary);"></b></div>
+        <div><span>Ghi chú / Nhật ký</span><b id="detail-note"></b></div>
+      </div>
     </div>
 
-    <script>
-    setTimeout(function () { document.querySelectorAll('.toast').forEach(function (t) { t.classList.add('out'); setTimeout(function () { t.remove(); }, 400); }); }, 6000);
-    (function () {
-        const modal = document.getElementById('detail-modal');
-        const $ = id => document.getElementById(id);
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-outline" id="detail-close-btn">Đóng</button>
+    </div>
+  </div>
+</dialog>
+{% endblock %}
 
-        function setPhoto(prefix, src) {
-            const img = $('d-' + prefix + '-img'), none = $('d-' + prefix + '-none');
-            if (src) { img.src = src; img.style.display = ''; none.style.display = 'none'; }
-            else { img.removeAttribute('src'); img.style.display = 'none'; none.style.display = ''; }
-        }
-        function close() { modal.hidden = true; }
+{% block extra_js %}
+<script src="/static/js/history-filter.js"></script>
+<script>
+  (function () {
+    document.querySelectorAll('[data-history-auto-submit]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        var form = document.getElementById('history-filters');
+        if (form) form.submit();
+      });
+    });
 
-        document.querySelectorAll('.detail-button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const d = btn.dataset;
-                $('d-plate').textContent = d.plate;
-                $('d-type').textContent = d.type;
-                $('d-slot').textContent = d.slot;
-                $('d-entry-time').textContent = d.entryTime;
-                $('d-exit-time').textContent = d.exitTime === '—' ? '' : d.exitTime;
-                $('d-fee').textContent = d.fee;
-                setPhoto('entry', d.entryImg);
-                setPhoto('exit', d.exitImg);
-                modal.hidden = false;
-            });
+    var mobBtn = document.getElementById('history-filter-toggle');
+    var sidebar = document.getElementById('history-filter-sidebar');
+    if (mobBtn && sidebar) {
+      mobBtn.addEventListener('click', function () {
+        var open = sidebar.classList.toggle('is-open');
+        mobBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    }
+
+    document.querySelectorAll('[data-history-col]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var col = cb.dataset.historyCol;
+        document.querySelectorAll('[data-col="' + col + '"]').forEach(function (cell) {
+          cell.hidden = !cb.checked;
         });
-        $('detail-close').addEventListener('click', close);
-        modal.addEventListener('click', e => { if (e.target === modal) close(); });
-        document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-    })();
-    </script>
-</body>
-</html>
+      });
+    });
+
+    var dialog = document.getElementById('record-detail-dialog');
+    if (!dialog) return;
+    function closeDialog() {
+      if (typeof dialog.close === 'function') dialog.close();
+      else dialog.removeAttribute('open');
+    }
+    document.querySelectorAll('[data-open-record]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var d = btn.dataset;
+        document.getElementById('detail-title').textContent = 'Chi tiết lượt gửi #' + (d.id || '');
+        document.getElementById('detail-plate').textContent = d.plate || '—';
+        document.getElementById('detail-gate').textContent = d.gate || 'Cổng chính';
+        document.getElementById('detail-slot').textContent = d.slot || '—';
+        document.getElementById('detail-type').textContent = d.vehicleType || '—';
+        document.getElementById('detail-in').textContent = d.timeIn || '—';
+        document.getElementById('detail-out').textContent = d.timeOut || '—';
+        document.getElementById('detail-fee').textContent = d.fee || '—';
+        document.getElementById('detail-status').textContent = d.status || '—';
+        document.getElementById('detail-note').textContent = d.note || '—';
+
+        var imgIn = document.getElementById('detail-img-in');
+        var empIn = document.getElementById('detail-empty-in');
+        if (d.imageIn) {
+          imgIn.src = d.imageIn;
+          imgIn.hidden = false;
+          empIn.hidden = true;
+        } else {
+          imgIn.hidden = true;
+          imgIn.removeAttribute('src');
+          empIn.hidden = false;
+        }
+
+        var imgOut = document.getElementById('detail-img-out');
+        var empOut = document.getElementById('detail-empty-out');
+        if (d.imageOut) {
+          imgOut.src = d.imageOut;
+          imgOut.hidden = false;
+          empOut.hidden = true;
+        } else {
+          imgOut.hidden = true;
+          imgOut.removeAttribute('src');
+          empOut.hidden = false;
+        }
+
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.setAttribute('open', '');
+      });
+      btn.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          btn.click();
+        }
+      });
+    });
+    document.getElementById('detail-close').addEventListener('click', closeDialog);
+    document.getElementById('detail-close-btn').addEventListener('click', closeDialog);
+    dialog.addEventListener('click', function (e) {
+      if (e.target === dialog) closeDialog();
+    });
+  })();
+</script>
+{% endblock %}
